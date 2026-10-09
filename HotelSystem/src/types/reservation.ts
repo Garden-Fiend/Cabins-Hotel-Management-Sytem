@@ -1,0 +1,192 @@
+export type DiscountScope = "reservation" | "room" | "item";
+export type DiscountMethod = "fixed" | "percentage";
+export type ReservationStatus =
+  | "confirmed"
+  | "reserved"
+  | "checked_in"
+  | "checked_out"
+  | "cancelled"
+  | "no_show";
+
+export interface ReservationGuest {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+}
+
+export interface BookingSourceOption {
+  id: string;
+  label: string;
+  enabled: boolean;
+}
+
+export interface ReservationConfigOption {
+  id: string;
+  label: string;
+  enabled: boolean;
+}
+
+export interface ReservationRoomOption {
+  number: string;
+  roomTypeId: string;
+  type: string;
+}
+
+export interface ReservationDuration {
+  id: string;
+  label: string;
+  minutes: number;
+}
+
+export interface ReservationCatalogItem {
+  id: string;
+  label: string;
+  price: number;
+  enabled?: boolean;
+}
+
+export interface ReservationInclusionSnapshot {
+  catalogId: string;
+  label: string;
+  quantity: number;
+}
+
+export interface ReservationDiscount {
+  id: string;
+  label: string;
+  scope: DiscountScope;
+  method: DiscountMethod;
+  value: number;
+  targetId: string;
+}
+
+export interface ReservationPriceLine {
+  id: string;
+  label: string;
+  amount: number;
+  roomNumber: string;
+  kind: "room" | "charge" | "breakfast";
+  catalogId?: string;
+  quantity?: number;
+  unitPrice?: number;
+  taxAmount?: number;
+  taxDetails?: string;
+}
+
+export interface AppliedDiscount {
+  id: string;
+  label: string;
+  amount: number;
+}
+
+export interface ReservationPriceSummary {
+  lines: ReservationPriceLine[];
+  discounts: AppliedDiscount[];
+  subtotal: number;
+  discountTotal: number;
+  adjustmentTotal: number;
+  amountOwed: number;
+}
+
+export interface ReservationChargeSnapshot {
+  id: string;
+  catalogId: string;
+  label: string;
+  quantity: number;
+  unitPrice: number;
+  taxAmount?: number;
+  taxDetails?: string;
+}
+
+export interface ReservationBreakfastSnapshot {
+  stayDate: string;
+  guestNumber: number;
+  status: "included" | "skipped";
+  mealId?: string;
+  mealLabel?: string;
+  beverageId?: string;
+  beverageLabel?: string;
+  quantity?: number;
+  unitPrice?: 0;
+  lineTotal?: 0;
+}
+
+export interface ReservationRoomSnapshot {
+  roomNumber: string;
+  roomTypeId: string;
+  roomType: string;
+  checkIn: Date;
+  checkOut: Date;
+  durationId: string;
+  adults: number;
+  children: number;
+  capturedRoomPrice: number;
+  capturedCurrency: string;
+  inclusions: ReservationInclusionSnapshot[];
+  charges: ReservationChargeSnapshot[];
+  breakfast: ReservationBreakfastSnapshot[];
+  actualCheckInAt?: Date;
+  actualCheckOutAt?: Date;
+}
+
+export interface ReservationAdjustment {
+  id: string;
+  amount: number;
+  reason: string;
+}
+
+export interface ReservationAuditEntry {
+  eventType:
+    | "created"
+    | "room_added"
+    | "room_removed"
+    | "guest_changed"
+    | "occupancy_changed"
+    | "stay_changed"
+    | "price_changed"
+    | "discount_changed"
+    | "adjustment_changed"
+    | "breakfast_changed"
+    | "extra_changed"
+    | "inclusion_changed"
+    | "booking_source_changed"
+    | "checked_in"
+    | "checked_out"
+    | "cancelled"
+    | "no_show"
+    | "departure_recorded"
+    | "updated";
+  action: string;
+  occurredAt: Date;
+  actor: string;
+  before?: string;
+  after?: string;
+}
+
+export interface CalendarReservationContext {
+  roomId: string;
+  start: Date;
+  end: Date;
+  reservationId?: string;
+}
+
+export interface ReservationSnapshot {
+  id: string;
+  status: ReservationStatus;
+  guestId: string;
+  bookingSourceId: string;
+  bookingSourceLabel: string;
+  checkIn: Date;
+  checkOut: Date;
+  note: string;
+  rooms: ReservationRoomSnapshot[];
+  discounts: ReservationDiscount[];
+  adjustments: ReservationAdjustment[];
+  pricing: ReservationPriceSummary;
+  audit: ReservationAuditEntry[];
+  createdAt: Date;
+  actualCheckInAt?: Date;
+  actualCheckOutAt?: Date;
+  occupancyLockRoomNumbers?: string[];
+}
