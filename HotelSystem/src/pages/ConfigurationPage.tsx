@@ -70,8 +70,6 @@ function getRows(section: SectionKey, data: HotelConfigurationData): ConfigRow[]
       return data.catalogItems.map((item) => ({ ...item }));
     case "roomTypePrices":
       return data.roomTypePrices.map((item) => ({ ...item }));
-    case "discounts":
-      return data.discounts.map((item) => ({ ...item }));
     case "roomStatuses":
       return data.roomStatuses.map((item) => ({ ...item }));
   }
@@ -201,30 +199,6 @@ function fieldsFor(
         },
         { key: "amount", label: "Price", kind: "number" },
         { key: "currency", label: "Currency" },
-      ];
-    case "discounts":
-      return [
-        { key: "label", label: "Name" },
-        {
-          key: "method",
-          label: "Method",
-          kind: "select",
-          options: [
-            { value: "fixed", label: "Fixed amount" },
-            { value: "percentage", label: "Percentage" },
-          ],
-        },
-        { key: "value", label: "Value", kind: "number" },
-        {
-          key: "scope",
-          label: "Applies to",
-          kind: "select",
-          options: [
-            { value: "reservation", label: "Reservation" },
-            { value: "room", label: "Room" },
-            { value: "item", label: "Item" },
-          ],
-        },
       ];
     case "roomStatuses":
       return [{ key: "label", label: "Name" }];
@@ -479,18 +453,6 @@ export function ConfigurationPage() {
               enabled: booleanValue(values, "enabled"),
             }),
           };
-        case "discounts":
-          return {
-            ...current,
-            discounts: replaceItem(current.discounts, {
-              id,
-              label: stringValue(values, "label"),
-              method: stringValue(values, "method") as "fixed" | "percentage",
-              value: numberValue(values, "value"),
-              scope: stringValue(values, "scope") as "reservation" | "room" | "item",
-              enabled: booleanValue(values, "enabled"),
-            }),
-          };
         case "roomStatuses":
           return {
             ...current,
@@ -556,14 +518,6 @@ export function ConfigurationPage() {
         numberValue(fields, "nights") < 1)
     ) {
       setNotice("Overnight durations must specify a positive whole number of nights.");
-      return;
-    }
-    if (
-      activeSection === "discounts" &&
-      stringValue(fields, "method") === "percentage" &&
-      numberValue(fields, "value") > 100
-    ) {
-      setNotice("Percentage discounts cannot exceed 100%.");
       return;
     }
     if (

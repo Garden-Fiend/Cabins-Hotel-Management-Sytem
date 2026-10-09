@@ -9,6 +9,7 @@ import { NotFoundPage } from "../pages/NotFoundPage";
 import { ReservationsPage } from "../pages/ReservationsPage";
 import { RoomsPage } from "../pages/RoomsPage";
 import { ConfigurationPage } from "../pages/ConfigurationPage";
+import { DiscountsPage } from "../pages/DiscountsPage";
 import { InventoryPage } from "../pages/InventoryPage";
 import { ReservationDetailPage } from "../pages/ReservationDetailPage";
 import { ReservationPrintPage } from "../pages/ReservationPrintPage";
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
       { path: "/rooms", element: <RoomsPage /> },
       { path: "/guests", element: <GuestsPage /> },
       { path: "/configuration", element: <ConfigurationPage /> },
+      { path: "/discounts", element: <DiscountsPage /> },
       { path: "/inventory", element: <InventoryPage /> },
     ],
   },

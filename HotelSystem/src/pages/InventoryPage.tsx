@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { InventoryDialog } from "../features/inventory/InventoryDialog";
 
 import { useHotelConfiguration } from "../features/configuration/useHotelConfiguration";
 import type {
   CatalogCategory,
+  CatalogConfiguration,
   InventoryCategoryConfiguration,
 } from "../features/configuration/types";
 
@@ -29,6 +31,35 @@ export function InventoryPage() {
   const [breakfastType, setBreakfastType] = useState<"meal" | "beverage">("meal");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("all");
+  const [showArchived, setShowArchived] = useState(false);
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const selectedProduct = configuration.catalogItems.find((item) => item.id === editingProductId);
+  const selectedProductCategory = configuration.inventoryCategories.find((item) => item.id === productCategoryId);
+  const money = (amount: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: configuration.currency }).format(amount);
+  const visibleCategories = configuration.inventoryCategories.filter((item) => showArchived || item.enabled);
+  const filteredProducts = configuration.catalogItems.filter((product) => {
+    const category = configuration.inventoryCategories.find((item) => item.id === product.categoryId);
+    return (showArchived || (product.enabled && !product.archived && category?.enabled)) &&
+      (selectedCategoryId === "all" || product.categoryId === selectedCategoryId) &&
+      `${product.label} ${category?.label ?? ""} ${product.breakfastType ?? ""}`.toLowerCase().includes(query.trim().toLowerCase());
+  });
+
+  function openNewProduct() {
+    setEditingProductId(null); setProductName(""); setProductPrice("0");
+    setProductCategoryId(activeCategories.some((item) => item.id === selectedCategoryId) ? selectedCategoryId : "");
+    setBreakfastType("meal"); setNotice(""); setProductDialogOpen(true);
+  }
+
+  function toggleProduct(product: CatalogConfiguration) {
+    const archived = product.archived || !product.enabled;
+    setConfiguration((current) => ({ ...current, catalogItems: current.catalogItems.map((item) => item.id === product.id ? { ...item, enabled: Boolean(archived), archived: !archived } : item) }));
+    setProductDialogOpen(false);
+    setNotice(`${product.label} ${archived ? "restored" : "archived"}.`);
+  }
+
 
   const activeCategories = configuration.inventoryCategories.filter(
     (category) => category.enabled,
@@ -116,6 +147,7 @@ export function InventoryPage() {
       return;
     }
     const id = editingProductId ?? `product-${category.id}-${slug(name)}`;
+    const existing = configuration.catalogItems.find((item) => item.id === editingProductId);
     const product = {
       id,
       label: name,
@@ -126,8 +158,8 @@ export function InventoryPage() {
         category.type === "breakfast" || category.type === "amenities"
           ? 0
           : price,
-      enabled: true,
-      archived: false,
+      enabled: existing?.enabled ?? true,
+      archived: existing?.archived ?? false,
     };
     setConfiguration((current) => ({
       ...current,
@@ -138,6 +170,8 @@ export function InventoryPage() {
     setProductName("");
     setProductPrice("0");
     setEditingProductId(null);
+    setProductDialogOpen(false);
+    setSelectedCategoryId(category.id);
     setNotice("Product saved for this session.");
   }
 
@@ -151,138 +185,90 @@ export function InventoryPage() {
     setProductPrice(String(product.price));
     setProductCategoryId(product.categoryId);
     setBreakfastType(product.breakfastType ?? "meal");
+    setNotice(""); setProductDialogOpen(true);
   }
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-          Catalog
-        </p>
-        <h1 className="mt-1 text-2xl font-bold text-slate-900">Inventory</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Manage product categories and products. Archiving keeps saved reservation
-          descriptions and prices intact. Changes reset when the demo reloads.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Catalog</p>
+          <h1 className="mt-1 text-2xl font-bold text-slate-900">Inventory</h1>
+          <p className="mt-2 text-sm text-slate-600">Browse products by category. Select an item to view and edit its details.</p>
+        </div>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => { setCategoryName(""); setEditingCategoryId(null); setNotice(""); setCategoryDialogOpen(true); }} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Manage categories</button>
+          <button type="button" onClick={openNewProduct} className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700">Add product</button>
+        </div>
       </header>
 
-      {notice && (
-        <p role="status" className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
-          {notice}
-        </p>
-      )}
+      {notice && !productDialogOpen && !categoryDialogOpen && <p role="status" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{notice}</p>}
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <section className={panel}>
-          <h2 className="text-lg font-semibold text-slate-900">Categories</h2>
-          <form onSubmit={saveCategory} className="mt-4 flex gap-2">
-            <input
-              className={input}
-              aria-label="Category name"
-              placeholder="Category name"
-              value={categoryName}
-              onChange={(event) => setCategoryName(event.target.value)}
-            />
-            <button className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
-              {editingCategoryId ? "Save" : "Add category"}
-            </button>
-          </form>
-          <div className="mt-4 divide-y divide-slate-100">
-            {configuration.inventoryCategories.map((category) => {
-              const products = configuration.catalogItems.filter(
-                (product) => product.categoryId === category.id,
-              );
-              return (
-                <div key={category.id} className="flex items-center justify-between gap-3 py-3">
-                  <div>
-                    <p className="font-medium text-slate-900">{category.label}</p>
-                    <p className="text-xs text-slate-500">
-                      {category.systemDefined
-                        ? `Special category · ${category.type}`
-                        : `Category · ${products.length} linked product${products.length === 1 ? "" : "s"}`}
-                      {!category.enabled ? " · Archived" : ""}
-                    </p>
-                  </div>
-                  <div className="flex gap-3 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingCategoryId(category.id);
-                        setCategoryName(category.label);
-                      }}
-                      className="font-semibold text-slate-700 underline underline-offset-2"
-                    >
-                      Rename
-                    </button>
-                    {!category.systemDefined && category.enabled && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={products.length > 0}
-                          title={products.length > 0 ? "Archive categories containing products" : undefined}
-                          onClick={() =>
-                            setConfiguration((current) => ({
-                              ...current,
-                              inventoryCategories: current.inventoryCategories.filter(
-                                (item) => item.id !== category.id,
-                              ),
-                            }))
-                          }
-                          className="font-semibold text-slate-700 underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setConfiguration((current) => ({
-                              ...current,
-                              inventoryCategories: current.inventoryCategories.map(
-                                (item) =>
-                                  item.id === category.id
-                                    ? { ...item, enabled: false }
-                                    : item,
-                              ),
-                            }))
-                          }
-                          className="font-semibold text-slate-700 underline underline-offset-2"
-                        >
-                          Archive
-                        </button>
-                      </>
-                    )}
-                    {!category.systemDefined && !category.enabled && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setConfiguration((current) => ({
-                            ...current,
-                            inventoryCategories: current.inventoryCategories.map(
-                              (item) =>
-                                item.id === category.id
-                                  ? { ...item, enabled: true }
-                                  : item,
-                            ),
-                          }))
-                        }
-                        className="font-semibold text-slate-700 underline underline-offset-2"
-                      >
-                        Restore
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
+      <section className={panel} aria-label="Inventory catalog">
+        <label className="block text-sm font-medium text-slate-700">
+          <span className="mb-2 block">Search inventory</span>
+          <input type="search" className={`${input} max-w-2xl`} placeholder="Search items or categories..." value={query} onChange={(event) => setQuery(event.target.value)} />
+        </label>
+
+        <div className="mt-5 border-b border-slate-200 pb-5">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Categories</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
+            {[{ id: "all", label: "All items", enabled: true }, ...visibleCategories].map((category) => {
+              const count = configuration.catalogItems.filter((product) => (category.id === "all" || product.categoryId === category.id) && (showArchived || (product.enabled && !product.archived && configuration.inventoryCategories.some((item) => item.id === product.categoryId && item.enabled)))).length;
+              return <button key={category.id} type="button" aria-pressed={selectedCategoryId === category.id} onClick={() => setSelectedCategoryId(category.id)}
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 ${selectedCategoryId === category.id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-slate-100"}`}>
+                {category.label}{!category.enabled ? " (archived)" : ""}
+                <span aria-hidden="true" className={`rounded-full px-2 py-0.5 text-xs ${selectedCategoryId === category.id ? "bg-white/15" : "bg-white text-slate-500"}`}>{count}</span>
+              </button>;
             })}
           </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Special category types are stable and cannot be deleted or reclassified.
-          </p>
-        </section>
+        </div>
 
-        <section className={panel}>
-          <h2 className="text-lg font-semibold text-slate-900">Products</h2>
-          <form onSubmit={saveProduct} className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="my-5 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-700">{filteredProducts.length} item{filteredProducts.length === 1 ? "" : "s"}{selectedCategoryId !== "all" ? ` in ${configuration.inventoryCategories.find((item) => item.id === selectedCategoryId)?.label ?? "category"}` : " in catalog"}</h2>
+          <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={showArchived} onChange={(event) => { setShowArchived(event.target.checked); if (!event.target.checked && !activeCategories.some((item) => item.id === selectedCategoryId)) setSelectedCategoryId("all"); }} />Show archived</label>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 min-[480px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {filteredProducts.map((product) => {
+            const category = configuration.inventoryCategories.find((item) => item.id === product.categoryId);
+            const archived = product.archived || !product.enabled;
+            return <button key={product.id} type="button" aria-label={`View ${product.label}`} onClick={() => editProduct(product.id)}
+              className="group overflow-hidden rounded-xl border border-slate-200 bg-white text-left transition hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 motion-reduce:transform-none">
+              <div className="relative p-3">
+                <InventoryItemArtwork category={product.category} />
+                <span className="absolute right-5 top-5 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">{archived ? "Archived" : "Active"}</span>
+              </div>
+              <div className="space-y-1 px-4 pb-4">
+                <p className="text-xs font-medium text-slate-500">{category?.label ?? product.categoryId}</p>
+                <h3 className="font-semibold text-slate-900">{product.label}{product.breakfastType ? ` · ${product.breakfastType}` : ""}</h3>
+                <div className="flex items-center justify-between gap-2 pt-2">
+                  <span className="text-sm font-semibold text-slate-900">{product.category === "breakfast" ? "Free" : product.category === "amenities" ? "Amenity" : money(product.price)}</span>
+                  <span aria-hidden="true" className="text-slate-400 transition group-hover:translate-x-1">→</span>
+                </div>
+              </div>
+            </button>;
+          })}
+        </div>
+        {!filteredProducts.length && <div className="rounded-xl border border-dashed border-slate-300 px-5 py-12 text-center"><h3 className="font-semibold text-slate-700">No items found</h3><p className="mt-2 text-sm text-slate-500">Try another search or category, or add a product.</p></div>}
+      </section>
+
+      {productDialogOpen && <InventoryDialog title={selectedProduct ? `Item details: ${selectedProduct.label}` : "Add product"} onClose={() => setProductDialogOpen(false)}>
+        <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+          <aside className="space-y-4">
+            <InventoryItemArtwork category={selectedProductCategory?.type ?? "ordinary"} large />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{selectedProductCategory?.label ?? "New catalog item"}</p>
+              <h3 className="mt-2 text-xl font-bold text-slate-900">{productName || "New product"}</h3>
+              <p className="mt-2 text-lg font-semibold text-slate-700">{selectedProductCategory?.type === "breakfast" ? "Free" : selectedProductCategory?.type === "amenities" ? "Amenity" : money(Number(productPrice) || 0)}</p>
+              {selectedProduct && <span className="mt-3 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{selectedProduct.archived || !selectedProduct.enabled ? "Archived" : "Active"}</span>}
+            </div>
+            {selectedProduct && <button type="button" onClick={() => toggleProduct(selectedProduct)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">{selectedProduct.archived || !selectedProduct.enabled ? "Restore" : "Archive"}</button>}
+          </aside>
+          <div className="space-y-4">
+            <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Item information</p><p className="mt-2 text-sm text-slate-600">Update the name, category, and price for this catalog item.</p></div>
+            {notice && <p role="status" className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700">{notice}</p>}
+          <form onSubmit={saveProduct} className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-medium text-slate-700">
               <span className="mb-1 block">Product name</span>
               <input
@@ -348,13 +334,11 @@ export function InventoryPage() {
               <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                 {editingProductId ? "Save product" : "Add product"}
               </button>
-              {editingProductId && (
+              {(
                 <button
                   type="button"
                   onClick={() => {
-                    setEditingProductId(null);
-                    setProductName("");
-                    setProductPrice("0");
+                    setProductDialogOpen(false);
                   }}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
                 >
@@ -363,73 +347,53 @@ export function InventoryPage() {
               )}
             </div>
           </form>
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[34rem] text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="px-2 py-2">Product</th>
-                  <th className="px-2 py-2">Category</th>
-                  <th className="px-2 py-2">Price</th>
-                  <th className="px-2 py-2">Status</th>
-                  <th className="px-2 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {configuration.catalogItems.map((product) => {
-                  const category = configuration.inventoryCategories.find(
-                    (item) => item.id === product.categoryId,
-                  );
-                  const archived = product.archived === true || !product.enabled;
-                  return (
-                    <tr key={product.id}>
-                      <td className="px-2 py-3 font-medium text-slate-900">
-                        {product.label}
-                        {product.breakfastType ? ` · ${product.breakfastType}` : ""}
-                      </td>
-                      <td className="px-2 py-3 text-slate-600">{category?.label ?? product.categoryId}</td>
-                      <td className="px-2 py-3 text-slate-600">
-                        {product.category === "breakfast"
-                          ? "Free"
-                          : product.category === "amenities"
-                            ? "Amenity"
-                            : `${product.price.toFixed(2)} ${configuration.currency}`}
-                      </td>
-                      <td className="px-2 py-3 text-slate-600">{archived ? "Archived" : "Active"}</td>
-                      <td className="px-2 py-3 text-right">
-                        <div className="inline-flex gap-3">
-                          <button
-                            type="button"
-                            onClick={() => editProduct(product.id)}
-                            className="font-semibold underline underline-offset-2"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setConfiguration((current) => ({
-                                ...current,
-                                catalogItems: current.catalogItems.map((item) =>
-                                  item.id === product.id
-                                    ? { ...item, enabled: archived, archived: !archived }
-                                    : item,
-                                ),
-                              }))
-                            }
-                            className="font-semibold underline underline-offset-2"
-                          >
-                            {archived ? "Restore" : "Archive"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
           </div>
-        </section>
-      </div>
+        </div>
+      </InventoryDialog>}
+
+      {categoryDialogOpen && <InventoryDialog title="Manage categories" onClose={() => setCategoryDialogOpen(false)}>
+        <form onSubmit={saveCategory} className="flex gap-2">
+          <input className={input} aria-label="Category name" placeholder="Category name" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} />
+          <button className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">{editingCategoryId ? "Save" : "Add category"}</button>
+          {editingCategoryId && <button type="button" onClick={() => { setEditingCategoryId(null); setCategoryName(""); }} className="text-sm underline">Cancel</button>}
+        </form>
+        {notice && <p role="status" className="mt-3 rounded-lg bg-slate-100 p-3 text-sm">{notice}</p>}
+        <div className="mt-5 space-y-3">
+          {configuration.inventoryCategories.map((category) => {
+            const products = configuration.catalogItems.filter((product) => product.categoryId === category.id);
+            return <article key={category.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
+              <div><h3 className="font-semibold text-slate-900">{category.label}</h3><p className="mt-1 text-xs text-slate-500">{category.systemDefined ? `Special category · ${category.type}` : `${products.length} linked products`}{!category.enabled ? " · Archived" : ""}</p></div>
+              <div className="flex gap-3 text-sm">
+                <button type="button" onClick={() => { setEditingCategoryId(category.id); setCategoryName(category.label); }} className="font-semibold text-slate-700 underline">Rename</button>
+                {!category.systemDefined && <>
+                  {category.enabled && <button type="button" disabled={products.length > 0} title={products.length ? "Archive categories containing products" : undefined} onClick={() => {
+                    setConfiguration((current) => ({ ...current, inventoryCategories: current.inventoryCategories.filter((item) => item.id !== category.id) }));
+                    if (selectedCategoryId === category.id) setSelectedCategoryId("all");
+                    if (editingCategoryId === category.id) { setEditingCategoryId(null); setCategoryName(""); }
+                  }} className="font-semibold text-slate-700 underline disabled:opacity-40">Delete</button>}
+                  <button type="button" onClick={() => {
+                    setConfiguration((current) => ({ ...current, inventoryCategories: current.inventoryCategories.map((item) => item.id === category.id ? { ...item, enabled: !item.enabled } : item) }));
+                    if (selectedCategoryId === category.id && category.enabled) setSelectedCategoryId("all");
+                  }} className="font-semibold text-slate-700 underline">{category.enabled ? "Archive" : "Restore"}</button>
+                </>}
+              </div>
+            </article>;
+          })}
+        </div>
+        <p className="mt-4 text-xs text-slate-500">Special category types are stable and cannot be deleted or reclassified.</p>
+      </InventoryDialog>}
     </div>
   );
+}
+
+function InventoryItemArtwork({ category, large = false }: { category: CatalogCategory; large?: boolean }) {
+  const colors: Record<CatalogCategory, string> = {
+    inclusion: "bg-emerald-50 text-emerald-700", extra: "bg-amber-50 text-amber-700",
+    breakfast: "bg-orange-50 text-orange-700", amenities: "bg-sky-50 text-sky-700", ordinary: "bg-violet-50 text-violet-700",
+  };
+  return <div aria-hidden="true" className={`flex items-center justify-center rounded-xl ${large ? "aspect-square" : "h-32"} ${colors[category]}`}>
+    <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={large ? "size-24" : "size-16"}>
+      {category === "breakfast" ? <><path d="M10 18h22v13a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9V18Z" /><path d="M32 20h3a6 6 0 0 1 0 12h-3M17 7v5m7-7v7m-18 30h32" /></> : category === "amenities" ? <><path d="M8 18a24 24 0 0 1 32 0M14 25a15 15 0 0 1 20 0M20 32a6 6 0 0 1 8 0" /><circle cx="24" cy="39" r="1.5" /></> : <><path d="m24 7 16 9v18l-16 9-16-9V16l16-9Z" /><path d="m8 16 16 9 16-9M24 25v18M16 11l16 9v8" /></>}
+    </svg>
+  </div>;
 }

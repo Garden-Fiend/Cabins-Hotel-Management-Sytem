@@ -1,3 +1,5 @@
+import type { DiscountDefinitionConfiguration } from "../discounts/types";
+
 export type ConfigurationValue = string | number | boolean | string[];
 
 export interface RoomTypeConfiguration {
@@ -88,15 +90,6 @@ export interface RoomTypePriceConfiguration {
   enabled: boolean;
 }
 
-export interface DiscountDefinitionConfiguration {
-  id: string;
-  label: string;
-  method: "fixed" | "percentage";
-  value: number;
-  scope: "reservation" | "room" | "item";
-  enabled: boolean;
-}
-
 export interface HotelConfigurationData {
   roomTypes: RoomTypeConfiguration[];
   rooms: RoomConfiguration[];
@@ -121,7 +114,6 @@ export type ConfigurationSection = {
     | "bookingSources"
     | "catalogItems"
     | "roomTypePrices"
-    | "discounts"
     | "roomStatuses"
   >;
   group: "Rooms & Inventory" | "Booking" | "Catalog" | "Pricing" | "Operations";
@@ -165,12 +157,6 @@ export const configurationSections: ConfigurationSection[] = [
     group: "Pricing",
     label: "Room Prices",
     description: "Configure hourly package prices and one base nightly rate per room type.",
-  },
-  {
-    id: "discounts",
-    group: "Pricing",
-    label: "Discounts",
-    description: "Configure reusable discount definitions for reservation pricing.",
   },
   {
     id: "roomStatuses",

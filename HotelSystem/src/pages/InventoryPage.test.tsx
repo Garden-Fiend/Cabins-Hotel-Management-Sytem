@@ -5,6 +5,37 @@ import { ReservationDemoProvider } from "../app/ReservationDemoContext";
 import { InventoryPage } from "./InventoryPage";
 
 describe("inventory catalog", () => {
+  it("combines search with category pills and shows an empty result state", () => {
+    render(<ReservationDemoProvider><InventoryPage /></ReservationDemoProvider>);
+    fireEvent.change(screen.getByLabelText("Search inventory"), { target: { value: "Laundry" } });
+    expect(screen.getByRole("button", { name: "View Laundry" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "View Extra bed" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Breakfast Items" }));
+    expect(screen.getByRole("heading", { name: "No items found" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Search inventory"), { target: { value: "" } });
+    expect(screen.getByRole("button", { name: "View Coffee" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "View Laundry" })).toBeNull();
+  });
+
+  it("opens item details, saves edits, and restores focus when dismissed with Escape", () => {
+    render(<ReservationDemoProvider><InventoryPage /></ReservationDemoProvider>);
+    const card = screen.getByRole("button", { name: "View Extra bed" });
+    card.focus();
+    fireEvent.click(card);
+    let dialog = screen.getByRole("dialog", { name: "Item details: Extra bed" });
+    expect(within(dialog).getByLabelText("Product name")).toHaveProperty("value", "Extra bed");
+    fireEvent.change(within(dialog).getByLabelText("Product name"), { target: { value: "Additional bed" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save product" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const updatedCard = screen.getByRole("button", { name: "View Additional bed" });
+    updatedCard.focus();
+    fireEvent.click(updatedCard);
+    dialog = screen.getByRole("dialog", { name: "Item details: Additional bed" });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(updatedCard);
+  });
+
   it("keeps special breakfast categories stable and creates a typed product", () => {
     render(
       <ReservationDemoProvider>
@@ -12,15 +43,13 @@ describe("inventory catalog", () => {
       </ReservationDemoProvider>,
     );
 
-    const breakfastCategory = screen
-      .getAllByText("Breakfast Items")[0]
-      .closest("div")?.parentElement as HTMLElement;
-    expect(
-      within(breakfastCategory).queryByRole("button", { name: "Delete" }),
-    ).toBeNull();
-    expect(
-      within(breakfastCategory).queryByRole("button", { name: "Archive" }),
-    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Manage categories" }));
+    const categoryDialog = screen.getByRole("dialog", { name: "Manage categories" });
+    const breakfastCategory = within(categoryDialog).getByRole("heading", { name: "Breakfast Items" }).closest("article")!;
+    expect(within(breakfastCategory).queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(within(breakfastCategory).queryByRole("button", { name: "Archive" })).toBeNull();
+    fireEvent.click(within(categoryDialog).getByRole("button", { name: "Close popup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
 
     fireEvent.change(screen.getByLabelText("Product name"), {
       target: { value: "Pancakes" },
@@ -31,7 +60,7 @@ describe("inventory catalog", () => {
     fireEvent.change(screen.getByLabelText("Breakfast product type"), {
       target: { value: "meal" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Add product" })).getByRole("button", { name: "Add product" }));
 
     expect(screen.getByText("Pancakes · meal")).toBeTruthy();
   });
@@ -43,10 +72,15 @@ describe("inventory catalog", () => {
       </ReservationDemoProvider>,
     );
 
-    const productRow = screen.getByText("Extra bed").closest("tr") as HTMLElement;
-    fireEvent.click(
-      within(productRow).getByRole("button", { name: "Archive" }),
-    );
-    expect(within(productRow).getByText("Archived")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View Extra bed" }));
+    const dialog = screen.getByRole("dialog", { name: "Item details: Extra bed" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Archive" }));
+    expect(screen.queryByRole("button", { name: "View Extra bed" })).toBeNull();
+    fireEvent.click(screen.getByLabelText("Show archived"));
+    const card = screen.getByRole("button", { name: "View Extra bed" });
+    expect(within(card).getByText("Archived")).toBeTruthy();
+    fireEvent.click(card);
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Item details: Extra bed" })).getByRole("button", { name: "Restore" }));
+    expect(within(screen.getByRole("button", { name: "View Extra bed" })).getByText("Active")).toBeTruthy();
   });
 });

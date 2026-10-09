@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { useHotelConfiguration } from "../../features/configuration/useHotelConfiguration";
 import type { HotelConfigurationData } from "../../features/configuration/types";
@@ -16,6 +16,9 @@ import {
   toHotelDateTimeInput,
 } from "../../lib/hotelTime";
 import { findClash } from "../../utils/availability";
+import { buildReservationPriceLines } from "../../lib/reservationDraftPricing";
+import { capturePreset, getApplicablePresets, isAppliedPresetCompatible } from "../../lib/discountPresets";
+import { LineDiscountSelector } from "./LineDiscountSelector";
 import type { Stay } from "../../types/booking";
 import type {
   DiscountMethod,
@@ -73,6 +76,9 @@ interface RoomDraft {
   capturedRoomPrice: number;
   capturedCurrency: string;
   priceLocked: boolean;
+  capturedUnitPrice?: number;
+  capturedPricingQuantity?: number;
+  capturedRateId?: string;
   inclusions: Record<string, number>;
   charges: ChargeDraft[];
   breakfast: Record<string, BreakfastDraft>;
@@ -87,8 +93,19 @@ interface AdjustmentDraft {
 const inputClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200";
 const labelClass = "mb-1.5 block text-sm font-medium text-slate-700";
-const sectionClass = "space-y-4 border-b border-slate-200 py-5 last:border-b-0";
-const sectionTitleClass = "text-base font-semibold text-slate-900";
+const sectionClass = "space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5";
+const roomSectionClass = "rounded-lg border border-slate-200 bg-white p-3";
+
+function ReservationStageHeading({ step, title }: { step: number; title: string }) {
+  return (
+    <h3 aria-label={`${step}. ${title}`} className="flex items-center gap-3 text-base font-semibold text-slate-900">
+      <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-bold text-white">
+        {step}
+      </span>
+      {title}
+    </h3>
+  );
+}
 
 function toDateTimeInput(date: Date) {
   return toHotelDateTimeInput(date);
@@ -365,7 +382,7 @@ export function ReservationPane({
     (item) => item.category === "inclusion" && item.enabled && !item.archived,
   );
   const reservationExtraCharges = configuration.catalogItems.filter(
-    (item) => item.category === "extra" && item.enabled && !item.archived,
+    (item) => (item.category === "extra" || item.category === "ordinary") && item.enabled && !item.archived,
   );
   const breakfastMeals = configuration.catalogItems.filter(
     (item) => item.category === "breakfast" && item.breakfastType === "meal",
@@ -432,6 +449,9 @@ export function ReservationPane({
   const defaultDurationId =
     availableDurationOptions[0]?.id ?? reservationDurations[0]?.id ?? "";
   const paneRef = useRef<HTMLElement>(null);
+  const reservationScrollRef = useRef<HTMLDivElement>(null);
+  const roomsStageRef = useRef<HTMLElement>(null);
+  const scrollToRoomsAfterCollapseRef = useRef(false);
   const openerRef = useRef<HTMLElement | null>(null);
   const existingReservationId = initialReservation?.id;
   const initialDurationId = initialReservation
@@ -485,6 +505,9 @@ export function ReservationPane({
         capturedRoomPrice: savedRoom.capturedRoomPrice,
         capturedCurrency: savedRoom.capturedCurrency,
         priceLocked: true,
+        capturedUnitPrice: savedRoom.capturedUnitPrice,
+        capturedPricingQuantity: savedRoom.capturedPricingQuantity,
+        capturedRateId: savedRoom.capturedRateId,
         inclusions: Object.fromEntries(
           savedRoom.inclusions.map((item) => [item.catalogId, item.quantity]),
         ),
@@ -533,6 +556,17 @@ export function ReservationPane({
   });
   const [selectedRoomNumber, setSelectedRoomNumber] = useState("");
   const [expandedRoom, setExpandedRoom] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (expandedRoom !== null || !scrollToRoomsAfterCollapseRef.current) return;
+    scrollToRoomsAfterCollapseRef.current = false;
+    const container = reservationScrollRef.current;
+    const stage = roomsStageRef.current;
+    if (!container || !stage) return;
+    container.scrollTo?.({
+      top: Math.max(0, container.scrollTop + stage.getBoundingClientRect().top - container.getBoundingClientRect().top - 20),
+      behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth",
+    });
+  }, [expandedRoom]);
   const [bookingSource, setBookingSource] = useState(
     initialReservation?.bookingSourceId ?? "",
   );
@@ -549,6 +583,8 @@ export function ReservationPane({
   const [discountMethod, setDiscountMethod] =
     useState<DiscountMethod>("percentage");
   const [discountValue, setDiscountValue] = useState("10");
+  const [manualDiscountLabel, setManualDiscountLabel] = useState("");
+  const [editingDiscountId, setEditingDiscountId] = useState<string | null>(null);
   const [discountTarget, setDiscountTarget] = useState("");
   const [discountDefinitionId, setDiscountDefinitionId] = useState("");
   const [adjustmentAmount, setAdjustmentAmount] = useState("");
@@ -559,14 +595,24 @@ export function ReservationPane({
   const [guestHasVacated, setGuestHasVacated] = useState<boolean | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [reservationStayEdited, setReservationStayEdited] = useState(false);
 
-  const reservationCheckIn = parseDateTimeInput(checkInInput);
-  const reservationCheckOut = getStayEnd(
+  const reservationCheckIn = initialReservation && checkInInput === toDateTimeInput(initialReservation.checkIn) ? initialReservation.checkIn : parseDateTimeInput(checkInInput);
+  const reservationCheckOut = initialReservation && !reservationStayEdited ? initialReservation.checkOut : getStayEnd(
     checkInInput,
     durationId,
     availableDurations,
     configuration.defaultCheckOutTime,
   );
+  function getRoomStayStart(room: RoomDraft) {
+    const saved = initialReservation?.rooms.find((item) => item.roomNumber === room.roomNumber);
+    return saved && room.checkIn === toDateTimeInput(saved.checkIn) ? saved.checkIn : parseDateTimeInput(room.checkIn);
+  }
+  function getRoomStayEnd(room: RoomDraft) {
+    const saved = initialReservation?.rooms.find((item) => item.roomNumber === room.roomNumber);
+    if (saved && room.priceLocked && room.durationId === saved.durationId && room.checkIn === toDateTimeInput(saved.checkIn)) return saved.checkOut;
+    return getStayEnd(room.checkIn, room.durationId, availableDurations, configuration.defaultCheckOutTime);
+  }
   const filteredGuests = guests.filter((option) =>
     `${option.name} ${option.email} ${option.phone}`
       .toLowerCase()
@@ -587,82 +633,46 @@ export function ReservationPane({
       ),
   ).length;
 
-  const priceLines = (() => {
-    const lines: ReservationPriceLine[] = [];
-
-    for (const room of roomDrafts) {
-      const roomDurationId = room.useReservationStay
-        ? durationId
-        : room.durationId;
-      const price = room.priceLocked
-        ? room.capturedRoomPrice
-        : configuredRoomPrice(room.roomTypeId, roomDurationId) ??
-          room.capturedRoomPrice;
-      const roomTax = calculateTax(price);
-      lines.push({
-        id: `room:${room.roomNumber}`,
-        label: `Room ${room.roomNumber} · ${room.roomType} · ${
-          getConfiguredDuration(roomDurationId)?.label ?? "Stay"
-        }`,
-        amount: price,
-        roomNumber: room.roomNumber,
-        kind: "room",
-        taxAmount: roomTax.taxAmount,
-        taxDetails: roomTax.taxDetails,
-      });
-
-      for (const charge of room.charges) {
-        const tax = calculateTax(charge.quantity * charge.unitPrice);
-        lines.push({
-          id: charge.id,
-          label: `${charge.label} × ${charge.quantity}`,
-          amount: charge.quantity * charge.unitPrice,
-          roomNumber: room.roomNumber,
-          kind: "charge",
-          catalogId: charge.catalogId,
-          quantity: charge.quantity,
-          unitPrice: charge.unitPrice,
-          taxAmount: tax.taxAmount,
-          taxDetails: tax.taxDetails,
-        });
-      }
-      for (const [key, breakfast] of Object.entries(room.breakfast)) {
-        if (breakfast.status !== "included") continue;
-        const [stayDate, guestIndex] = key.split(":");
-        lines.push({
-          id: `breakfast:${room.roomNumber}:${stayDate}:${guestIndex}`,
-          label: `${stayDate} · Guest ${Number(guestIndex) + 1}: ${breakfast.meal} + ${breakfast.drink}`,
-          amount: 0,
-          roomNumber: room.roomNumber,
-          kind: "breakfast",
-          quantity: 1,
-          unitPrice: 0,
-          ...calculateTax(0),
-        });
-      }
+  const priceLines = buildReservationPriceLines(roomDrafts, durationId, configuration, initialReservation);
+  const invalidPresets = discounts.filter((discount) => !isAppliedPresetCompatible(discount, priceLines));
+  const pricingResult = (() => {
+    try {
+      return { summary: calculateReservationPrice(priceLines, discounts.filter((discount) => !invalidPresets.includes(discount)), adjustments.map((adjustment) => adjustment.amount), {
+        currency: priceLines[0]?.currency ?? reservationCurrency,
+        staged: !initialReservation || initialReservation.pricing.pipelineVersion === 2 || discounts.some((discount) => discount.sourcePresetId),
+      }), error: "" };
+    } catch (error) {
+      return { summary: initialReservation?.pricing ?? { lines: [], discounts: [], subtotal: 0, discountTotal: 0, adjustmentTotal: 0, amountOwed: 0 }, error: error instanceof Error ? error.message : "Unable to calculate prices." };
     }
-
-    return lines;
   })();
+  const priceSummary = pricingResult.summary;
 
-  const priceSummary = calculateReservationPrice(
-    priceLines,
-    discounts,
-    adjustments.map((adjustment) => adjustment.amount),
-  );
+  function selectLinePreset(line: ReservationPriceLine, presetId: string) {
+    const scope = line.kind === "room" ? "room" : "item";
+    const preset = getApplicablePresets(configuration, scope, line).find((item) => item.id === presetId);
+    if (presetId && !preset) { setErrorMessage("This preset is not available for the selected price."); return; }
+    setDiscounts((current) => [
+      ...current.filter((item) => !(item.sourcePresetId && item.targetId === line.id)),
+      ...(preset ? [capturePreset(preset, line)] : []),
+    ]);
+    markDirty();
+  }
+
+  function addReservationPreset() {
+    const preset = getApplicablePresets(configuration, "reservation").find((item) => item.id === discountDefinitionId);
+    if (!preset || preset.currency !== (priceLines[0]?.currency ?? reservationCurrency)) { setErrorMessage("Select an available reservation preset in the reservation currency."); return; }
+    if (discounts.some((item) => item.sourcePresetId === preset.id && item.scope === "reservation")) { setErrorMessage("This reservation preset is already applied."); return; }
+    setDiscounts((current) => [...current, capturePreset(preset)]);
+    setDiscountDefinitionId(""); markDirty();
+  }
 
   const roomConflicts = roomDrafts.filter((room) => {
     const roomCheckIn = room.useReservationStay
       ? reservationCheckIn
-      : parseDateTimeInput(room.checkIn);
+      : getRoomStayStart(room);
     const roomCheckOut = room.useReservationStay
       ? reservationCheckOut
-      : getStayEnd(
-          room.checkIn,
-          room.durationId,
-          availableDurations,
-          configuration.defaultCheckOutTime,
-        );
+      : getRoomStayEnd(room);
 
     return (
       (!isOperationallyAvailable(room.roomNumber, configuration) &&
@@ -683,15 +693,10 @@ export function ReservationPane({
   const invalidRoomStay = roomDrafts.some((room) => {
     const start = room.useReservationStay
       ? reservationCheckIn
-      : parseDateTimeInput(room.checkIn);
+      : getRoomStayStart(room);
     const end = room.useReservationStay
       ? reservationCheckOut
-      : getStayEnd(
-          room.checkIn,
-          room.durationId,
-          availableDurations,
-          configuration.defaultCheckOutTime,
-        );
+      : getRoomStayEnd(room);
 
     return (
       Number.isNaN(start.getTime()) ||
@@ -724,6 +729,8 @@ export function ReservationPane({
     Boolean(getConfiguredDuration(durationId)) &&
     !invalidRoomStay &&
     !missingRoomPrice &&
+    !invalidPresets.length &&
+    !pricingResult.error &&
     !isSubmitting &&
     initialReservation?.status !== "cancelled";
 
@@ -838,12 +845,13 @@ export function ReservationPane({
     setDiscounts((current) =>
       current.filter(
         (discount) =>
-          !(discount.scope === "room" && discount.targetId === roomNumber) &&
+          !(discount.scope === "room" && (discount.targetId === roomNumber || discount.targetId === `room:${roomNumber}`)) &&
           !(discount.scope === "item" && removedChargeIds.includes(discount.targetId)),
       ),
     );
     setExpandedRoom(null);
-    markDirty();
+    setErrorMessage("Room removed; its targeted discounts were removed too.");
+    setIsDirty(true);
   }
 
   function addCharge(roomNumber: string, catalogId: string) {
@@ -896,28 +904,24 @@ export function ReservationPane({
       setErrorMessage("Select the room or charge this discount applies to.");
       return;
     }
+    if ((discountScope === "room" && !roomDrafts.some((room) => room.roomNumber === discountTarget)) || (discountScope === "item" && !priceLines.some((line) => line.id === discountTarget && line.kind === "charge"))) {
+      setErrorMessage("Select an existing room or charge line for the manual discount.");
+      return;
+    }
 
-    const selectedDefinition = configuration.discounts.find(
-      (definition) =>
-        definition.id === discountDefinitionId && definition.enabled,
-    );
-    const label = selectedDefinition?.label ??
-      (discountScope === "reservation"
-        ? "Reservation discount"
-        : discountScope === "room"
-          ? `Room ${discountTarget} discount`
-          : `Charge discount`);
-    setDiscounts((current) => [
-      ...current,
-      {
-        id: `discount-${Date.now()}`,
+    const label = manualDiscountLabel.trim() ||
+      (discountScope === "reservation" ? "Reservation discount" : discountScope === "room" ? `Room ${discountTarget} discount` : "Charge discount");
+    const manualDiscount: ReservationDiscount = {
+        id: editingDiscountId ?? crypto.randomUUID(),
         label,
         scope: discountScope,
         method: discountMethod,
         value,
         targetId: discountScope === "reservation" ? "" : discountTarget,
-      },
-    ]);
+      };
+    setDiscounts((current) => editingDiscountId ? current.map((item) => item.id === editingDiscountId ? manualDiscount : item) : [...current, manualDiscount]);
+    setEditingDiscountId(null);
+    setManualDiscountLabel("");
     setDiscountValue("");
     setDiscountTarget("");
     setDiscountDefinitionId("");
@@ -954,7 +958,7 @@ export function ReservationPane({
     }
 
     const createdGuest: ReservationGuest = {
-      id: `guest-${Date.now()}`,
+      id: `guest-${crypto.randomUUID()}`,
       name,
       phone: newGuestPhone.trim(),
       email: newGuestEmail.trim(),
@@ -970,6 +974,10 @@ export function ReservationPane({
   }
 
   async function submitReservation() {
+    if (initialReservation && !isDirty) {
+      onSaved?.(initialReservation, stays.filter((stay) => stay.reservationId === initialReservation.id));
+      return;
+    }
     if (!canCreate) {
       return;
     }
@@ -1003,15 +1011,10 @@ export function ReservationPane({
     const createdStays: Stay[] = roomDrafts.map((room, index) => {
       const roomCheckIn = room.useReservationStay
         ? reservationCheckIn
-        : parseDateTimeInput(room.checkIn);
+        : getRoomStayStart(room);
       const roomCheckOut = room.useReservationStay
         ? reservationCheckOut
-        : getStayEnd(
-            room.checkIn,
-            room.durationId,
-            availableDurations,
-            configuration.defaultCheckOutTime,
-          );
+        : getRoomStayEnd(room);
 
       return {
         id:
@@ -1065,15 +1068,10 @@ export function ReservationPane({
       rooms: roomDrafts.map((room) => {
         const roomCheckIn = room.useReservationStay
           ? reservationCheckIn
-          : parseDateTimeInput(room.checkIn);
+          : getRoomStayStart(room);
         const roomCheckOut = room.useReservationStay
           ? reservationCheckOut
-          : getStayEnd(
-              room.checkIn,
-              room.durationId,
-              availableDurations,
-              configuration.defaultCheckOutTime,
-            );
+          : getRoomStayEnd(room);
         const savedRoom = initialReservation?.rooms.find(
           (saved) => saved.roomNumber === room.roomNumber,
         );
@@ -1095,6 +1093,9 @@ export function ReservationPane({
                 room.roomTypeId,
                 room.useReservationStay ? durationId : room.durationId,
               ) ?? room.capturedRoomPrice,
+          capturedUnitPrice: priceLines.find((line) => line.id === `room:${room.roomNumber}`)?.baseUnitPrice,
+          capturedPricingQuantity: priceLines.find((line) => line.id === `room:${room.roomNumber}`)?.pricingQuantity,
+          capturedRateId: priceLines.find((line) => line.id === `room:${room.roomNumber}`)?.rateId,
           capturedCurrency: room.priceLocked
             ? room.capturedCurrency
             : configuredRoomCurrency(
@@ -1160,7 +1161,10 @@ export function ReservationPane({
             ),
         };
       }),
-      discounts: discounts.map((discount) => ({ ...discount })),
+      discounts: discounts.map((discount) => {
+        const applied = priceSummary.discounts.find((item) => item.id === discount.id);
+        return { ...discount, baseUnitPrice: applied?.baseUnitPrice ?? discount.baseUnitPrice, quantity: applied?.quantity ?? discount.quantity };
+      }),
       adjustments: adjustments.map(({ id, amount, reason }) => ({
         id,
         amount,
@@ -1190,15 +1194,10 @@ export function ReservationPane({
     roomId: room.roomNumber,
     start: room.useReservationStay
       ? reservationCheckIn
-      : parseDateTimeInput(room.checkIn),
+      : getRoomStayStart(room),
     end: room.useReservationStay
       ? reservationCheckOut
-      : getStayEnd(
-          room.checkIn,
-          room.durationId,
-          availableDurations,
-          configuration.defaultCheckOutTime,
-        ),
+      : getRoomStayEnd(room),
   }));
   const contextSignature = currentContexts
     .map(
@@ -1331,11 +1330,11 @@ export function ReservationPane({
           </button>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 sm:px-6">
+        <div ref={reservationScrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-100/70 px-4 py-5 sm:px-5">
           {errorMessage && (
             <div
               role="alert"
-              className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800"
+              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800"
             >
               {errorMessage}
             </div>
@@ -1343,7 +1342,7 @@ export function ReservationPane({
 
           <section className={sectionClass}>
             <div>
-              <h3 className={sectionTitleClass}>1. Primary guest</h3>
+              <ReservationStageHeading step={1} title="Primary guest" />
               <p className="mt-1 text-sm text-slate-500">
                 One guest is associated with the whole reservation.
               </p>
@@ -1478,7 +1477,7 @@ export function ReservationPane({
 
           <section className={sectionClass}>
             <div>
-              <h3 className={sectionTitleClass}>2. Reservation stay</h3>
+              <ReservationStageHeading step={2} title="Reservation stay" />
               <p className="mt-1 text-sm text-slate-500">
                 Check-out is calculated from the configured duration.
               </p>
@@ -1489,6 +1488,7 @@ export function ReservationPane({
                 <input
                   className={inputClass}
                   onChange={(event) => {
+                    setReservationStayEdited(true);
                     setCheckInInput(event.target.value);
                     markDirty();
                   }}
@@ -1503,6 +1503,7 @@ export function ReservationPane({
                   className={inputClass}
                   onChange={(event) => {
                     const nextDurationId = event.target.value;
+                    setReservationStayEdited(true);
                     setDurationId(nextDurationId);
                     setRoomDrafts((current) =>
                       current.map((room) =>
@@ -1548,9 +1549,9 @@ export function ReservationPane({
             </p>
           </section>
 
-          <section className={sectionClass}>
+          <section ref={roomsStageRef} className={sectionClass}>
             <div>
-              <h3 className={sectionTitleClass}>3. Rooms</h3>
+              <ReservationStageHeading step={3} title="Rooms" />
               <p className="mt-1 text-sm text-slate-500">
                 Rooms can have different room types and individual settings.
               </p>
@@ -1570,13 +1571,8 @@ export function ReservationPane({
                         durationId,
                       }
                     : {
-                        start: parseDateTimeInput(room.checkIn),
-                        end: getStayEnd(
-                          room.checkIn,
-                          room.durationId,
-                          availableDurations,
-                          configuration.defaultCheckOutTime,
-                        ),
+                        start: getRoomStayStart(room),
+                        end: getRoomStayEnd(room),
                         durationId: room.durationId,
                       };
                   const conflict =
@@ -1645,6 +1641,8 @@ export function ReservationPane({
                         <div className="flex shrink-0 gap-2">
                           <button
                             type="button"
+                            aria-expanded={expandedRoom === room.roomNumber}
+                            aria-controls={expandedRoom === room.roomNumber ? `room-settings-${encodeURIComponent(room.roomNumber)}` : undefined}
                             onClick={() =>
                               setExpandedRoom((current) =>
                                 current === room.roomNumber
@@ -1655,7 +1653,7 @@ export function ReservationPane({
                             className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
                           >
                             {expandedRoom === room.roomNumber
-                              ? "Done"
+                              ? "Hide settings"
                               : "Configure"}
                           </button>
                           <button
@@ -1669,9 +1667,12 @@ export function ReservationPane({
                         </div>
                       </div>
 
+                      <div className="px-4 pb-3">
+                        <LineDiscountSelector configuration={configuration} line={priceLines.find((line) => line.id === `room:${room.roomNumber}`)!} discounts={discounts} summary={priceSummary} onSelect={selectLinePreset} />
+                      </div>
                       {expandedRoom === room.roomNumber && (
-                        <div className="space-y-5 border-t border-slate-200 bg-slate-50 p-4">
-                          <div>
+                        <div id={`room-settings-${encodeURIComponent(room.roomNumber)}`} className="space-y-4 border-t border-slate-200 bg-slate-100/70 p-4">
+                          <div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Stay
                             </h4>
@@ -1751,7 +1752,7 @@ export function ReservationPane({
                             )}
                           </div>
 
-                          <div>
+                          <div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Occupancy
                             </h4>
@@ -1780,7 +1781,7 @@ export function ReservationPane({
                             </div>
                           </div>
 
-                          <div>
+                          <div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Inclusions
                             </h4>
@@ -1817,7 +1818,7 @@ export function ReservationPane({
                             </div>
                           </div>
 
-                          <div>
+                          <div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Extra charges
                             </h4>
@@ -1830,7 +1831,7 @@ export function ReservationPane({
                                 {room.charges.map((charge) => (
                                   <div
                                     key={charge.id}
-                                    className="flex items-center justify-between gap-3 rounded-lg bg-white p-2.5 text-sm"
+                                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-2.5 text-sm"
                                   >
                                     <span>
                                       {charge.label} ·{" "}
@@ -1886,13 +1887,15 @@ export function ReservationPane({
                                                 discount.targetId !== charge.id,
                                             ),
                                           );
-                                          markDirty();
+                                          setErrorMessage("Charge removed; its targeted discounts were removed too.");
+                                          setIsDirty(true);
                                         }}
                                         className="text-slate-500 underline"
                                       >
                                         Remove
                                       </button>
                                     </div>
+                                    <LineDiscountSelector configuration={configuration} line={priceLines.find((line) => line.id === charge.id)!} discounts={discounts} summary={priceSummary} onSelect={selectLinePreset} />
                                   </div>
                                 ))}
                               </div>
@@ -1924,7 +1927,7 @@ export function ReservationPane({
                             </select>
                           </div>
 
-                          <div>
+                          <div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Breakfast
                             </h4>
@@ -2138,6 +2141,21 @@ export function ReservationPane({
                               </div>
                             )}
                           </div>
+                          <div className="flex justify-end border-t border-slate-300 pt-4">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                const article = event.currentTarget.closest("article");
+                                scrollToRoomsAfterCollapseRef.current = true;
+                                setExpandedRoom(null);
+                                const toggle = article?.querySelector<HTMLButtonElement>("button[aria-expanded]");
+                                toggle?.focus({ preventScroll: true });
+                              }}
+                              className="rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+                            >
+                              Done
+                            </button>
+                          </div>
                         </div>
                       )}
                     </article>
@@ -2221,7 +2239,7 @@ export function ReservationPane({
 
           <section className={sectionClass}>
             <div>
-              <h3 className={sectionTitleClass}>4. Booking information</h3>
+              <ReservationStageHeading step={4} title="Booking information" />
             </div>
             <label>
               <span className={labelClass}>Booking source *</span>
@@ -2277,43 +2295,22 @@ export function ReservationPane({
 
           <section className={sectionClass}>
             <div>
-              <h3 className={sectionTitleClass}>5. Discounts</h3>
+              <ReservationStageHeading step={5} title="Discounts" />
               <p className="mt-1 text-sm text-slate-500">
-                Discounts apply in the order listed and cannot reduce a line
-                below zero.
+                Final-price presets apply first, then room/item reductions, then reservation-wide reductions. Manual room discounts include that room's extras. Lines never fall below zero.
               </p>
             </div>
-            {configuration.discounts.some((item) => item.enabled) && (
-              <label>
-                <span className={labelClass}>Discount definition</span>
-                <select
-                  className={inputClass}
-                  onChange={(event) => {
-                    const definition = configuration.discounts.find(
-                      (item) => item.id === event.target.value && item.enabled,
-                    );
-                    setDiscountDefinitionId(definition?.id ?? "");
-                    if (definition) {
-                      setDiscountScope(definition.scope);
-                      setDiscountMethod(definition.method);
-                      setDiscountValue(String(definition.value));
-                      setDiscountTarget("");
-                    }
-                    markDirty();
-                  }}
-                  value={discountDefinitionId}
-                >
-                  <option value="">Custom discount</option>
-                  {configuration.discounts
-                    .filter((item) => item.enabled)
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.label}
-                      </option>
-                    ))}
+            <div className="space-y-2 rounded-lg bg-slate-50 p-3">
+              <h4 className="font-semibold">Reservation Discounts</h4>
+              <label><span className={labelClass}>Reservation preset</span>
+                <select className={inputClass} value={discountDefinitionId} onChange={(event) => setDiscountDefinitionId(event.target.value)}>
+                  <option value="">Select preset</option>
+                  {getApplicablePresets(configuration, "reservation").filter((item) => item.currency === (priceLines[0]?.currency ?? reservationCurrency)).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                 </select>
               </label>
-            )}
+              <button type="button" className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium" disabled={!discountDefinitionId} onClick={addReservationPreset}>Apply reservation preset</button>
+              <p className="text-xs text-slate-500">Staff verify eligibility. Selection alone does not apply the preset.</p>
+            </div>
             {discounts.length > 0 && (
               <ul className="space-y-2">
                 {discounts.map((discount, index) => (
@@ -2323,14 +2320,21 @@ export function ReservationPane({
                   >
                     <span>
                       {index + 1}. {discount.label} ·{" "}
-                      {discount.method === "percentage"
+                      {discount.method === "final_price" ? `${formatReservationMoney(discount.discountedUnitPrice ?? 0, discount.currency)} per unit` : discount.method === "percentage"
                         ? `${discount.value}%`
                         : formatReservationMoney(discount.value)}
+                      {discount.sourcePresetId ? " (preset, read-only)" : " (manual)"}
                     </span>
+                    {!discount.sourcePresetId && <button type="button" className="ml-auto mr-3 text-slate-500 underline" onClick={() => {
+                      setEditingDiscountId(discount.id); setManualDiscountLabel(discount.label);
+                      setDiscountScope(discount.scope); setDiscountTarget(discount.targetId);
+                      setDiscountMethod(discount.method as DiscountMethod); setDiscountValue(String(discount.value));
+                    }}>Edit manual discount</button>}
                     <button
                       type="button"
                       aria-label={`Remove ${discount.label}`}
                       onClick={() => {
+                        if (editingDiscountId === discount.id) setEditingDiscountId(null);
                         setDiscounts((current) =>
                           current.filter((item) => item.id !== discount.id),
                         );
@@ -2344,6 +2348,8 @@ export function ReservationPane({
                 ))}
               </ul>
             )}
+            <h4 className="font-semibold">Manual Discount</h4>
+            <label><span className={labelClass}>Manual discount label</span><input className={inputClass} value={manualDiscountLabel} onChange={(event) => setManualDiscountLabel(event.target.value)} /></label>
             <div className="grid gap-2 sm:grid-cols-2">
               <label>
                 <span className={labelClass}>Applies to</span>
@@ -2432,13 +2438,14 @@ export function ReservationPane({
               onClick={addDiscount}
               className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
             >
-              + Add discount
+              {editingDiscountId ? "Save manual discount" : "+ Add discount"}
             </button>
+            {editingDiscountId && <button type="button" className="ml-2 text-sm underline" onClick={() => { setEditingDiscountId(null); setManualDiscountLabel(""); setDiscountValue(""); }}>Cancel manual edit</button>}
           </section>
 
           <section className={sectionClass}>
             <div>
-              <h3 className={sectionTitleClass}>6. Manual adjustments</h3>
+              <ReservationStageHeading step={6} title="Manual adjustments" />
               <p className="mt-1 text-sm text-slate-500">
                 A reason is required. Positive values add to the amount owed;
                 negative values reduce it.
@@ -2509,7 +2516,7 @@ export function ReservationPane({
 
           <section className={`${sectionClass} pb-6`}>
             <div>
-              <h3 className={sectionTitleClass}>7. Pricing</h3>
+              <ReservationStageHeading step={7} title="Pricing" />
               <p className="mt-1 text-sm text-slate-500">
                 Preview only · tax and payments are not included.
               </p>
@@ -2520,7 +2527,7 @@ export function ReservationPane({
                   key={line.id}
                   className="flex items-start justify-between gap-3 text-sm"
                 >
-                  <span className="text-slate-600">{line.label}</span>
+                  <span className="text-slate-600">Original: {line.label}</span>
                   <span className="shrink-0 font-medium text-slate-900">
                     {formatReservationMoney(line.amount)}
                   </span>
@@ -2530,7 +2537,7 @@ export function ReservationPane({
                 <p className="text-sm text-slate-500">Add a room to see pricing.</p>
               )}
               <div className="flex justify-between border-t border-slate-200 pt-2 text-sm">
-                <span className="text-slate-600">Subtotal</span>
+                <span className="text-slate-600">Original subtotal</span>
                 <span className="font-medium">{formatReservationMoney(priceSummary.subtotal)}</span>
               </div>
               {priceSummary.discounts.map((discount) => (
@@ -2542,6 +2549,7 @@ export function ReservationPane({
                   <span>−{formatReservationMoney(discount.amount)}</span>
                 </div>
               ))}
+              <div className="flex justify-between text-sm"><span>Total discounts</span><span>{formatReservationMoney(priceSummary.discountTotal)}</span></div>
               {adjustments.map((adjustment) => (
                 <div
                   key={adjustment.id}
@@ -2556,9 +2564,7 @@ export function ReservationPane({
                 <span>{formatReservationMoney(priceSummary.amountOwed)}</span>
               </div>
               <p className="text-xs text-slate-500">
-                Prices are captured from the sample rate configuration for
-                this reservation. Actual pricing must be confirmed by the
-                booking service.
+                Original prices and applied reductions are captured for this reservation in memory.
               </p>
             </div>
           </section>
@@ -2573,6 +2579,8 @@ export function ReservationPane({
               {formatReservationMoney(priceSummary.amountOwed)}
             </span>
           </div>
+          {invalidPresets.length > 0 && <p role="alert" className="mb-3 text-sm text-rose-700">{invalidPresets.map((item) => item.label).join(", ")} no longer matches the selected room, duration, or item. Remove it or select a compatible preset before saving. The incompatible preset is excluded from this preview.</p>}
+          {pricingResult.error && <p role="alert" className="mb-3 text-sm text-rose-700">{pricingResult.error}</p>}
           {roomConflicts.length > 0 && (
             <p className="mb-3 text-xs text-rose-700">
               Recheck availability:{" "}

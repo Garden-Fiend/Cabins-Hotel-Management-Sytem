@@ -1,5 +1,6 @@
 export type DiscountScope = "reservation" | "room" | "item";
 export type DiscountMethod = "fixed" | "percentage";
+export type DiscountPresetMethod = DiscountMethod | "final_price";
 export type ReservationStatus =
   | "confirmed"
   | "reserved"
@@ -56,9 +57,19 @@ export interface ReservationDiscount {
   id: string;
   label: string;
   scope: DiscountScope;
-  method: DiscountMethod;
+  method: DiscountPresetMethod;
   value: number;
   targetId: string;
+  sourcePresetId?: string;
+  sourcePresetName?: string;
+  targetRoomTypeId?: string;
+  targetItemId?: string;
+  rateId?: string;
+  currency?: string;
+  baseUnitPrice?: number;
+  discountedUnitPrice?: number;
+  quantity?: number;
+  appliedAt?: Date;
 }
 
 export interface ReservationPriceLine {
@@ -72,12 +83,36 @@ export interface ReservationPriceLine {
   unitPrice?: number;
   taxAmount?: number;
   taxDetails?: string;
+  currency?: string;
+  roomTypeId?: string;
+  rateId?: string;
+  baseUnitPrice?: number;
+  pricingQuantity?: number;
+  effectiveUnitPrice?: number;
+  effectiveAmount?: number;
+  finalAmount?: number;
 }
 
 export interface AppliedDiscount {
   id: string;
   label: string;
   amount: number;
+  value?: number;
+  currency?: string;
+  rateId?: string;
+  targetRoomTypeId?: string;
+  targetItemId?: string;
+  sourcePresetId?: string;
+  sourcePresetName?: string;
+  scope?: DiscountScope;
+  method?: DiscountPresetMethod;
+  targetId?: string;
+  baseUnitPrice?: number;
+  discountedUnitPrice?: number;
+  quantity?: number;
+  order?: number;
+  appliedAt?: Date;
+  allocations?: { lineId: string; amount: number }[];
 }
 
 export interface ReservationPriceSummary {
@@ -87,6 +122,7 @@ export interface ReservationPriceSummary {
   discountTotal: number;
   adjustmentTotal: number;
   amountOwed: number;
+  pipelineVersion?: 2;
 }
 
 export interface ReservationChargeSnapshot {
@@ -128,6 +164,9 @@ export interface ReservationRoomSnapshot {
   breakfast: ReservationBreakfastSnapshot[];
   actualCheckInAt?: Date;
   actualCheckOutAt?: Date;
+  capturedUnitPrice?: number;
+  capturedPricingQuantity?: number;
+  capturedRateId?: string;
 }
 
 export interface ReservationAdjustment {

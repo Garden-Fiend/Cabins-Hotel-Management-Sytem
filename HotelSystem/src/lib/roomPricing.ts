@@ -1,18 +1,25 @@
 import type { HotelConfigurationData } from "../features/configuration/types";
+import { roundMoney } from "./money";
 
 export interface RoomAccommodationPrice {
   amount: number;
   currency: string;
 }
 
-export function getRoomAccommodationPrice(
+export interface RoomPriceBasis extends RoomAccommodationPrice {
+  rateId: string;
+  unitPrice: number;
+  quantity: number;
+}
+
+export function getRoomPriceBasis(
   configuration: Pick<
     HotelConfigurationData,
     "roomTypePrices" | "durations" | "currency"
   >,
   roomTypeId: string,
   durationId: string,
-): RoomAccommodationPrice | undefined {
+): RoomPriceBasis | undefined {
   const duration = configuration.durations.find(
     (item) => item.id === durationId && item.enabled,
   );
@@ -26,7 +33,7 @@ export function getRoomAccommodationPrice(
         item.bookingType === "hourly" &&
         item.durationId === durationId,
     );
-    return rate ? { amount: rate.amount, currency: rate.currency } : undefined;
+    return rate ? { amount: roundMoney(rate.amount, rate.currency), currency: rate.currency, rateId: rate.id, unitPrice: roundMoney(rate.amount, rate.currency), quantity: 1 } : undefined;
   }
 
   const nightlyRate = configuration.roomTypePrices.find(
@@ -41,7 +48,19 @@ export function getRoomAccommodationPrice(
   }
 
   return {
-    amount: nightlyRate.amount * (nights ?? 0),
+    amount: roundMoney(roundMoney(nightlyRate.amount, nightlyRate.currency) * (nights ?? 0), nightlyRate.currency),
     currency: nightlyRate.currency,
+    rateId: nightlyRate.id,
+    unitPrice: roundMoney(nightlyRate.amount, nightlyRate.currency),
+    quantity: nights ?? 0,
   };
+}
+
+export function getRoomAccommodationPrice(
+  configuration: Pick<HotelConfigurationData, "roomTypePrices" | "durations" | "currency">,
+  roomTypeId: string,
+  durationId: string,
+): RoomAccommodationPrice | undefined {
+  const basis = getRoomPriceBasis(configuration, roomTypeId, durationId);
+  return basis ? { amount: basis.amount, currency: basis.currency } : undefined;
 }

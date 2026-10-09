@@ -2,6 +2,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { useReservationDemo } from "../app/useReservationDemo";
 import { formatHotelDate } from "../lib/hotelTime";
+import { AppliedDiscountDescription } from "../components/reservations/AppliedDiscountDescription";
+import { SavedLineAmounts } from "../components/reservations/SavedLineAmounts";
 
 function money(amount: number, currency: string) {
   return new Intl.NumberFormat("en-PH", {
@@ -156,23 +158,24 @@ export function ReservationPrintPage() {
             {reservation.pricing.lines.map((line) => (
               <li key={line.id} className="flex justify-between gap-2">
                 <span>
-                  {line.label}
+                  Original: {line.label}
                   {line.roomNumber ? ` · Room ${line.roomNumber}` : ""}
                   {line.taxDetails ? ` (${line.taxDetails})` : ""}
                 </span>
-                <span className="whitespace-nowrap">{money(line.amount, currency)}</span>
+                <SavedLineAmounts line={line} currency={currency} />
               </li>
             ))}
             <li className="flex justify-between border-t border-slate-300 pt-2">
-              <span>Subtotal</span>
+              <span>Original subtotal</span>
               <span>{money(reservation.pricing.subtotal, currency)}</span>
             </li>
             {reservation.pricing.discounts.map((discount) => (
               <li key={discount.id} className="flex justify-between gap-2">
-                <span>Discount · {discount.label}</span>
+                <AppliedDiscountDescription discount={discount} currency={currency} />
                 <span>−{money(discount.amount, currency)}</span>
               </li>
             ))}
+            <li className="flex justify-between"><span>Total discounts</span><span>{money(reservation.pricing.discountTotal, currency)}</span></li>
             {reservation.adjustments.map((adjustment) => (
               <li key={adjustment.id} className="flex justify-between gap-2">
                 <span>Adjustment · {adjustment.reason}</span>

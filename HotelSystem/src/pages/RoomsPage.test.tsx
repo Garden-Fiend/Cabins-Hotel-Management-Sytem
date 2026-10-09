@@ -139,6 +139,7 @@ describe("room inventory", () => {
       </ReservationDemoProvider>,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
     fireEvent.change(screen.getByLabelText("Product name"), {
       target: { value: "Balcony" },
     });
@@ -148,7 +149,7 @@ describe("room inventory", () => {
     expect(
       screen.getByText("Amenity catalog items do not have a price."),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Add product" })).getByRole("button", { name: "Add product" }));
     expect(screen.getByText("Balcony")).toBeTruthy();
     expect(screen.getByRole("status").textContent).toContain(
       "Product saved for this session.",

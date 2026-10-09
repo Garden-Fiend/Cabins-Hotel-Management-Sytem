@@ -44,9 +44,9 @@ and [`roomPricing.ts`](../src/lib/roomPricing.ts).
 
 ## Reservation snapshots and other charges
 
-Each assigned room saves the final accommodation charge in
+Each assigned room saves the original/base accommodation charge in
 `ReservationRoomSnapshot.capturedRoomPrice`, alongside `capturedCurrency` and
-the selected `durationId`/stay dates. For an overnight stay, the captured price
+the selected `durationId`/stay dates. New snapshots also capture the unit rate, rate ID, and pricing quantity. Final-price discount presets and subsequent reductions are captured separately in the reservation price summary. For an overnight stay, the captured base price
 is already the total for all selected nights; it is not a per-night value.
 
 Opening an existing reservation does not reprice it. The saved accommodation
@@ -94,5 +94,7 @@ price new reservations.
 
 Rates are not date-, weekday-, season-, occupancy-, guest-count-, or
 promotion-dependent. There is no automatic proration, extension, or
-room-specific/reservation-specific rate override. Those behaviors would
-require separate product requirements and explicit configuration.
+physical-room rate override. Contextual discount presets can explicitly replace
+a room type's hourly package or nightly unit price; see
+[Discount mechanics](./discounts.md). Seasonal rules, proration and extensions
+would require separate product requirements and explicit configuration.

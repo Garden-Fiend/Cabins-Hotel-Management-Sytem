@@ -1,128 +1,129 @@
-# Discount mechanics
+# Unified discount mechanics
 
-This document describes the current discount behavior in the in-memory hotel
-system. It records what the app does today; it is not a proposal for additional
-discount rules.
+This frontend-only demo stores configuration and reservations in memory. Nothing
+is persisted to a server. Presets never apply automatically; staff verify guest
+eligibility and explicitly select them. This is not statutory tax/VAT logic.
 
-## Discount definitions and reservation discounts
+## Configuration presets
 
-Configuration → Discounts stores reusable defaults with:
+The dedicated Discounts page (`/discounts`) provides search, create/edit,
+enable/disable and delete. Its builder and preset types belong to
+`src/features/discounts/`; shared pricing/applicability functions remain in `src/lib/`.
+Room presets target a stable room-type ID; item presets target a catalog product ID.
+Reservation presets are globally available in the hotel currency.
 
-- a label;
-- a method: fixed amount or percentage;
-- a numeric value;
-- a scope: reservation, room, or item; and
-- an enabled flag.
+Room and item presets support `final_price`, `fixed`, and `percentage`.
+Reservation presets support only fixed and percentage reductions. A room
+final-price preset stores `{ rateId, discountedUnitPrice }` entries referencing the
+existing room-type price configuration. Blank rates are excluded; zero is valid.
+At least one covered rate is required. There is one nightly rate entry, regardless
+of the selected number of nights. Item final prices are per unit. Item fixed
+reductions are a total against one selected charge line, not a per-unit deduction.
 
-Definitions do not automatically apply to new or existing reservations. In the
-reservation form, staff can select an enabled definition to prefill its label,
-method, value, and scope, then add it to that reservation. These values can be
-changed before adding. Staff can also add a custom discount without selecting a
-definition. A reservation stores its own discount entries (ID, label, scope,
-method, value, and target); it does not retain a link to the configuration
-definition. Thus later edits or disabling of a definition do not rewrite a
-saved reservation discount.
+Definitions include currency. New selections require active targets/rates,
+compatible currencies and valid prices no higher than the current base. If the
+base drops below a preset price, that preset is unavailable for new selection
+until corrected. Disabled/deleted definitions never invalidate saved snapshots.
 
-The add form accepts values greater than zero. Percentages are limited to
-100%; fixed amounts are not capped at entry time, but the calculation limits
-the actual discount to the eligible remaining amount. Room and item discounts
-require a selected target. Reservation-wide discounts have no target.
+## Contextual selection
 
-The types and seed definitions are in
-[`reservation.ts`](../src/types/reservation.ts) and
-[`sampleConfiguration.ts`](../src/features/configuration/sampleConfiguration.ts).
-Definition editing is in
-[`ConfigurationPage.tsx`](../src/pages/ConfigurationPage.tsx), and adding or
-removing reservation discounts is in
-[`ReservationPane.tsx`](../src/components/reservations/ReservationPane.tsx).
+Each assigned room has a room preset selector. It shows only presets matching
+its room type and active rate, with partial coverage respected. Room presets
+apply to accommodation only. Each extra/ordinary charge line has an item
+selector matching its product ID. Two lines of the same product are independent.
+A line selector offers one preset at a time. Manual discounts can be stacked.
 
-## Scope and eligible price lines
+Reservation presets have a separate select-and-Apply interaction. Their values
+cannot be edited inside the reservation pane. The manual form independently
+supports a label, fixed/percentage method, scope and target. Manual entries can
+be edited and removed. Manual room scope intentionally continues to include all
+associated room charges, not just accommodation. Item scope targets one line ID.
 
-The calculator receives the current reservation's price lines and discount
-entries. Each line has an ID, amount, room number, and kind (room, charge, or
-breakfast).
+Removing a room/charge removes its targeted discounts with feedback. A rate or
+room-type change that invalidates a captured preset displays a warning and blocks
+saving until staff remove or replace it. The incompatible reduction is excluded
+from the preview; the selection is not silently deleted. A changed nightly count
+uses the same nightly rate and recalculates quantity. Inactive historical presets
+remain visible as saved selections, using their captured values.
 
-- **Reservation** scope applies to all price lines in the reservation.
-- **Room** scope applies to every line whose `roomNumber` equals the selected
-  physical room number. This includes that room's accommodation and its charge
-  lines; included breakfast lines are also in scope but have a zero amount.
-- **Item** scope applies to the single line whose ID equals the selected target
-  ID. In the reservation form, item targets are room charge lines (extras).
+## One pricing pipeline
 
-If there are no eligible positive-amount lines (for example, an item target
-was removed), the calculated discount amount is zero.
+`reservationPricing.ts` is the only discount calculator. `discountPresets.ts`
+resolves applicability separately; `reservationDraftPricing.ts` builds original
+price lines outside React rendering logic.
 
-## Calculation order
+New reservations use pipeline version 2:
 
-Discounts are applied sequentially in the order stored on the reservation.
-Every price line starts with a remaining amount of `max(0, line.amount)`.
-For each discount:
+1. Start with original base line amounts.
+2. Apply final-price unit overrides first (one per line).
+3. Apply fixed/percentage room and item reductions in insertion order.
+4. Apply reservation-wide fixed/percentage reductions in insertion order.
+5. Sum signed manual adjustments separately.
+6. Calculate the final nonnegative amount owed once.
 
-1. Find eligible lines using its scope and target.
-2. Sum those lines' **remaining** amounts after any earlier discounts.
-3. For a percentage discount, request `eligible remaining amount × value / 100`.
-   For a fixed discount, request the configured fixed value.
-4. Clamp the requested discount to the range from zero through the eligible
-   remaining amount.
-5. Consume that discount from eligible lines in their input order, never
-   taking a line below zero.
+Percentage reductions use the remaining eligible balance. Fixed reductions are
+capped at the balance. Allocation consumes eligible lines in their input order,
+as in the legacy calculator. Lines cannot go negative.
 
-Consequently, later discounts can apply to value remaining after earlier
-discounts, not the original subtotal. A fixed discount is a total amount for
-its scope, not an amount per line. A percentage is calculated against the
-eligible remaining balance at that point in sequence.
+Hourly final prices replace the selected package amount. Nightly final prices
+replace the unit nightly rate and multiply by captured nights. Item final prices
+multiply by the charge quantity. For example, 3 nights at base 1,950 and preset
+1,750 produce base 5,850, reduction 600, and effective amount 5,250.
 
-The implementation is
-[`reservationPricing.ts`](../src/lib/reservationPricing.ts). For example, with
-a PHP 1,000 room line and PHP 200 charge line, a 10% room discount on that room
-includes both lines and requests PHP 120. If a later reservation-wide fixed
-discount is PHP 200, it applies to the balance remaining after the room
-discount, subject to the remaining subtotal cap.
+For one night, a 1,950 base, 1,750 preset, 100 manual room reduction, and 10%
+reservation reduction produce reductions of 200, 100 and 165, leaving 1,485.
 
-## Totals and adjustments
+Each line keeps its original `amount` and stores `effectiveAmount` after unit
+replacement and `finalAmount` after all reductions. Reporting uses:
 
-- **Subtotal** is the sum of `max(0, line.amount)` across the original price
-  lines.
-- **Discount total** is the sum of each sequentially calculated discount.
-- **Adjustment total** is the sum of manual adjustment amounts. Positive
-  adjustments add to what is owed; negative adjustments reduce it.
-- **Amount owed** is
-  `max(0, subtotal - discount total + adjustment total)`.
+```
+amountOwed = max(0, originalSubtotal - totalDiscounts + adjustmentTotal)
+```
 
-The app does not allow an amount owed below zero. The tax helper is currently
-a zero-tax placeholder; tax fields on price lines do not alter this discount
-calculation.
+Preset reductions appear once in totalDiscounts. Effective amounts are comparison
+values and are not subtracted again. The tax helper remains a zero-tax placeholder.
+Unit prices round to the currency precision before quantity multiplication;
+allocations use integer minor units. Percentage amounts round at each application.
+Rounding is half away from zero for monetary inputs, using the currency's Intl
+precision (PHP: two decimals). This is a business calculation policy, not tax law.
 
-## Saved values and history
+## Historical snapshots and compatibility
 
-When saved, each reservation retains its discount entries and its calculated
-price summary. The summary records each applied discount's ID, label, and
-calculated amount, along with subtotal, discount total, adjustment total, and
-amount owed. The reservation detail and print pages display these saved values
-rather than deriving old reservations from the current discount definitions.
+Applied reservation entries capture source preset ID/name, scope, method, target,
+rate ID, currency, unit prices, quantity and application timestamp. Price summary
+entries retain calculated amount, actual application order and per-line allocation.
+Room snapshots capture base unit price, rate ID and pricing quantity. They retain
+`capturedRoomPrice` as the original/base accommodation amount; the price summary
+contains the applied reductions and effective/final amounts.
 
-The summary's applied discount rows do not separately store the original
-scope, method, value, target, or per-line allocation. Those are retained on
-the reservation's `discounts` entries, but a historical summary alone is not a
-full allocation ledger.
+Opening a saved reservation never fetches new preset values. Configuration edits,
+disabling, deletion, rate changes and item price changes do not rewrite records.
+Unrelated edits preserve original rates, quantities and scheduled timestamps.
+Explicit duration edits resolve current base pricing and revalidate selected
+presets. Item quantity edits recalculate using the captured unit prices.
 
-## Current limitations and behavior to be aware of
+Pre-version-2 reservations retain their manual discount list order when edited
+without adding presets. Selecting a preset explicitly opts that record into the
+staged pipeline. Legacy fixture prices/totals remain historical; they are not
+migrated to current base rates. For legacy room snapshots without captured pricing
+quantity, overnight quantity is inferred from the saved hotel-local stay dates.
+Detail and print views read saved reductions; they do not reconstruct history
+from current definitions. Unchanged saves return the existing snapshot directly.
 
-- There is no automatic coupon-code, date, weekday, room-type, guest, booking
-  source, or minimum-spend eligibility.
-- Configuration definitions are presets, not automatically applied
-  promotions.
-- There is no explicit priority field; the discount list order controls
-  calculation order.
-- Discounts do not have a currency field. Fixed discounts and adjustments are
-  formatted using the reservation/hotel currency.
-- Room scope targets a physical room number, not a room type.
-- Item scope targets a price-line ID; in the form this is an extra-charge line.
-- A removed charge also removes item discounts targeted at that charge.
-- Existing snapshots remain historical values if current configuration
-  definitions later change.
+## Limits
 
-Tests for the sequential calculation and total caps are in
-[`reservationPricing.test.ts`](../src/lib/reservationPricing.test.ts). Sample
-reservations with reservation-, room-, and item-scoped discounts are in
-[`demoReservations.ts`](../src/data/demoReservations.ts).
+There are no coupon codes, automatic personal eligibility checks, date schedules,
+rate overrides by physical room, payments, tax compliance rules or backend.
+Only extras and ordinary products are chargeable item targets; included breakfast,
+amenities and inclusions remain outside item preset selection. There is no
+apply-to-all-items action or discount priority editor. Multiple preset definitions
+can exist, but a room/item selector applies one at a time plus manual exceptions.
+
+## Verification
+
+Tests cover applicability, configuration validation, unit replacements, nightly
+and item multiplication, scope differences, stable staging, caps, adjustments,
+rounding, preserved legacy order, contextual UI, manual editing, invalidation,
+historical configuration changes and printing. See `discountPresets.test.ts`,
+`unifiedPricing.test.ts`, `DiscountPresetsEditor.test.tsx` and
+`ReservationDiscounts.test.tsx`, along with the existing pricing/page tests.

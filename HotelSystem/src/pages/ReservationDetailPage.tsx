@@ -7,6 +7,8 @@ import { ReservationPane } from "../components/reservations/ReservationPane";
 import { formatHotelDate } from "../lib/hotelTime";
 import { getRoomAccommodationPrice } from "../lib/roomPricing";
 import type { ReservationSnapshot } from "../types/reservation";
+import { AppliedDiscountDescription } from "../components/reservations/AppliedDiscountDescription";
+import { SavedLineAmounts } from "../components/reservations/SavedLineAmounts";
 
 const cardClass =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
@@ -246,26 +248,27 @@ export function ReservationDetailPage() {
             {reservation.pricing.lines.map((line) => (
               <li key={line.id} className="flex justify-between gap-4">
                 <span>
-                  {line.label}
+                  Original: {line.label}
                   {line.roomNumber ? ` · Room ${line.roomNumber}` : ""}
                   {line.quantity && line.quantity > 1
                     ? ` × ${line.quantity}`
                     : ""}
                   {line.taxDetails ? ` · ${line.taxDetails}` : ""}
                 </span>
-                <span>{money(line.amount, currency)}</span>
+                <SavedLineAmounts line={line} currency={currency} />
               </li>
             ))}
             <li className="flex justify-between border-t border-slate-200 pt-2">
-              <span>Subtotal</span>
+              <span>Original subtotal</span>
               <span>{money(reservation.pricing.subtotal, currency)}</span>
             </li>
             {reservation.pricing.discounts.map((discount) => (
               <li key={discount.id} className="flex justify-between">
-                <span>Discount · {discount.label}</span>
+                <AppliedDiscountDescription discount={discount} currency={currency} />
                 <span>−{money(discount.amount, currency)}</span>
               </li>
             ))}
+            <li className="flex justify-between"><span>Total discounts</span><span>{money(reservation.pricing.discountTotal, currency)}</span></li>
             {reservation.adjustments.map((adjustment) => (
               <li key={adjustment.id} className="flex justify-between">
                 <span>Adjustment · {adjustment.reason}</span>
