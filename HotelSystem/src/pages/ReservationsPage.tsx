@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useReservationDemo } from "../app/useReservationDemo";
 import { useReservationActions } from "../app/useReservationActions";
@@ -26,6 +26,7 @@ function formatMoney(amount: number, currency: string) {
 }
 
 export function ReservationsPage() {
+  const navigate = useNavigate();
   const { reservations, guests, configuration } = useReservationDemo();
   const { checkIn, checkOut, noShow, message, setMessage } =
     useReservationActions();
@@ -223,7 +224,10 @@ export function ReservationsPage() {
               const currency =
                 reservation.rooms[0]?.capturedCurrency ?? configuration.currency;
               return (
-                <tr key={reservation.id} className="hover:bg-slate-50">
+                <tr key={reservation.id} tabIndex={0} aria-label={`Reservation ${reservation.id}, ${guest?.name ?? "Unknown guest"}. Open details`}
+                  onClick={(event) => { if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea, [role='button'], [contenteditable='true']")) return; navigate(`/reservations/${encodeURIComponent(reservation.id)}`); }}
+                  onKeyDown={(event) => { if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return; event.preventDefault(); navigate(`/reservations/${encodeURIComponent(reservation.id)}`); }}
+                  className="cursor-pointer hover:bg-blue-50 focus-visible:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
                   <td className="px-4 py-3 font-semibold">
                     <Link
                       to={`/reservations/${encodeURIComponent(reservation.id)}`}

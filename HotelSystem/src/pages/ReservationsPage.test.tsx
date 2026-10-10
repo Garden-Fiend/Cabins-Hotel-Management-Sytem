@@ -38,6 +38,32 @@ describe("reservation operations", () => {
     vi.useRealTimers();
   });
 
+  it("opens details from row cells and keyboard activation while keeping nested buttons independent", () => {
+    const first = renderReservations();
+    let row = screen.getByRole("row", { name: /DEMO-6/ });
+    fireEvent.click(within(row).getByRole("button", { name: "Check out" }));
+    expect(screen.queryByRole("heading", { name: "DEMO-6" })).toBeNull();
+    fireEvent.click(within(row).getByText("Bob Wilson"));
+    expect(screen.getByRole("heading", { name: "DEMO-6" })).toBeTruthy();
+    first.unmount();
+    const second = renderReservations();
+    row = screen.getByRole("row", { name: /DEMO-8/ });
+    fireEvent.keyDown(row, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "DEMO-8" })).toBeTruthy();
+    const summary = screen.getByRole("region", { name: "Billing summary" });
+    expect(summary.textContent).toContain("7,150");
+    expect(summary.textContent).toContain("Not recorded");
+    expect(screen.getByRole("heading", { name: "Guest Information" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Stay Details" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Billing & Payments" })).toBeTruthy();
+    expect(screen.queryByText(/Before:/)).toBeNull();
+    second.unmount();
+    renderReservations();
+    row = screen.getByRole("row", { name: /DEMO-8/ });
+    fireEvent.keyDown(row, { key: " " });
+    expect(screen.getByRole("heading", { name: "DEMO-8" })).toBeTruthy();
+  });
+
   it("filters the reservation table and opens full saved details", () => {
     renderReservations();
 

@@ -1,3 +1,4 @@
+import type { ReservationChannelTerms, ChannelPricingSnapshot } from "../features/channels/types";
 export type DiscountScope = "reservation" | "room" | "item";
 export type DiscountMethod = "fixed" | "percentage";
 export type DiscountPresetMethod = DiscountMethod | "final_price";
@@ -78,6 +79,7 @@ export interface ReservationPriceLine {
   amount: number;
   roomNumber: string;
   kind: "room" | "charge" | "breakfast";
+  usage?: "purchase" | "extra_charge" | "complimentary_breakfast";
   catalogId?: string;
   quantity?: number;
   unitPrice?: number;
@@ -116,6 +118,7 @@ export interface AppliedDiscount {
 }
 
 export interface ReservationPriceSummary {
+  channel?: ChannelPricingSnapshot;
   lines: ReservationPriceLine[];
   discounts: AppliedDiscount[];
   subtotal: number;
@@ -126,6 +129,7 @@ export interface ReservationPriceSummary {
 }
 
 export interface ReservationChargeSnapshot {
+  usage?: "purchase" | "extra_charge";
   id: string;
   catalogId: string;
   label: string;
@@ -148,7 +152,10 @@ export interface ReservationBreakfastSnapshot {
   lineTotal?: 0;
 }
 
+export type InclusionOrigin = { source: "default" | "manual"; overridden?: boolean };
+
 export interface ReservationRoomSnapshot {
+  inclusionOrigins?: Record<string, InclusionOrigin>;
   roomNumber: string;
   roomTypeId: string;
   roomType: string;
@@ -176,6 +183,7 @@ export interface ReservationAdjustment {
 }
 
 export interface ReservationAuditEntry {
+  visibility?: "accounting";
   eventType:
     | "created"
     | "room_added"
@@ -189,6 +197,8 @@ export interface ReservationAuditEntry {
     | "breakfast_changed"
     | "extra_changed"
     | "inclusion_changed"
+    | "channel_terms_changed"
+    | "channel_settlement_changed"
     | "booking_source_changed"
     | "checked_in"
     | "checked_out"
@@ -211,6 +221,8 @@ export interface CalendarReservationContext {
 }
 
 export interface ReservationSnapshot {
+  channelTerms?: ReservationChannelTerms;
+  supersededChannelTerms?: ReservationChannelTerms[];
   id: string;
   status: ReservationStatus;
   guestId: string;

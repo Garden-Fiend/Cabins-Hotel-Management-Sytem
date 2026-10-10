@@ -1,3 +1,4 @@
+import { illustrativeReservations } from "./channelSamples";
 import {
   historicalRoomRates,
   reservationCurrency,
@@ -333,6 +334,8 @@ export const demoReservations: ReservationSnapshot[] = [
     },
   ),
 ];
+
+demoReservations.push(...illustrativeReservations(demoReservations[0]));
 
 export const demoStays: Stay[] = demoReservations.flatMap((reservation, index) =>
   reservation.rooms.map((assignedRoom, roomIndex) => ({

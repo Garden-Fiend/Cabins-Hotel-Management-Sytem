@@ -4,6 +4,7 @@ import { findClash } from "../../utils/availability";
 
 import {
   calendarStayClassName,
+  getCalendarOccupancy,
   getCalendarDates,
   getCalendarRange,
   getStayPosition,
@@ -11,6 +12,7 @@ import {
 import { hotelDateAtTime } from "../../lib/hotelTime";
 
 interface MonthCalendarProps {
+  now?: Date;
   rooms: string[];
   stays: Stay[];
   anchorDate: Date;
@@ -39,6 +41,7 @@ function formatMonth(date: Date) {
 }
 
 export function MonthCalendar({
+  now = new Date(),
   rooms,
   stays,
   anchorDate,
@@ -183,7 +186,7 @@ export function MonthCalendar({
                         const start = hotelDateAtTime(date, "14:00");
                         onRoomTimeSelect?.(room, start);
                       }}
-                      className="shrink-0 border-r border-slate-100 bg-transparent hover:bg-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50/70"
+                      className="shrink-0 border-r border-slate-100 bg-slate-50 hover:bg-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50/70"
                       style={{
                         width: MIN_DAY_WIDTH,
                       }}
@@ -239,7 +242,7 @@ export function MonthCalendar({
                         key={stay.id}
                         type="button"
                         onClick={() => onStayClick?.(stay)}
-                        className={`pointer-events-auto absolute top-2 z-10 h-12 min-w-0 cursor-pointer overflow-hidden rounded-md border px-3 text-left text-xs font-medium shadow-sm transition hover:shadow-md ${calendarStayClassName(stay)}`}
+                        className={`pointer-events-auto absolute top-2 z-10 h-12 min-w-0 cursor-pointer overflow-hidden rounded-md border px-3 text-left text-xs font-medium shadow-sm transition hover:shadow-md ${calendarStayClassName(stay, now)}`}
                         style={{
                           left: `${position.startRatio * 100}%`,
                           width: `${position.widthRatio * 100}%`,
@@ -252,7 +255,7 @@ export function MonthCalendar({
                         </div>
 
                         <div className="mt-0.5 truncate text-[10px] opacity-70">
-                          {stay.status.replace("_", " ")}
+                          {stay.status === "checked_in" ? getCalendarOccupancy(stay, now) : stay.status.replace("_", " ")}
                         </div>
                       </button>
                     );

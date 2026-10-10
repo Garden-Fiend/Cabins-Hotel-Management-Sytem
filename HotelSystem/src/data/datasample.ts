@@ -1,3 +1,4 @@
+import { getBreakfastProducts } from "../lib/inventoryProducts";
 import type {
   ReservationCatalogItem,
   BookingSourceOption,
@@ -161,15 +162,8 @@ export const reservationInclusions: ReservationCatalogItem[] =
 export const reservationExtraCharges: ReservationCatalogItem[] =
   sampleConfiguration.catalogItems.filter((item) => item.category === "extra");
 
-export const breakfastMeals: ReservationConfigOption[] =
-  sampleConfiguration.catalogItems
-    .filter((option) => option.category === "breakfast" && option.breakfastType === "meal")
-    .map(({ id, label, enabled }) => ({ id, label, enabled }));
-
-export const breakfastDrinks: ReservationConfigOption[] =
-  sampleConfiguration.catalogItems
-    .filter((option) => option.category === "breakfast" && option.breakfastType === "beverage")
-    .map(({ id, label, enabled }) => ({ id, label, enabled }));
+export const breakfastMeals: ReservationConfigOption[] = getBreakfastProducts(sampleConfiguration, "meal");
+export const breakfastDrinks: ReservationConfigOption[] = getBreakfastProducts(sampleConfiguration, "beverage");
 
 export const roomRates: Record<string, Record<string, number>> =
   Object.fromEntries(

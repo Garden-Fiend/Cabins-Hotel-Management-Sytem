@@ -98,3 +98,13 @@ physical-room rate override. Contextual discount presets can explicitly replace
 a room type's hourly package or nightly unit price; see
 [Discount mechanics](./discounts.md). Seasonal rules, proration and extensions
 would require separate product requirements and explicit configuration.
+
+
+## Reservation channel pricing
+
+Booking channel agreements can permit a single externally confirmed accommodation
+total for the reservation. The channel extension applies it once after this
+calculator, preserving original room prices and hotel discount allocations.
+Purchases and extra charges retain their existing discounted amounts. Commission
+and hotel settlements remain separate from guest charges. See
+[Booking channels](./booking-channels.md) for monetary, collection and history rules.

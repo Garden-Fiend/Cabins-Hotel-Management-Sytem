@@ -4,6 +4,7 @@ import { findClash } from "../../utils/availability";
 
 import {
   calendarStayClassName,
+  getCalendarOccupancy,
   getCalendarDates,
   getCalendarRange,
   getYearStayPosition,
@@ -11,6 +12,7 @@ import {
 import { createHotelDateTime, getHotelDateParts } from "../../lib/hotelTime";
 
 interface YearCalendarProps {
+  now?: Date;
   rooms: string[];
   stays: Stay[];
   anchorDate: Date;
@@ -32,6 +34,7 @@ function formatMonth(date: Date) {
 }
 
 export function YearCalendar({
+  now = new Date(),
   rooms,
   stays,
   anchorDate,
@@ -174,7 +177,7 @@ export function YearCalendar({
                       aria-label={`Select Room ${room} in ${formatMonth(month)} ${parts.year}`}
                       disabled={Boolean(findClash(stays, room, start, end))}
                       onClick={() => onRoomTimeSelect?.(room, start)}
-                      className="border-r border-slate-100 bg-transparent hover:bg-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50/70"
+                      className="border-r border-slate-100 bg-slate-50 hover:bg-blue-50 disabled:cursor-not-allowed disabled:bg-slate-50/70"
                     />
                     );
                   })}
@@ -232,7 +235,7 @@ export function YearCalendar({
                           "_",
                           " ",
                         )}`}
-                        className={`pointer-events-auto absolute top-2 z-10 h-12 min-w-0 cursor-pointer overflow-hidden rounded-md border px-3 text-left text-xs font-medium shadow-sm transition hover:shadow-md ${calendarStayClassName(stay)}`}
+                        className={`pointer-events-auto absolute top-2 z-10 h-12 min-w-0 cursor-pointer overflow-hidden rounded-md border px-3 text-left text-xs font-medium shadow-sm transition hover:shadow-md ${calendarStayClassName(stay, now)}`}
                         style={{
                           left: `${position.startRatio * 100}%`,
                           width: `${position.widthRatio * 100}%`,
@@ -245,7 +248,7 @@ export function YearCalendar({
                         </div>
 
                         <div className="truncate text-[10px] leading-3 opacity-70">
-                          {stay.status.replace("_", " ")}
+                          {stay.status === "checked_in" ? getCalendarOccupancy(stay, now) : stay.status.replace("_", " ")}
                         </div>
                       </button>
                     );

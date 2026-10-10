@@ -1,3 +1,4 @@
+import type { ChannelAgreement, ChannelClassification } from "../channels/types";
 import type { DiscountDefinitionConfiguration } from "../discounts/types";
 
 export type ConfigurationValue = string | number | boolean | string[];
@@ -7,6 +8,7 @@ export interface RoomTypeConfiguration {
   label: string;
   enabled: boolean;
   archived?: boolean;
+  defaultInclusions?: { catalogId: string; quantity: number }[];
   defaultCapacity: number;
   amenities: string[];
 }
@@ -47,6 +49,9 @@ export interface DurationConfiguration {
 }
 
 export interface BookingSourceConfiguration {
+  classification?: ChannelClassification;
+  referenceRequired?: boolean;
+  notes?: string;
   id: string;
   label: string;
   enabled: boolean;
@@ -75,6 +80,7 @@ export interface CatalogConfiguration {
   category: CatalogCategory;
   categoryId: string;
   breakfastType?: BreakfastProductType;
+  availableForSale?: boolean;
   price: number;
   enabled: boolean;
   archived?: boolean;
@@ -95,6 +101,8 @@ export interface HotelConfigurationData {
   rooms: RoomConfiguration[];
   durations: DurationConfiguration[];
   bookingSources: BookingSourceConfiguration[];
+  channelAgreements?: ChannelAgreement[];
+  breakfastEligibleItems?: { inventoryItemId: string; kind: BreakfastProductType; enabled: boolean }[];
   catalogItems: CatalogConfiguration[];
   inventoryCategories: InventoryCategoryConfiguration[];
   roomTypePrices: RoomTypePriceConfiguration[];

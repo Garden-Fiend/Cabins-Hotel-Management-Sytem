@@ -1,3 +1,7 @@
+import { BookingChannelsEditor } from "../components/channels/BookingChannelsEditor";
+import { validateDefaultInclusions } from "../lib/roomTypeInclusions";
+import { RoomTypeInclusionsEditor } from "../features/configuration/RoomTypeInclusionsEditor";
+import { BreakfastEligibilityEditor } from "../features/inventory/BreakfastEligibilityEditor";
 import { useMemo, useState } from "react";
 
 import { useHotelConfiguration } from "../features/configuration/useHotelConfiguration";
@@ -5,6 +9,7 @@ import type {
   HotelConfigurationData,
   ConfigurationValue,
   ConfigurationSection,
+  RoomTypeConfiguration,
 } from "../features/configuration/types";
 import { configurationSections } from "../features/configuration/types";
 import { isValidHotelTime } from "../lib/hotelTime";
@@ -36,7 +41,7 @@ function getRows(section: SectionKey, data: HotelConfigurationData): ConfigRow[]
   switch (section) {
     case "roomTypes":
       return data.roomTypes.map((item) => ({
-        ...item,
+        id: item.id, label: item.label, enabled: item.enabled, archived: item.archived ?? false, defaultCapacity: item.defaultCapacity,
         amenities: item.amenities.map(amenityId),
       }));
     case "rooms":
@@ -67,7 +72,7 @@ function getRows(section: SectionKey, data: HotelConfigurationData): ConfigRow[]
     case "bookingSources":
       return data.bookingSources.map((item) => ({ ...item }));
     case "catalogItems":
-      return data.catalogItems.map((item) => ({ ...item }));
+      return data.catalogItems.map((item) => ({ ...item, availableForSale: item.availableForSale ?? item.category === "ordinary" }));
     case "roomTypePrices":
       return data.roomTypePrices.map((item) => ({ ...item }));
     case "roomStatuses":
@@ -156,18 +161,10 @@ function fieldsFor(
           label: "Category",
           kind: "select",
           options: data.inventoryCategories
-            .filter((category) => category.enabled)
+            .filter((category) => category.enabled && category.type !== "breakfast")
             .map((category) => ({ value: category.id, label: category.label })),
         },
-        {
-          key: "breakfastType",
-          label: "Breakfast type (special category only)",
-          kind: "select",
-          options: [
-            { value: "meal", label: "Meal" },
-            { value: "beverage", label: "Beverage" },
-          ],
-        },
+        { key: "availableForSale", label: "Available for sale", kind: "toggle" },
         { key: "price", label: "Unit price", kind: "number" },
       ];
     case "roomTypePrices":
@@ -280,6 +277,7 @@ function makeId(section: SectionKey, fields: Record<string, ConfigurationValue>)
 export function ConfigurationPage() {
   const { configuration, setConfiguration } = useHotelConfiguration();
   const [activeSection, setActiveSection] = useState<SectionKey>("roomTypes");
+  const [defaultInclusions, setDefaultInclusions] = useState<NonNullable<RoomTypeConfiguration["defaultInclusions"]>>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, ConfigurationValue>>(
     () => defaultFields("roomTypes", configuration),
@@ -308,6 +306,7 @@ export function ConfigurationPage() {
   const rows = getRows(activeSection, configuration);
 
   function selectSection(section: SectionKey) {
+    setDefaultInclusions([]);
     setActiveSection(section);
     setEditingId(null);
     setFields(defaultFields(section, configuration));
@@ -316,6 +315,7 @@ export function ConfigurationPage() {
 
   function editRow(row: ConfigRow) {
     setEditingId(row.id);
+    setDefaultInclusions((configuration.roomTypes.find((item) => item.id === row.id)?.defaultInclusions ?? []).map((item) => ({ ...item })));
     const editable = Object.fromEntries(
       currentFields.map((field) => [field.key, row[field.key] ?? ""]),
     );
@@ -329,7 +329,7 @@ export function ConfigurationPage() {
     setNotice("");
   }
 
-  function persist(id: string, values: Record<string, ConfigurationValue>) {
+  function persist(id: string, values: Record<string, ConfigurationValue>, inclusionDraft?: NonNullable<RoomTypeConfiguration["defaultInclusions"]>) {
     setConfiguration((current) => {
       switch (activeSection) {
         case "roomTypes":
@@ -340,6 +340,7 @@ export function ConfigurationPage() {
               label: stringValue(values, "label"),
               enabled: booleanValue(values, "enabled"),
               defaultCapacity: numberValue(values, "defaultCapacity"),
+              defaultInclusions: inclusionDraft?.map((item) => ({ ...item })) ?? current.roomTypes.find((item) => item.id === id)?.defaultInclusions,
               amenities: stringArrayValue(values, "amenities"),
             }),
           };
@@ -409,6 +410,7 @@ export function ConfigurationPage() {
           return {
             ...current,
             bookingSources: replaceItem(current.bookingSources, {
+              ...current.bookingSources.find(source=>source.id===id),
               id,
               label: stringValue(values, "label"),
               enabled: booleanValue(values, "enabled"),
@@ -426,11 +428,8 @@ export function ConfigurationPage() {
               label: stringValue(values, "label"),
               category: productCategory,
               categoryId: category?.id ?? "",
-              ...(productCategory === "breakfast"
-                ? { breakfastType: stringValue(values, "breakfastType") as "meal" | "beverage" }
-                : {}),
+              availableForSale: productCategory === "ordinary" && booleanValue(values, "availableForSale"),
               price:
-                productCategory === "breakfast" ||
                 productCategory === "amenities"
                   ? 0
                   : numberValue(values, "price"),
@@ -594,8 +593,10 @@ export function ConfigurationPage() {
       setNotice("All room rates must use the same hotel currency.");
       return;
     }
+    if (activeSection === "roomTypes") { const error = validateDefaultInclusions(defaultInclusions, configuration); if (error) { setNotice(error); return; } }
     const id = editingId ?? makeId(activeSection, fields);
-    persist(id, { ...fields, enabled: fields.enabled ?? true });
+    persist(id, { ...fields, enabled: fields.enabled ?? true }, activeSection === "roomTypes" ? defaultInclusions : undefined);
+    setDefaultInclusions([]);
     setEditingId(null);
     setFields(defaultFields(activeSection, configuration));
     setNotice(`${label || "Configuration"} saved for this session.`);
@@ -703,6 +704,7 @@ export function ConfigurationPage() {
       <div className="grid gap-5 xl:grid-cols-[minmax(14rem,0.65fr)_minmax(0,2fr)]">
         <nav aria-label="Configuration categories" className={`${panelClass} h-fit`}>
           <div className="space-y-5">
+          {activeSection === "catalogItems" && <BreakfastEligibilityEditor />}
             {(["Rooms & Inventory", "Booking", "Catalog", "Pricing", "Operations"] as const).map(
               (group) => (
                 <section key={group}>
@@ -734,6 +736,8 @@ export function ConfigurationPage() {
         </nav>
 
         <div className="space-y-5">
+          {activeSection === "bookingSources" ? <BookingChannelsEditor /> : <>
+          {activeSection === "catalogItems" && <BreakfastEligibilityEditor />}
           <section className={panelClass}>
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -874,6 +878,7 @@ export function ConfigurationPage() {
                   Reservation blocking behavior is application-defined.
                 </p>
               )}
+              {activeSection === "roomTypes" && <div className="sm:col-span-2"><RoomTypeInclusionsEditor configuration={configuration} value={defaultInclusions} onChange={setDefaultInclusions} /></div>}
               <div className="flex items-center gap-2 sm:col-span-2">
                 <button
                   type="submit"
@@ -886,6 +891,7 @@ export function ConfigurationPage() {
                     type="button"
                     onClick={() => {
                       setEditingId(null);
+                      setDefaultInclusions([]);
                       setFields(defaultFields(activeSection, configuration));
                     }}
                     className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
@@ -973,6 +979,7 @@ export function ConfigurationPage() {
               </tbody>
             </table>
           </section>
+          </>}
         </div>
       </div>
     </div>

@@ -9,7 +9,8 @@ import { demoReservations } from "./demoReservations";
 
 describe("demonstration reservation domain scenarios", () => {
   it("covers the established reservation cases with related sample entities", () => {
-    expect(demoReservations).toHaveLength(9);
+    expect(demoReservations.filter(item=>item.id.startsWith("DEMO-"))).toHaveLength(9);
+    expect(demoReservations.filter(item=>item.id.startsWith("CHANNEL-"))).toHaveLength(12);
 
     const simple = demoReservations.find((item) => item.id === "DEMO-1");
     expect(simple?.rooms).toHaveLength(1);

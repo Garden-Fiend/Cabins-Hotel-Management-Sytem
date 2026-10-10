@@ -7,8 +7,8 @@ const navigation = [
   { to: "/rooms", label: "Rooms" },
   { to: "/guests", label: "Guests" },
   { to: "/discounts", label: "Discounts" },
-  { to: "/configuration", label: "Configuration" },
   { to: "/inventory", label: "Inventory" },
+  { to: "/configuration", label: "Configuration" },
 ];
 
 export function AppLayout() {

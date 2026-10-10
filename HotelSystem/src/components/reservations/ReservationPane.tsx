@@ -1,3 +1,13 @@
+import { InfoTip } from "../InfoTip";
+import { fromMinorUnits } from "../../lib/money";
+import { useReservationDemo } from "../../app/useReservationDemo";
+import type { ReservationChannelTerms, CollectionTransaction } from "../../features/channels/types";
+import { applyChannelPricing, applicableAgreement, createChannelTerms, validateChannelTerms, commissionEstimate } from "../../lib/channelFinance";
+import { channelTermsAudit, validateTermsPermissions, requireCapability, switchChannelTerms, recordCollection } from "../../lib/channelActions";
+import { ReservationChannelTermsEditor } from "../channels/ReservationChannelTermsEditor";
+import { ChannelGuestSummary } from "../channels/ChannelGuestSummary";
+import { switchInclusionDefaults, setInclusionQuantity } from "../../lib/roomTypeInclusions";
+import { getBreakfastProducts, getSellableProducts } from "../../lib/inventoryProducts";
 import { useCallback, useState } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
@@ -29,6 +39,7 @@ import type {
   ReservationPriceLine,
   ReservationRoomOption,
   ReservationSnapshot,
+  InclusionOrigin,
 } from "../../types/reservation";
 
 interface ReservationPaneProps {
@@ -51,6 +62,7 @@ interface ReservationPaneProps {
 }
 
 interface ChargeDraft {
+  usage?: "purchase" | "extra_charge";
   id: string;
   catalogId: string;
   label: string;
@@ -80,6 +92,7 @@ interface RoomDraft {
   capturedPricingQuantity?: number;
   capturedRateId?: string;
   inclusions: Record<string, number>;
+  inclusionOrigins: Record<string, InclusionOrigin>;
   charges: ChargeDraft[];
   breakfast: Record<string, BreakfastDraft>;
 }
@@ -96,13 +109,14 @@ const labelClass = "mb-1.5 block text-sm font-medium text-slate-700";
 const sectionClass = "space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5";
 const roomSectionClass = "rounded-lg border border-slate-200 bg-white p-3";
 
-function ReservationStageHeading({ step, title }: { step: number; title: string }) {
+function ReservationStageHeading({ step, title, help }: { step: number; title: string; help?: string }) {
   return (
     <h3 aria-label={`${step}. ${title}`} className="flex items-center gap-3 text-base font-semibold text-slate-900">
       <span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-bold text-white">
         {step}
       </span>
       {title}
+      {help && <InfoTip label={title}>{help}</InfoTip>}
     </h3>
   );
 }
@@ -355,6 +369,7 @@ export function ReservationPane({
   onDraftContextChange,
 }: ReservationPaneProps) {
   const { configuration } = useHotelConfiguration();
+  const { capabilities, actor } = useReservationDemo();
   const reservationDurations = configuration.durations;
   const activeRoomTypeIds = new Set(
     configuration.roomTypes
@@ -379,18 +394,16 @@ export function ReservationPane({
   const formatReservationMoney = (amount: number, currency = reservationCurrency) =>
     formatMoney(amount, currency);
   const reservationInclusions = configuration.catalogItems.filter(
-    (item) => item.category === "inclusion" && item.enabled && !item.archived,
-  );
+    (item) => item.category === "inclusion",
+  ).map((item) => ({ ...item, enabled: item.enabled && !item.archived }));
   const reservationExtraCharges = configuration.catalogItems.filter(
-    (item) => (item.category === "extra" || item.category === "ordinary") && item.enabled && !item.archived,
+    (item) => (item.category === "extra") && item.enabled && !item.archived,
   );
-  const breakfastMeals = configuration.catalogItems.filter(
-    (item) => item.category === "breakfast" && item.breakfastType === "meal",
-  );
-  const breakfastDrinks = configuration.catalogItems.filter(
-    (item) => item.category === "breakfast" && item.breakfastType === "beverage",
-  );
+  const breakfastMeals = getBreakfastProducts(configuration, "meal");
+  const breakfastDrinks = getBreakfastProducts(configuration, "beverage");
+  const purchasedProducts = getSellableProducts(configuration);
   const bookingSources = configuration.bookingSources;
+
   const configuredRoomPrice = (roomTypeId: string, durationId: string) =>
     getRoomAccommodationPrice(configuration, roomTypeId, durationId)?.amount;
   const configuredRoomCurrency = (roomTypeId: string, durationId: string) =>
@@ -511,6 +524,7 @@ export function ReservationPane({
         inclusions: Object.fromEntries(
           savedRoom.inclusions.map((item) => [item.catalogId, item.quantity]),
         ),
+        inclusionOrigins: savedRoom.inclusionOrigins ?? Object.fromEntries(savedRoom.inclusions.map((item) => [item.catalogId, { source: "manual" as const }])),
         charges: savedRoom.charges.map((charge) => ({ ...charge })),
         breakfast: Object.fromEntries(
           savedRoom.breakfast.map((breakfast) => [
@@ -547,7 +561,7 @@ export function ReservationPane({
             priceLocked: false,
             adults: 2,
             children: 0,
-            inclusions: {},
+            ...switchInclusionDefaults({ inclusions: {}, inclusionOrigins: {} }, configuration, room.roomTypeId),
             charges: [],
             breakfast: {},
           },
@@ -567,6 +581,28 @@ export function ReservationPane({
       behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth",
     });
   }, [expandedRoom]);
+  const [pendingFinancialAudit,setPendingFinancialAudit] = useState<ReservationAuditEntry[]>([]);
+  const [channelInputsValid,setChannelInputsValid] = useState(true);
+  const [channelTerms,setChannelTerms] = useState<ReservationChannelTerms | undefined>(()=>initialReservation?.channelTerms ? structuredClone(initialReservation.channelTerms) : undefined);
+  const [channelHistory,setChannelHistory] = useState<ReservationChannelTerms[]>(()=>structuredClone(initialReservation?.supersededChannelTerms ?? []));
+  const [pendingSource,setPendingSource] = useState<string | undefined>();
+  function verifyDraftCollection(transaction:CollectionTransaction,status:"partial"|"confirmed") {
+    if (!channelTerms) throw new Error("Choose a channel first.");
+    const draft:ReservationSnapshot = {id:initialReservation?.id ?? "draft",status:initialReservation?.status ?? "confirmed",guestId:"",bookingSourceId:channelTerms.channelId,bookingSourceLabel:channelTerms.channelLabel,checkIn:reservationCheckIn,checkOut:reservationCheckOut,note:"",rooms:[],discounts:[],adjustments:[],createdAt:new Date(),audit:[],pricing:pricingResult.summary,channelTerms,supersededChannelTerms:channelHistory};
+    const verified=recordCollection(draft,transaction,status,capabilities);
+    setChannelTerms(verified.channelTerms);setPendingFinancialAudit(current=>[...current,...verified.audit.slice(-1)]);markDirty();
+  }
+  function changeSource(id:string,reviewed=false) {
+    if (initialReservation && id !== bookingSource && !reviewed) {setPendingSource(id);return;}
+    try {
+      requireCapability(capabilities,"edit_channel_terms");
+      const source = bookingSources.find(item=>item.id===id);
+      const agreement = source ? applicableAgreement(configuration.channelAgreements ?? [],id,hotelDateKey(new Date())) : undefined;
+      const next = source ? createChannelTerms(source,agreement,priceLines[0]?.currency ?? reservationCurrency) : undefined;
+      if (initialReservation && id!==bookingSource) {const switched=switchChannelTerms({...initialReservation,channelTerms,supersededChannelTerms:channelHistory},next,reviewed,capabilities);setChannelHistory(switched.supersededChannelTerms);}
+      setChannelInputsValid(true);setChannelTerms(next);setBookingSource(id);setPendingSource(undefined);markDirty();
+    }catch(error){setErrorMessage(error instanceof Error ? error.message : "Unable to capture channel agreement.");}
+  }
   const [bookingSource, setBookingSource] = useState(
     initialReservation?.bookingSourceId ?? "",
   );
@@ -645,7 +681,8 @@ export function ReservationPane({
       return { summary: initialReservation?.pricing ?? { lines: [], discounts: [], subtotal: 0, discountTotal: 0, adjustmentTotal: 0, amountOwed: 0 }, error: error instanceof Error ? error.message : "Unable to calculate prices." };
     }
   })();
-  const priceSummary = pricingResult.summary;
+  const channelPricingResult = (() => { try { return {summary:applyChannelPricing(pricingResult.summary,channelTerms,channelHistory),error:""}; } catch (error) {return {summary:pricingResult.summary,error:error instanceof Error ? error.message : "Invalid channel pricing."};} })();
+  const priceSummary = channelPricingResult.summary;
 
   function selectLinePreset(line: ReservationPriceLine, presetId: string) {
     const scope = line.kind === "room" ? "room" : "item";
@@ -806,7 +843,7 @@ export function ReservationPane({
         priceLocked: false,
         adults: 2,
         children: 0,
-        inclusions: {},
+        ...switchInclusionDefaults({ inclusions: {}, inclusionOrigins: {} }, configuration, option.roomTypeId),
         charges: [],
         breakfast: {},
       },
@@ -814,6 +851,22 @@ export function ReservationPane({
     setSelectedRoomNumber("");
     setExpandedRoom(option.number);
     markDirty();
+  }
+
+  function changeAssignedRoom(room: RoomDraft, number: string) {
+    if (initialReservation && initialReservation.status !== "confirmed" && initialReservation.status !== "reserved") return;
+    const option = reservationRooms.find((item) => item.number === number);
+    if (!option || roomDrafts.some((item) => item.roomNumber === number) || !isOperationallyAvailable(number, configuration)) { setErrorMessage("Select an active room that is available for assignment."); return; }
+    const start = room.useReservationStay ? reservationCheckIn : getRoomStayStart(room);
+    const end = room.useReservationStay ? reservationCheckOut : getRoomStayEnd(room);
+    const selectedDuration = room.useReservationStay ? durationId : room.durationId;
+    if (findClash(stays, number, start, end, undefined, existingReservationId) || configuredRoomPrice(option.roomTypeId, selectedDuration) === undefined) {
+      setErrorMessage("Select an available room with a configured rate for this stay."); return;
+    }
+    updateRoom(room.roomNumber, { roomNumber: number, roomTypeId: option.roomTypeId, roomType: option.type, priceLocked: false,
+      ...(room.roomTypeId === option.roomTypeId ? {} : switchInclusionDefaults(room, configuration, option.roomTypeId)) });
+    setDiscounts((current) => current.map((discount) => discount.scope === "room" ? { ...discount, targetId: discount.targetId === room.roomNumber ? number : discount.targetId === `room:${room.roomNumber}` ? `room:${number}` : discount.targetId } : discount));
+    setExpandedRoom(number);
   }
 
   function updateRoom(roomNumber: string, update: Partial<RoomDraft>) {
@@ -854,8 +907,8 @@ export function ReservationPane({
     setIsDirty(true);
   }
 
-  function addCharge(roomNumber: string, catalogId: string) {
-    const option = reservationExtraCharges.find((item) => item.id === catalogId);
+  function addCharge(roomNumber: string, catalogId: string, usage: "purchase" | "extra_charge" = "extra_charge") {
+    const option = (usage === "purchase" ? purchasedProducts : reservationExtraCharges).find((item) => item.id === catalogId);
     if (!option?.enabled) {
       return;
     }
@@ -869,6 +922,7 @@ export function ReservationPane({
                 ...room.charges,
                 {
                   id: `charge-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                  usage,
                   catalogId: option.id,
                   label: option.label,
                   quantity: 1,
@@ -974,12 +1028,41 @@ export function ReservationPane({
   }
 
   async function submitReservation() {
+    if (!channelInputsValid || pendingSource !== undefined) {setErrorMessage("Correct channel amounts and finish the source change review before saving.");return;}
     if (initialReservation && !isDirty) {
       onSaved?.(initialReservation, stays.filter((stay) => stay.reservationId === initialReservation.id));
       return;
     }
     if (!canCreate) {
       return;
+    }
+
+    try {
+      if (!channelInputsValid || pendingSource !== undefined) throw new Error("Correct channel amounts and finish the source change review before saving.");
+      if (channelPricingResult.error) throw new Error(channelPricingResult.error);
+      // A reviewed source switch archives old financial facts; it never edits their transaction history.
+      validateTermsPermissions(channelTerms, initialReservation?.channelTerms?.channelId === channelTerms?.channelId ? initialReservation?.channelTerms : undefined, capabilities);
+      if (channelTerms) validateChannelTerms(channelTerms, selectedBookingSource ?? {id:bookingSource,label:initialReservation?.bookingSourceLabel ?? bookingSource,enabled:false},initialReservation?.channelTerms);
+    }catch(error){setErrorMessage(error instanceof Error ? error.message : "Invalid channel terms.");return;}
+    for (const room of roomDrafts) {
+      const duration = configuration.durations.find((item) => item.id === (room.useReservationStay ? durationId : room.durationId));
+      const start = room.useReservationStay ? reservationCheckIn : getRoomStayStart(room);
+      const end = room.useReservationStay ? reservationCheckOut : getRoomStayEnd(room);
+      const allowedDates = duration?.bookingType === "overnight" ? getBreakfastDates(start, end).map(hotelDateKey) : [];
+      const savedRoom = initialReservation?.rooms.find((item) => item.roomNumber === room.roomNumber);
+      for (const [key, choice] of Object.entries(room.breakfast)) {
+        const [date, index] = key.split(":");
+        const previous = savedRoom?.breakfast.find((item) => item.stayDate === date && item.guestNumber === Number(index) + 1);
+        if (choice.status !== "included") continue;
+        if (!allowedDates.includes(date) || Number(index) >= room.adults + room.children) continue;
+        if ((!breakfastMeals.some((item) => item.id === choice.meal && item.enabled) && previous?.mealId !== choice.meal) ||
+            (!breakfastDrinks.some((item) => item.id === choice.drink && item.enabled) && previous?.beverageId !== choice.drink)) {
+          setErrorMessage("Select an eligible meal and beverage for each new complimentary breakfast."); return;
+        }
+      }
+      if (room.charges.some((charge) => !Number.isInteger(charge.quantity) || charge.quantity < 1 || !Number.isFinite(charge.unitPrice) || charge.unitPrice < 0)) {
+        setErrorMessage("Charge quantities must be positive whole numbers with valid unit prices."); return;
+      }
     }
 
     if (roomConflicts.length > 0) {
@@ -1102,6 +1185,7 @@ export function ReservationPane({
                 room.roomTypeId,
                 room.useReservationStay ? durationId : room.durationId,
               ),
+          inclusionOrigins: { ...room.inclusionOrigins },
           inclusions: Object.entries(room.inclusions)
             .filter(([, quantity]) => quantity > 0)
             .map(([catalogId, quantity]) => ({
@@ -1157,7 +1241,9 @@ export function ReservationPane({
             })
             .filter(
               (breakfast) =>
-                breakfast.guestNumber <= room.adults + room.children,
+                breakfast.guestNumber <= room.adults + room.children &&
+                (configuration.durations.find((item) => item.id === (room.useReservationStay ? durationId : room.durationId))?.bookingType === "overnight") &&
+                getBreakfastDates(roomCheckIn, roomCheckOut).some((date) => hotelDateKey(date) === breakfast.stayDate),
             ),
         };
       }),
@@ -1170,6 +1256,8 @@ export function ReservationPane({
         amount,
         reason,
       })),
+      channelTerms: channelTerms ? {...structuredClone(channelTerms),commissionEstimateMinor:commissionEstimate(channelTerms,priceSummary.channel!.confirmedAccommodationMinor).estimateMinor,commissionBasisMinor:commissionEstimate(channelTerms,priceSummary.channel!.confirmedAccommodationMinor).basisMinor} : undefined,
+      supersededChannelTerms: structuredClone(channelHistory),
       pricing: {
         ...priceSummary,
         lines: priceSummary.lines.map((line) => ({ ...line })),
@@ -1181,6 +1269,8 @@ export function ReservationPane({
     reservation.audit = [
       ...(initialReservation?.audit ?? []),
       ...buildAuditEntries(initialReservation ?? undefined, reservation, createdAt),
+      ...channelTermsAudit(initialReservation?.channelTerms,reservation.channelTerms,actor,createdAt),
+      ...pendingFinancialAudit,
     ];
 
     if (initialReservation) {
@@ -1291,6 +1381,119 @@ export function ReservationPane({
     };
   }, []);
 
+  function renderChargeSection(room: RoomDraft, purchase: boolean) {
+    const options = purchase ? purchasedProducts : reservationExtraCharges;
+    return (
+                          <div className={roomSectionClass}>
+                            <h4 className="text-sm font-semibold text-slate-900">
+                              {purchase ? "Purchased Items" : "Extra charges"}
+                            </h4>
+                            {room.charges.filter((charge) => (charge.usage === "purchase") === purchase).length === 0 ? (
+                              <p className="mt-1 text-sm text-slate-500">
+                                {purchase ? "No purchased items" : "No extra charges"}
+                              </p>
+                            ) : (
+                              <div className="mt-2 space-y-2">
+                                {room.charges.filter((charge) => (charge.usage === "purchase") === purchase).map((charge) => (
+                                  <div
+                                    key={charge.id}
+                                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-2.5 text-sm"
+                                  >
+                                    <span>
+                                      {charge.label} ·{" "}
+                                      {formatReservationMoney(charge.unitPrice)} each · Total {formatReservationMoney(charge.unitPrice * charge.quantity)}
+                                      {!options.some((item) => item.id === charge.catalogId)
+                                        ? " · inactive historical item"
+                                        : ""}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        aria-label={`${charge.label} quantity`}
+                                        className="w-16 rounded-md border border-slate-300 px-2 py-1"
+                                        min={1}
+                                        onChange={(event) => {
+                                          const quantity = Math.max(
+                                            1,
+                                            Math.floor(Number(event.target.value)) || 1,
+                                          );
+                                          updateRoom(room.roomNumber, {
+                                            charges: room.charges.map((item) =>
+                                              item.id === charge.id
+                                                ? { ...item, quantity }
+                                                : item,
+                                            ),
+                                          });
+                                        }}
+                                        type="number"
+                                        value={charge.quantity}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setRoomDrafts((current) =>
+                                            current.map((draft) =>
+                                              draft.roomNumber ===
+                                              room.roomNumber
+                                                ? {
+                                                    ...draft,
+                                                    charges:
+                                                      draft.charges.filter(
+                                                        (item) =>
+                                                          item.id !== charge.id,
+                                                      ),
+                                                  }
+                                                : draft,
+                                            ),
+                                          );
+                                          setDiscounts((current) =>
+                                            current.filter(
+                                              (discount) =>
+                                                discount.targetId !== charge.id,
+                                            ),
+                                          );
+                                          setErrorMessage("Charge removed; its targeted discounts were removed too.");
+                                          setIsDirty(true);
+                                        }}
+                                        className="text-slate-500 underline"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                    <LineDiscountSelector configuration={configuration} line={priceLines.find((line) => line.id === charge.id)!} discounts={discounts} summary={priceSummary} onSelect={selectLinePreset} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <select
+                              aria-label={purchase ? "Add purchased item" : "Add extra charge"}
+                              className={`${inputClass} mt-2`}
+                              onChange={(event) => {
+                                if (event.target.value) {
+                                  addCharge(room.roomNumber, event.target.value, purchase ? "purchase" : "extra_charge");
+                                  event.target.value = "";
+                                }
+                              }}
+                              value=""
+                            >
+                              <option value="">{purchase ? "+ Add item" : "+ Add charge"}</option>
+                              {options.map((item) => (
+                                <option
+                                  key={item.id}
+                                  value={item.id}
+                                  disabled={!item.enabled}
+                                >
+                                  {purchase ? `${configuration.inventoryCategories.find((category) => category.id === item.categoryId)?.label}: ` : ""}{item.label}
+                                  {!item.enabled
+                                    ? " (inactive historical item)"
+                                    : ` · ${formatReservationMoney(item.price)}`}
+                                </option>
+                              ))}
+                            </select>
+                             {purchase && <p className="mt-3 text-sm font-semibold">Purchased items total: {formatReservationMoney(room.charges.filter((charge) => charge.usage === "purchase").reduce((total, charge) => total + charge.quantity * charge.unitPrice, 0))}</p>}
+                          </div>
+    );
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex justify-end bg-slate-950/40 lg:static lg:z-auto lg:h-full lg:min-h-0 lg:bg-transparent"
@@ -1342,7 +1545,7 @@ export function ReservationPane({
 
           <section className={sectionClass}>
             <div>
-              <ReservationStageHeading step={1} title="Primary guest" />
+              <ReservationStageHeading step={1} title="Primary guest" help="Choose the primary guest or add a new guest. Set the adult and child counts for each room under Rooms." />
               <p className="mt-1 text-sm text-slate-500">
                 One guest is associated with the whole reservation.
               </p>
@@ -1477,7 +1680,7 @@ export function ReservationPane({
 
           <section className={sectionClass}>
             <div>
-              <ReservationStageHeading step={2} title="Reservation stay" />
+              <ReservationStageHeading step={2} title="Reservation stay" help="Set arrival and duration. These dates apply to all rooms unless you configure an individual room stay." />
               <p className="mt-1 text-sm text-slate-500">
                 Check-out is calculated from the configured duration.
               </p>
@@ -1551,7 +1754,7 @@ export function ReservationPane({
 
           <section ref={roomsStageRef} className={sectionClass}>
             <div>
-              <ReservationStageHeading step={3} title="Rooms" />
+              <ReservationStageHeading step={3} title="Rooms" help="Add available rooms, then Configure to set occupancy, inclusions, purchases and extras. Done closes room settings and returns you to this stage." />
               <p className="mt-1 text-sm text-slate-500">
                 Rooms can have different room types and individual settings.
               </p>
@@ -1603,10 +1806,7 @@ export function ReservationPane({
                     (item) =>
                       item.enabled || (room.inclusions[item.id] ?? 0) > 0,
                   );
-                  const breakfastDates = getBreakfastDates(
-                    roomStay.start,
-                    roomStay.end,
-                  );
+                  const breakfastDates = configuration.durations.find((item) => item.id === (room.useReservationStay ? durationId : room.durationId))?.bookingType === "overnight" ? getBreakfastDates(roomStay.start, roomStay.end) : [];
 
                   return (
                     <article
@@ -1785,6 +1985,11 @@ export function ReservationPane({
                             <h4 className="text-sm font-semibold text-slate-900">
                               Inclusions
                             </h4>
+                            {(!initialReservation || initialReservation.status === "confirmed" || initialReservation.status === "reserved") && <label className="mt-3 block text-sm font-medium">Assigned room
+                              <select aria-label={`Assigned room ${room.roomNumber}`} value={room.roomNumber} onChange={(event) => changeAssignedRoom(room, event.target.value)} className={`${inputClass} mt-1`}>
+                                {reservationRooms.filter((item) => item.number === room.roomNumber || !roomDrafts.some((draft) => draft.roomNumber === item.number)).map((item) => <option key={item.number} value={item.number}>Room {item.number} - {item.type}</option>)}
+                              </select>
+                            </label>}
                             <div className="mt-2 space-y-2">
                               {inclusionOptions.map((item) => (
                                 <label
@@ -1793,6 +1998,7 @@ export function ReservationPane({
                                 >
                                   <span>
                                     {item.label}
+                                    {room.inclusionOrigins[item.id]?.source === "default" ? " (room-type default)" : ""}
                                     {!item.enabled ? " (inactive historical item)" : ""}
                                   </span>
                                   <input
@@ -1801,13 +2007,7 @@ export function ReservationPane({
                                     min={0}
                                     onChange={(event) =>
                                       updateRoom(room.roomNumber, {
-                                        inclusions: {
-                                          ...room.inclusions,
-                                          [item.id]: Math.max(
-                                            0,
-                                            Number(event.target.value) || 0,
-                                          ),
-                                        },
+                                        ...setInclusionQuantity(room, item.id, Number(event.target.value)),
                                       })
                                     }
                                     type="number"
@@ -1818,115 +2018,7 @@ export function ReservationPane({
                             </div>
                           </div>
 
-                          <div className={roomSectionClass}>
-                            <h4 className="text-sm font-semibold text-slate-900">
-                              Extra charges
-                            </h4>
-                            {room.charges.length === 0 ? (
-                              <p className="mt-1 text-sm text-slate-500">
-                                No extra charges
-                              </p>
-                            ) : (
-                              <div className="mt-2 space-y-2">
-                                {room.charges.map((charge) => (
-                                  <div
-                                    key={charge.id}
-                                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-2.5 text-sm"
-                                  >
-                                    <span>
-                                      {charge.label} ·{" "}
-                                      {formatReservationMoney(charge.unitPrice)} each
-                                      {reservationExtraCharges.find(
-                                        (item) => item.id === charge.catalogId,
-                                      )?.enabled === false
-                                        ? " · inactive historical item"
-                                        : ""}
-                                    </span>
-                                    <div className="flex items-center gap-2">
-                                      <input
-                                        aria-label={`${charge.label} quantity`}
-                                        className="w-16 rounded-md border border-slate-300 px-2 py-1"
-                                        min={1}
-                                        onChange={(event) => {
-                                          const quantity = Math.max(
-                                            1,
-                                            Number(event.target.value) || 1,
-                                          );
-                                          updateRoom(room.roomNumber, {
-                                            charges: room.charges.map((item) =>
-                                              item.id === charge.id
-                                                ? { ...item, quantity }
-                                                : item,
-                                            ),
-                                          });
-                                        }}
-                                        type="number"
-                                        value={charge.quantity}
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setRoomDrafts((current) =>
-                                            current.map((draft) =>
-                                              draft.roomNumber ===
-                                              room.roomNumber
-                                                ? {
-                                                    ...draft,
-                                                    charges:
-                                                      draft.charges.filter(
-                                                        (item) =>
-                                                          item.id !== charge.id,
-                                                      ),
-                                                  }
-                                                : draft,
-                                            ),
-                                          );
-                                          setDiscounts((current) =>
-                                            current.filter(
-                                              (discount) =>
-                                                discount.targetId !== charge.id,
-                                            ),
-                                          );
-                                          setErrorMessage("Charge removed; its targeted discounts were removed too.");
-                                          setIsDirty(true);
-                                        }}
-                                        className="text-slate-500 underline"
-                                      >
-                                        Remove
-                                      </button>
-                                    </div>
-                                    <LineDiscountSelector configuration={configuration} line={priceLines.find((line) => line.id === charge.id)!} discounts={discounts} summary={priceSummary} onSelect={selectLinePreset} />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <select
-                              aria-label="Add extra charge"
-                              className={`${inputClass} mt-2`}
-                              onChange={(event) => {
-                                if (event.target.value) {
-                                  addCharge(room.roomNumber, event.target.value);
-                                  event.target.value = "";
-                                }
-                              }}
-                              value=""
-                            >
-                              <option value="">+ Add charge</option>
-                              {reservationExtraCharges.map((item) => (
-                                <option
-                                  key={item.id}
-                                  value={item.id}
-                                  disabled={!item.enabled}
-                                >
-                                  {item.label}
-                                  {!item.enabled
-                                    ? " (inactive historical item)"
-                                    : ` · ${formatReservationMoney(item.price)}`}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
+                          {renderChargeSection(room, false)}
                           <div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Breakfast
@@ -1975,7 +2067,7 @@ export function ReservationPane({
                                                 )
                                                 ? [{
                                                     id: breakfast.meal,
-                                                    label: breakfast.meal,
+                                                    label: initialReservation?.rooms.find((saved) => saved.roomNumber === room.roomNumber)?.breakfast.find((saved) => saved.mealId === breakfast.meal)?.mealLabel ?? breakfast.meal,
                                                   category: "breakfast" as const,
                                                   categoryId: "special-breakfast",
                                                   breakfastType: "meal" as const,
@@ -1998,7 +2090,7 @@ export function ReservationPane({
                                                 )
                                                 ? [{
                                                     id: breakfast.drink,
-                                                    label: breakfast.drink,
+                                                    label: initialReservation?.rooms.find((saved) => saved.roomNumber === room.roomNumber)?.breakfast.find((saved) => saved.beverageId === breakfast.drink)?.beverageLabel ?? breakfast.drink,
                                                   category: "breakfast" as const,
                                                   categoryId: "special-breakfast",
                                                   breakfastType: "beverage" as const,
@@ -2031,10 +2123,10 @@ export function ReservationPane({
                                                         value as BreakfastDraft["status"],
                                                       meal:
                                                         breakfast?.meal ??
-                                                        breakfastMeals[0].id,
+                                                        breakfastMeals.find((item) => item.enabled)?.id ?? "",
                                                       drink:
                                                         breakfast?.drink ??
-                                                        breakfastDrinks[0].id,
+                                                        breakfastDrinks.find((item) => item.enabled)?.id ?? "",
                                                     };
                                                   }
                                                   updateRoom(room.roomNumber, {
@@ -2049,7 +2141,7 @@ export function ReservationPane({
                                                 <option value="unrecorded">
                                                   Unrecorded
                                                 </option>
-                                                <option value="included">
+                                                <option value="included" disabled={!breakfastMeals.some((item) => item.enabled) || !breakfastDrinks.some((item) => item.enabled)}>
                                                   Breakfast
                                                 </option>
                                                 <option value="skipped">
@@ -2141,6 +2233,7 @@ export function ReservationPane({
                               </div>
                             )}
                           </div>
+                          {renderChargeSection(room, true)}
                           <div className="flex justify-end border-t border-slate-300 pt-4">
                             <button
                               type="button"
@@ -2239,15 +2332,14 @@ export function ReservationPane({
 
           <section className={sectionClass}>
             <div>
-              <ReservationStageHeading step={4} title="Booking information" />
+              <div className="flex items-center justify-between"><ReservationStageHeading step={4} title="Booking information" /><InfoTip label="Booking source">Choose how this booking reached the hotel. External channels reveal booking reference, accommodation and collection settings. Changing the source of a saved booking requires review.</InfoTip></div>
             </div>
             <label>
               <span className={labelClass}>Booking source *</span>
               <select
                 className={inputClass}
                 onChange={(event) => {
-                  setBookingSource(event.target.value);
-                  markDirty();
+                  changeSource(event.target.value);
                 }}
                 value={bookingSource}
               >
@@ -2277,7 +2369,10 @@ export function ReservationPane({
                   ))}
               </select>
             </label>
-            <label>
+            {pendingSource !== undefined && <div role="dialog" aria-label="Review booking source change" className="rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-semibold">Review booking source change</h3><p className="mt-2 text-sm">This captures the new channel defaults. Existing collection and confirmed financial terms are archived with their original channel. Verified historical collection still reduces the guest balance; settlement records retain their original channel.</p><div className="mt-3 flex gap-3"><button type="button" className={inputClass} onClick={()=>changeSource(pendingSource,true)}>Confirm reviewed source change</button><button type="button" className={inputClass} onClick={()=>setPendingSource(undefined)}>Keep current source</button></div></div>}
+            {channelTerms && (channelTerms.classification !== "direct" || channelTerms.agreement || channelTerms.externalReference) && <ReservationChannelTermsEditor key={channelTerms.channelId} terms={channelTerms} capabilities={capabilities} actor={actor} onCollection={verifyDraftCollection} onValidity={setChannelInputsValid} onChange={next=>{setChannelTerms(next);markDirty();}} />}
+            <details className="rounded-lg border border-slate-200 p-3" open={Boolean(note) || undefined}><summary className="cursor-pointer text-sm font-medium">Reservation note <span className="font-normal text-slate-500">/ optional</span> <InfoTip label="Reservation note">Add arrival instructions or staff information. Notes do not change the bill.</InfoTip></summary>
+            <label className="mt-3 block">
               <span className={labelClass}>Reservation note</span>
               <textarea
                 className={inputClass}
@@ -2290,16 +2385,12 @@ export function ReservationPane({
                 rows={3}
                 value={note}
               />
-            </label>
+            </label></details>
           </section>
 
-          <section className={sectionClass}>
-            <div>
-              <ReservationStageHeading step={5} title="Discounts" />
-              <p className="mt-1 text-sm text-slate-500">
-                Final-price presets apply first, then room/item reductions, then reservation-wide reductions. Manual room discounts include that room's extras. Lines never fall below zero.
-              </p>
-            </div>
+          <details className={sectionClass} open={discounts.length > 0 || undefined}>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-700">Discounts <span className="font-normal text-slate-500">/ optional{discounts.length ? ` / ${discounts.length} applied` : ""}</span> <InfoTip label="Discounts">Use a preset or a manual reduction when the guest qualifies. Final-price offers apply first, followed by room/item and reservation reductions. A manual room discount includes its extras. A channel accommodation total replaces the discounted accommodation amount.</InfoTip></summary>
+            <div className="space-y-4 pt-2">
             <div className="space-y-2 rounded-lg bg-slate-50 p-3">
               <h4 className="font-semibold">Reservation Discounts</h4>
               <label><span className={labelClass}>Reservation preset</span>
@@ -2441,16 +2532,12 @@ export function ReservationPane({
               {editingDiscountId ? "Save manual discount" : "+ Add discount"}
             </button>
             {editingDiscountId && <button type="button" className="ml-2 text-sm underline" onClick={() => { setEditingDiscountId(null); setManualDiscountLabel(""); setDiscountValue(""); }}>Cancel manual edit</button>}
-          </section>
-
-          <section className={sectionClass}>
-            <div>
-              <ReservationStageHeading step={6} title="Manual adjustments" />
-              <p className="mt-1 text-sm text-slate-500">
-                A reason is required. Positive values add to the amount owed;
-                negative values reduce it.
-              </p>
             </div>
+          </details>
+
+          <details className={sectionClass} open={adjustments.length > 0 || undefined}>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-700">Billing adjustments <span className="font-normal text-slate-500">/ optional{adjustments.length ? ` / ${adjustments.length} applied` : ""}</span> <InfoTip label="Billing adjustments">Use a documented billing correction. Positive amounts add charges; negative amounts reduce them. This does not record payment or OTA commission. A reason is required.</InfoTip></summary>
+            <div className="space-y-4 pt-2">
             {adjustments.length > 0 && (
               <ul className="space-y-2">
                 {adjustments.map((adjustment) => (
@@ -2512,16 +2599,19 @@ export function ReservationPane({
             >
               Apply adjustment
             </button>
-          </section>
+            </div>
+          </details>
 
           <section className={`${sectionClass} pb-6`}>
             <div>
-              <ReservationStageHeading step={7} title="Pricing" />
+              <ReservationStageHeading step={5} title="Review & save" help="Check total guest charges, verified collection and the remaining guest balance. A negative balance means credit. Expand Price breakdown to inspect original prices and discounts." />
               <p className="mt-1 text-sm text-slate-500">
-                Preview only · tax and payments are not included.
+                Check the guest charges and verified collection before saving.
               </p>
             </div>
             <div className="space-y-2">
+              {priceSummary.channel ? <ChannelGuestSummary pricing={priceSummary} compact /> : <div className="flex justify-between rounded-xl bg-blue-50 p-4 font-semibold"><span>Total guest charges</span><span>{formatReservationMoney(priceSummary.amountOwed)}</span></div>}
+              <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium">Price breakdown <InfoTip label="Price breakdown">Original room and item prices, hotel discounts and billing corrections are retained. Channel adjustments appear in guest billing. Commission never reduces guest charges.</InfoTip></summary><div className="mt-3 space-y-2">
               {priceSummary.lines.map((line) => (
                 <div
                   key={line.id}
@@ -2560,12 +2650,13 @@ export function ReservationPane({
                 </div>
               ))}
               <div className="flex justify-between border-t border-slate-200 pt-3 text-base font-bold text-slate-900">
-                <span>Amount owed</span>
+                <span>Total guest charges</span>
                 <span>{formatReservationMoney(priceSummary.amountOwed)}</span>
               </div>
               <p className="text-xs text-slate-500">
                 Original prices and applied reductions are captured for this reservation in memory.
               </p>
+              </div></details>
             </div>
           </section>
         </div>
@@ -2573,10 +2664,10 @@ export function ReservationPane({
         <footer className="sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-4px_12px_rgba(15,23,42,0.04)] sm:px-6">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-sm font-medium text-slate-600">
-              Amount owed
+              {priceSummary.channel ? "Guest balance" : "Total guest charges"}
             </span>
             <span className="text-lg font-bold text-slate-900">
-              {formatReservationMoney(priceSummary.amountOwed)}
+              {formatReservationMoney(priceSummary.channel ? fromMinorUnits(priceSummary.channel.guestBalanceMinor,priceSummary.channel.currency) : priceSummary.amountOwed)}
             </span>
           </div>
           {invalidPresets.length > 0 && <p role="alert" className="mb-3 text-sm text-rose-700">{invalidPresets.map((item) => item.label).join(", ")} no longer matches the selected room, duration, or item. Remove it or select a compatible preset before saving. The incompatible preset is excluded from this preview.</p>}

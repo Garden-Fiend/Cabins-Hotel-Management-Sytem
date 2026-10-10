@@ -36,7 +36,7 @@ describe("inventory catalog", () => {
     expect(document.activeElement).toBe(updatedCard);
   });
 
-  it("keeps special breakfast categories stable and creates a typed product", () => {
+  it("keeps special breakfast configuration stable and references a regular product", () => {
     render(
       <ReservationDemoProvider>
         <InventoryPage />
@@ -55,14 +55,18 @@ describe("inventory catalog", () => {
       target: { value: "Pancakes" },
     });
     fireEvent.change(screen.getByLabelText("Category"), {
-      target: { value: "special-breakfast" },
-    });
-    fireEvent.change(screen.getByLabelText("Breakfast product type"), {
-      target: { value: "meal" },
+      target: { value: "meals" },
     });
     fireEvent.click(within(screen.getByRole("dialog", { name: "Add product" })).getByRole("button", { name: "Add product" }));
 
-    expect(screen.getByText("Pancakes · meal")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View Pancakes" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Manage categories" }));
+    fireEvent.click(screen.getByRole("button", { name: "Configure breakfast" }));
+    fireEvent.click(screen.getByLabelText("Breakfast eligible: Pancakes"));
+    fireEvent.click(screen.getByRole("button", { name: "Save breakfast configuration" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close popup" }));
+    fireEvent.click(screen.getByRole("button", { name: "Breakfast Items" }));
+    expect(screen.getByRole("button", { name: "View Pancakes" })).toBeTruthy();
   });
 
   it("archives a product without removing saved historical catalog data", () => {

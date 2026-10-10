@@ -1,3 +1,5 @@
+import type { ChannelSettlement } from "../features/channels/types";
+import type { ChannelCapabilities } from "./permissions";
 import { createContext } from "react";
 
 import type { Stay } from "../types/booking";
@@ -6,6 +8,10 @@ import type { SampleGuest } from "../data/datasample";
 import type { HotelConfigurationData } from "../features/configuration/types";
 
 export interface ReservationDemoContextValue {
+  capabilities: ChannelCapabilities;
+  actor: string;
+  settlements: ChannelSettlement[];
+  setSettlements: React.Dispatch<React.SetStateAction<ChannelSettlement[]>>;
   reservations: ReservationSnapshot[];
   setReservations: React.Dispatch<
     React.SetStateAction<ReservationSnapshot[]>

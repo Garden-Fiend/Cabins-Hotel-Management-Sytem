@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { Stay } from "../types/booking";
 import type { CalendarView } from "../lib/calendar";
 import type { CalendarReservationContext } from "../types/reservation";
@@ -28,10 +29,13 @@ export function AvailabilityCalendar({
   draftContexts = [],
   onDraftContextClick,
 }: AvailabilityCalendarProps) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 1000); return () => window.clearInterval(timer); }, []);
   switch (view) {
     case "day":
       return (
         <DayCalendar
+          now={now}
           rooms={rooms}
           stays={stays}
           anchorDate={anchorDate}
@@ -45,6 +49,7 @@ export function AvailabilityCalendar({
     case "week":
       return (
         <WeekCalendar
+          now={now}
           rooms={rooms}
           stays={stays}
           anchorDate={anchorDate}
@@ -58,6 +63,7 @@ export function AvailabilityCalendar({
     case "month":
       return (
         <MonthCalendar
+          now={now}
           rooms={rooms}
           stays={stays}
           anchorDate={anchorDate}
@@ -71,6 +77,7 @@ export function AvailabilityCalendar({
     case "year":
       return (
         <YearCalendar
+          now={now}
           rooms={rooms}
           stays={stays}
           anchorDate={anchorDate}

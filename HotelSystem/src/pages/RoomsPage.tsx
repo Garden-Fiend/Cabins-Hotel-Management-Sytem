@@ -1,3 +1,5 @@
+import { validateDefaultInclusions } from "../lib/roomTypeInclusions";
+import { RoomTypeInclusionsEditor } from "../features/configuration/RoomTypeInclusionsEditor";
 import { useState } from "react";
 
 import { useReservationDemo } from "../app/useReservationDemo";
@@ -24,6 +26,7 @@ interface RoomForm {
 }
 
 interface RoomTypeForm {
+  defaultInclusions: NonNullable<RoomTypeConfiguration["defaultInclusions"]>;
   label: string;
   defaultCapacity: string;
   amenities: string[];
@@ -63,7 +66,7 @@ export function RoomsPage() {
   const [roomFormVisible, setRoomFormVisible] = useState(false);
   const [roomTypeForm, setRoomTypeForm] = useState<RoomTypeForm>({
     label: "",
-    defaultCapacity: "2",
+    defaultCapacity: "2", defaultInclusions: [],
     amenities: [],
   });
   const [editingRoomTypeId, setEditingRoomTypeId] = useState<string | null>(null);
@@ -218,6 +221,8 @@ export function RoomsPage() {
       setNotice("Enter a unique room type name and a positive whole-number capacity.");
       return;
     }
+    const inclusionError = validateDefaultInclusions(roomTypeForm.defaultInclusions, configuration);
+    if (inclusionError) { setNotice(inclusionError); return; }
     const existing = roomTypes.find((item) => item.id === editingRoomTypeId);
     const next: RoomTypeConfiguration = {
       id: existing?.id ?? makeId("room-type", label),
@@ -226,6 +231,7 @@ export function RoomsPage() {
       archived: existing?.archived ?? false,
       defaultCapacity,
       amenities: roomTypeForm.amenities,
+      defaultInclusions: roomTypeForm.defaultInclusions.map((item) => ({ ...item })),
     };
     setConfiguration((current) => ({
       ...current,
@@ -235,7 +241,7 @@ export function RoomsPage() {
           )
         : [...current.roomTypes, next],
     }));
-    setRoomTypeForm({ label: "", defaultCapacity: "2", amenities: [] });
+    setRoomTypeForm({ label: "", defaultCapacity: "2", defaultInclusions: [], amenities: [] });
     setEditingRoomTypeId(null);
     setSelectedRoomTypeId(null);
     setRoomTypeFormVisible(false);
@@ -249,6 +255,7 @@ export function RoomsPage() {
     setRoomTypeForm({
       label: roomType.label,
       defaultCapacity: String(roomType.defaultCapacity),
+      defaultInclusions: (roomType.defaultInclusions ?? []).map((item) => ({ ...item })),
       amenities: roomType.amenities.map((amenity) =>
         resolveAmenityId(amenity),
       ),
@@ -729,7 +736,7 @@ export function RoomsPage() {
                 setSelectedRoomTypeId(null);
                 setRoomTypeForm({
                   label: "",
-                  defaultCapacity: "2",
+                  defaultCapacity: "2", defaultInclusions: [],
                   amenities: [],
                 });
                 setRoomTypeFormVisible(true);
@@ -748,7 +755,7 @@ export function RoomsPage() {
                 setSelectedRoomTypeId(null);
                 setRoomTypeForm({
                   label: "",
-                  defaultCapacity: "2",
+                  defaultCapacity: "2", defaultInclusions: [],
                   amenities: [],
                 });
                 setRoomTypeFormVisible(false);
@@ -773,7 +780,7 @@ export function RoomsPage() {
                   setSelectedRoomTypeId(null);
                   setRoomTypeForm({
                     label: "",
-                    defaultCapacity: "2",
+                    defaultCapacity: "2", defaultInclusions: [],
                     amenities: [],
                   });
                   setRoomTypeFormVisible(false);
@@ -783,6 +790,7 @@ export function RoomsPage() {
                 Close
               </button>
             </div>
+            {notice && <p role="status" className="mt-3 text-sm text-slate-600">{notice}</p>}
             <form onSubmit={saveRoomType} className="mt-4 space-y-3">
               <label className="block text-sm font-medium">
                 Name
@@ -846,6 +854,7 @@ export function RoomsPage() {
                   )}
                 </div>
               </fieldset>
+              <RoomTypeInclusionsEditor configuration={configuration} value={roomTypeForm.defaultInclusions} onChange={(defaultInclusions) => setRoomTypeForm((current) => ({ ...current, defaultInclusions }))} />
               <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                 {editingRoomTypeId ? "Save room type" : "Add room type"}
               </button>
@@ -856,7 +865,7 @@ export function RoomsPage() {
                   setSelectedRoomTypeId(null);
                   setRoomTypeForm({
                     label: "",
-                    defaultCapacity: "2",
+                    defaultCapacity: "2", defaultInclusions: [],
                     amenities: [],
                   });
                   setRoomTypeFormVisible(false);

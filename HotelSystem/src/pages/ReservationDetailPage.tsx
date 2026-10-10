@@ -1,3 +1,7 @@
+import { ChannelGuestSummary } from "../components/channels/ChannelGuestSummary";
+import { ChannelFinancials } from "../components/channels/ChannelFinancials";
+import { fromMinorUnits } from "../lib/money";
+import { ReservationAuditHistory } from "../components/reservations/ReservationAuditHistory";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -102,7 +106,7 @@ export function ReservationDetailPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <header className={`${cardClass} flex flex-wrap items-start justify-between gap-4`}>
         <div>
           <Link to="/reservations" className="text-sm text-blue-800 underline">
             ← All reservations
@@ -197,6 +201,12 @@ export function ReservationDetailPage() {
         </div>
       </header>
 
+      <section aria-label="Billing summary" className={`${cardClass} grid gap-4 sm:grid-cols-3`}>
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total charges</p><p className="mt-2 text-2xl font-bold">{money(reservation.pricing.subtotal, currency)}</p></div>
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Amount paid</p><p className="mt-2 text-xl font-semibold text-slate-600">{reservation.pricing.channel ? money(fromMinorUnits(reservation.pricing.channel.verifiedCollectionMinor,currency),currency) : "Not recorded"}</p></div>
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outstanding balance</p><p className="mt-2 text-2xl font-bold text-blue-900">{money(reservation.pricing.channel ? fromMinorUnits(reservation.pricing.channel.guestBalanceMinor,currency) : reservation.pricing.amountOwed, currency)}</p><p className="mt-1 text-xs text-slate-500">{reservation.pricing.channel ? "Guest charges less verified collection; negative balance is credit." : "Saved amount owed; no payment records available."}</p></div>
+      </section>
+
       {actions.message && (
         <p role="status" className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
           {actions.message}
@@ -219,7 +229,7 @@ export function ReservationDetailPage() {
 
       <div className="grid gap-5 lg:grid-cols-2">
         <section className={cardClass}>
-          <h2 className="text-lg font-semibold">Guest and stay</h2>
+          <h2 className="text-lg font-semibold">Guest Information</h2>
           <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             <dt className="text-slate-500">Guest</dt>
             <dd>{guest?.name ?? "Unknown guest"}</dd>
@@ -229,6 +239,12 @@ export function ReservationDetailPage() {
             <dd>{guest?.email || "Not provided"}</dd>
             <dt className="text-slate-500">Booking source</dt>
             <dd>{reservation.bookingSourceLabel}</dd>
+          </dl>
+        </section>
+
+        <section className={cardClass}>
+          <h2 className="text-lg font-semibold">Stay Details</h2>
+          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             <dt className="text-slate-500">Scheduled check-in</dt>
             <dd>{dateTime(reservation.checkIn)}</dd>
             <dt className="text-slate-500">Scheduled check-out</dt>
@@ -240,60 +256,9 @@ export function ReservationDetailPage() {
             <dt className="text-slate-500">Reservation note</dt>
             <dd className="whitespace-pre-wrap">{reservation.note || "None"}</dd>
           </dl>
-        </section>
-
-        <section className={cardClass}>
-          <h2 className="text-lg font-semibold">Saved price summary</h2>
-          <ul className="mt-4 space-y-2 text-sm">
-            {reservation.pricing.lines.map((line) => (
-              <li key={line.id} className="flex justify-between gap-4">
-                <span>
-                  Original: {line.label}
-                  {line.roomNumber ? ` · Room ${line.roomNumber}` : ""}
-                  {line.quantity && line.quantity > 1
-                    ? ` × ${line.quantity}`
-                    : ""}
-                  {line.taxDetails ? ` · ${line.taxDetails}` : ""}
-                </span>
-                <SavedLineAmounts line={line} currency={currency} />
-              </li>
-            ))}
-            <li className="flex justify-between border-t border-slate-200 pt-2">
-              <span>Original subtotal</span>
-              <span>{money(reservation.pricing.subtotal, currency)}</span>
-            </li>
-            {reservation.pricing.discounts.map((discount) => (
-              <li key={discount.id} className="flex justify-between">
-                <AppliedDiscountDescription discount={discount} currency={currency} />
-                <span>−{money(discount.amount, currency)}</span>
-              </li>
-            ))}
-            <li className="flex justify-between"><span>Total discounts</span><span>{money(reservation.pricing.discountTotal, currency)}</span></li>
-            {reservation.adjustments.map((adjustment) => (
-              <li key={adjustment.id} className="flex justify-between">
-                <span>Adjustment · {adjustment.reason}</span>
-                <span>{money(adjustment.amount, currency)}</span>
-              </li>
-            ))}
-            <li className="flex justify-between border-t border-slate-200 pt-2 font-bold">
-              <span>Amount owed (no payment data recorded)</span>
-              <span>{money(reservation.pricing.amountOwed, currency)}</span>
-            </li>
-          </ul>
-          <p className="mt-3 text-xs text-slate-500">
-            These amounts are saved reservation snapshots; they are not recalculated from current catalog or rate settings.
-          </p>
-        </section>
-      </div>
-
-      <section className={cardClass}>
-        <h2 className="text-lg font-semibold">Assigned rooms and saved inclusions</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {reservation.rooms.map((room) => (
-            <article key={room.roomNumber} className="rounded-xl border border-slate-200 p-4">
-              <h3 className="font-semibold">
-                Room {room.roomNumber} · {room.roomType}
-              </h3>
+          <div className="mt-5 space-y-4">{reservation.rooms.map((room) => <article key={room.roomNumber} className="border-t border-slate-200 pt-4">
+            <h3 className="font-semibold">Room {room.roomNumber} · {room.roomType}</h3>
+            <p className="mt-1 text-sm text-slate-600">Duration: {configuration.durations.find((item) => item.id === room.durationId)?.label ?? "Historical duration"}</p>
               <p className="mt-1 text-sm text-slate-600">
                 Housekeeping readiness:{" "}
                 {configuration.rooms.find(
@@ -321,6 +286,19 @@ export function ReservationDetailPage() {
                   </p>
                 );
               })()}
+            <p className="mt-1 text-sm text-slate-600">Actual check-in: {dateTime(room.actualCheckInAt)} · Actual check-out: {dateTime(room.actualCheckOutAt)}</p>
+          </article>)}</div>
+        </section>
+      </div>
+
+      <section className={cardClass}>
+        <h2 className="text-lg font-semibold">Inclusions & Additional Charges</h2>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {reservation.rooms.map((room) => (
+            <article key={room.roomNumber} className="rounded-xl border border-slate-200 p-4">
+              <h3 className="font-semibold">
+                Room {room.roomNumber} · {room.roomType}
+              </h3>
               <p className="mt-3 text-sm font-medium">Inclusions and charges</p>
               <ul className="mt-1 space-y-1 text-sm text-slate-600">
                 {room.inclusions.map((inclusion) => (
@@ -338,7 +316,7 @@ export function ReservationDetailPage() {
                 ))}
                 {room.charges.map((charge) => (
                   <li key={charge.id}>
-                    {charge.label} × {charge.quantity} ·{" "}
+                    {charge.usage === "purchase" ? "Purchased item: " : ""}{charge.label} × {charge.quantity} ·{" "}
                     {money(charge.quantity * charge.unitPrice, room.capturedCurrency)}
                     {charge.taxDetails ? ` · ${charge.taxDetails}` : ""}
                     {!configuration.catalogItems.some(
@@ -377,25 +355,53 @@ export function ReservationDetailPage() {
         </div>
       </section>
 
+      <ChannelFinancials key={reservation.id} reservation={reservation} />
       <section className={cardClass}>
-        <h2 className="text-lg font-semibold">Audit history</h2>
-        <ol className="mt-4 space-y-3 text-sm text-slate-600">
-          {reservation.audit.map((event, index) => (
-            <li key={`${event.occurredAt.getTime()}-${index}`}>
-              <span className="font-medium text-slate-900">{event.action}</span>
-              {" · "}
-              {dateTime(event.occurredAt)}
-              {" · "}
-              {event.actor}
-              {(event.before || event.after) && (
-                <span className="block text-xs text-slate-500">
-                  {event.before ? `Before: ${event.before} ` : ""}
-                  {event.after ? `After: ${event.after}` : ""}
-                </span>
-              )}
+        <h2 className="text-lg font-semibold">Billing & Payments</h2>
+        <div className="mt-4"><ChannelGuestSummary pricing={reservation.pricing} /></div>
+        <ul className="mt-4 space-y-2 text-sm">
+          {reservation.pricing.lines.map((line) => (
+            <li key={line.id} className="flex justify-between gap-4">
+              <span>
+                Original: {line.label}
+                {line.roomNumber ? ` · Room ${line.roomNumber}` : ""}
+                {line.quantity && line.quantity > 1
+                  ? ` × ${line.quantity}`
+                  : ""}
+                {line.taxDetails ? ` · ${line.taxDetails}` : ""}
+              </span>
+              <SavedLineAmounts line={line} currency={currency} />
             </li>
           ))}
-        </ol>
+          <li className="flex justify-between border-t border-slate-200 pt-2">
+            <span>Original subtotal</span>
+            <span>{money(reservation.pricing.subtotal, currency)}</span>
+          </li>
+          {reservation.pricing.discounts.map((discount) => (
+            <li key={discount.id} className="flex justify-between">
+              <AppliedDiscountDescription discount={discount} currency={currency} />
+              <span>−{money(discount.amount, currency)}</span>
+            </li>
+          ))}
+          <li className="flex justify-between"><span>Total discounts</span><span>{money(reservation.pricing.discountTotal, currency)}</span></li>
+          {reservation.adjustments.map((adjustment) => (
+            <li key={adjustment.id} className="flex justify-between">
+              <span>Adjustment · {adjustment.reason}</span>
+              <span>{money(adjustment.amount, currency)}</span>
+            </li>
+          ))}
+          <li className="flex justify-between border-t border-slate-200 pt-2 font-bold">
+            <span>{reservation.pricing.channel ? "Total guest charges" : "Amount owed (no payment data recorded)"}</span>
+            <span>{money(reservation.pricing.amountOwed, currency)}</span>
+          </li>
+        </ul>
+        <p className="mt-3 text-xs text-slate-500">
+          These amounts are saved reservation snapshots; they are not recalculated from current catalog or rate settings.
+        </p>
+      </section>
+      <section className={cardClass}>
+        <h2 className="text-lg font-semibold">Audit history</h2>
+        <ReservationAuditHistory reservation={reservation} configuration={configuration} guests={guests} />
       </section>
 
       {cancelChoice && (

@@ -1,3 +1,4 @@
+import { BreakfastEligibilityEditor } from "../features/inventory/BreakfastEligibilityEditor";
 import { useState } from "react";
 import { InventoryDialog } from "../features/inventory/InventoryDialog";
 
@@ -28,7 +29,7 @@ export function InventoryPage() {
   const [productName, setProductName] = useState("");
   const [productPrice, setProductPrice] = useState("0");
   const [productCategoryId, setProductCategoryId] = useState("");
-  const [breakfastType, setBreakfastType] = useState<"meal" | "beverage">("meal");
+  const [availableForSale, setAvailableForSale] = useState(true);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
@@ -36,6 +37,7 @@ export function InventoryPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [productDialogOpen, setProductDialogOpen] = useState(false);
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [breakfastDialogOpen, setBreakfastDialogOpen] = useState(false);
   const selectedProduct = configuration.catalogItems.find((item) => item.id === editingProductId);
   const selectedProductCategory = configuration.inventoryCategories.find((item) => item.id === productCategoryId);
   const money = (amount: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: configuration.currency }).format(amount);
@@ -43,14 +45,14 @@ export function InventoryPage() {
   const filteredProducts = configuration.catalogItems.filter((product) => {
     const category = configuration.inventoryCategories.find((item) => item.id === product.categoryId);
     return (showArchived || (product.enabled && !product.archived && category?.enabled)) &&
-      (selectedCategoryId === "all" || product.categoryId === selectedCategoryId) &&
+      (selectedCategoryId === "all" || product.categoryId === selectedCategoryId || (selectedCategoryId === "special-breakfast" && configuration.breakfastEligibleItems?.some((item) => item.inventoryItemId === product.id && item.enabled))) &&
       `${product.label} ${category?.label ?? ""} ${product.breakfastType ?? ""}`.toLowerCase().includes(query.trim().toLowerCase());
   });
 
   function openNewProduct() {
     setEditingProductId(null); setProductName(""); setProductPrice("0");
     setProductCategoryId(activeCategories.some((item) => item.id === selectedCategoryId) ? selectedCategoryId : "");
-    setBreakfastType("meal"); setNotice(""); setProductDialogOpen(true);
+    setAvailableForSale(true); setNotice(""); setProductDialogOpen(true);
   }
 
   function toggleProduct(product: CatalogConfiguration) {
@@ -62,7 +64,7 @@ export function InventoryPage() {
 
 
   const activeCategories = configuration.inventoryCategories.filter(
-    (category) => category.enabled,
+    (category) => category.enabled && category.type !== "breakfast",
   );
 
   function saveCategory(event: React.FormEvent<HTMLFormElement>) {
@@ -122,20 +124,6 @@ export function InventoryPage() {
       setNotice("Enter a product name, active category, and valid non-negative price.");
       return;
     }
-    if (
-      category.type === "breakfast" &&
-      configuration.catalogItems.some(
-        (item) =>
-          item.category === "breakfast" &&
-          item.categoryId === category.id &&
-          item.breakfastType === breakfastType &&
-          item.label.toLowerCase() === name.toLowerCase() &&
-          item.id !== editingProductId,
-      )
-    ) {
-      setNotice("A product with that name already exists for this breakfast type.");
-      return;
-    }
     const duplicate = configuration.catalogItems.some(
       (item) =>
         item.categoryId === category.id &&
@@ -153,9 +141,9 @@ export function InventoryPage() {
       label: name,
       category: category.type as CatalogCategory,
       categoryId: category.id,
-      ...(category.type === "breakfast" ? { breakfastType } : {}),
+      availableForSale: category.type === "ordinary" && availableForSale,
       price:
-        category.type === "breakfast" || category.type === "amenities"
+        category.type === "amenities"
           ? 0
           : price,
       enabled: existing?.enabled ?? true,
@@ -184,7 +172,7 @@ export function InventoryPage() {
     setProductName(product.label);
     setProductPrice(String(product.price));
     setProductCategoryId(product.categoryId);
-    setBreakfastType(product.breakfastType ?? "meal");
+    setAvailableForSale(product.availableForSale !== false);
     setNotice(""); setProductDialogOpen(true);
   }
 
@@ -214,7 +202,7 @@ export function InventoryPage() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Categories</p>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
             {[{ id: "all", label: "All items", enabled: true }, ...visibleCategories].map((category) => {
-              const count = configuration.catalogItems.filter((product) => (category.id === "all" || product.categoryId === category.id) && (showArchived || (product.enabled && !product.archived && configuration.inventoryCategories.some((item) => item.id === product.categoryId && item.enabled)))).length;
+              const count = configuration.catalogItems.filter((product) => (category.id === "all" || product.categoryId === category.id || (category.id === "special-breakfast" && configuration.breakfastEligibleItems?.some((item) => item.inventoryItemId === product.id && item.enabled))) && (showArchived || (product.enabled && !product.archived && configuration.inventoryCategories.some((item) => item.id === product.categoryId && item.enabled)))).length;
               return <button key={category.id} type="button" aria-pressed={selectedCategoryId === category.id} onClick={() => setSelectedCategoryId(category.id)}
                 className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 ${selectedCategoryId === category.id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-slate-100"}`}>
                 {category.label}{!category.enabled ? " (archived)" : ""}
@@ -223,6 +211,8 @@ export function InventoryPage() {
             })}
           </div>
         </div>
+
+        {selectedCategoryId === "special-breakfast" && <button type="button" onClick={() => setBreakfastDialogOpen(true)} className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Configure breakfast</button>}
 
         <div className="my-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-700">{filteredProducts.length} item{filteredProducts.length === 1 ? "" : "s"}{selectedCategoryId !== "all" ? ` in ${configuration.inventoryCategories.find((item) => item.id === selectedCategoryId)?.label ?? "category"}` : " in catalog"}</h2>
@@ -243,7 +233,7 @@ export function InventoryPage() {
                 <p className="text-xs font-medium text-slate-500">{category?.label ?? product.categoryId}</p>
                 <h3 className="font-semibold text-slate-900">{product.label}{product.breakfastType ? ` · ${product.breakfastType}` : ""}</h3>
                 <div className="flex items-center justify-between gap-2 pt-2">
-                  <span className="text-sm font-semibold text-slate-900">{product.category === "breakfast" ? "Free" : product.category === "amenities" ? "Amenity" : money(product.price)}</span>
+                  <span className="text-sm font-semibold text-slate-900">{product.category === "amenities" ? "Amenity" : money(product.price)}</span>
                   <span aria-hidden="true" className="text-slate-400 transition group-hover:translate-x-1">→</span>
                 </div>
               </div>
@@ -260,7 +250,7 @@ export function InventoryPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{selectedProductCategory?.label ?? "New catalog item"}</p>
               <h3 className="mt-2 text-xl font-bold text-slate-900">{productName || "New product"}</h3>
-              <p className="mt-2 text-lg font-semibold text-slate-700">{selectedProductCategory?.type === "breakfast" ? "Free" : selectedProductCategory?.type === "amenities" ? "Amenity" : money(Number(productPrice) || 0)}</p>
+              <p className="mt-2 text-lg font-semibold text-slate-700">{selectedProductCategory?.type === "amenities" ? "Amenity" : money(Number(productPrice) || 0)}</p>
               {selectedProduct && <span className="mt-3 inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{selectedProduct.archived || !selectedProduct.enabled ? "Archived" : "Active"}</span>}
             </div>
             {selectedProduct && <button type="button" onClick={() => toggleProduct(selectedProduct)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">{selectedProduct.archived || !selectedProduct.enabled ? "Restore" : "Archive"}</button>}
@@ -294,25 +284,7 @@ export function InventoryPage() {
                 ))}
               </select>
             </label>
-            {configuration.inventoryCategories.find(
-              (item) => item.id === productCategoryId,
-            )?.type === "breakfast" ? (
-              <label className="text-sm font-medium text-slate-700">
-                <span className="mb-1 block">Breakfast product type</span>
-                <select
-                  className={input}
-                  value={breakfastType}
-                  onChange={(event) =>
-                    setBreakfastType(event.target.value as "meal" | "beverage")
-                  }
-                >
-                  <option value="meal">Meal</option>
-                  <option value="beverage">Beverage</option>
-                </select>
-              </label>
-            ) : configuration.inventoryCategories.find(
-                  (item) => item.id === productCategoryId,
-                )?.type === "amenities" ? (
+            {selectedProductCategory?.type === "amenities" ? (
               <p className="text-sm text-slate-500 sm:col-span-2">
                 Amenity catalog items do not have a price.
               </p>
@@ -330,6 +302,7 @@ export function InventoryPage() {
                 />
               </label>
             )}
+            {selectedProductCategory?.type === "ordinary" && <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={availableForSale} onChange={(event) => setAvailableForSale(event.target.checked)} />Available for sale</label>}
             <div className="flex items-end gap-2">
               <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                 {editingProductId ? "Save product" : "Add product"}
@@ -351,8 +324,10 @@ export function InventoryPage() {
         </div>
       </InventoryDialog>}
 
+      {breakfastDialogOpen && <InventoryDialog title="Breakfast Configuration" onClose={() => setBreakfastDialogOpen(false)}><BreakfastEligibilityEditor /></InventoryDialog>}
+
       {categoryDialogOpen && <InventoryDialog title="Manage categories" onClose={() => setCategoryDialogOpen(false)}>
-        <form onSubmit={saveCategory} className="flex gap-2">
+        <form onSubmit={saveCategory} className="mt-5 flex flex-wrap gap-2">
           <input className={input} aria-label="Category name" placeholder="Category name" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} />
           <button className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">{editingCategoryId ? "Save" : "Add category"}</button>
           {editingCategoryId && <button type="button" onClick={() => { setEditingCategoryId(null); setCategoryName(""); }} className="text-sm underline">Cancel</button>}
@@ -364,6 +339,7 @@ export function InventoryPage() {
             return <article key={category.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
               <div><h3 className="font-semibold text-slate-900">{category.label}</h3><p className="mt-1 text-xs text-slate-500">{category.systemDefined ? `Special category · ${category.type}` : `${products.length} linked products`}{!category.enabled ? " · Archived" : ""}</p></div>
               <div className="flex gap-3 text-sm">
+                {category.type === "breakfast" && <button type="button" onClick={() => { setCategoryDialogOpen(false); setBreakfastDialogOpen(true); }} className="font-semibold text-slate-700 underline">Configure breakfast</button>}
                 <button type="button" onClick={() => { setEditingCategoryId(category.id); setCategoryName(category.label); }} className="font-semibold text-slate-700 underline">Rename</button>
                 {!category.systemDefined && <>
                   {category.enabled && <button type="button" disabled={products.length > 0} title={products.length ? "Archive categories containing products" : undefined} onClick={() => {

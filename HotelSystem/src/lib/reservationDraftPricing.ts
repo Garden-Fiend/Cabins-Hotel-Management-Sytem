@@ -10,7 +10,7 @@ export interface RoomPricingDraft {
   useReservationStay: boolean; durationId: string;
   priceLocked: boolean; capturedRoomPrice: number; capturedCurrency: string;
   capturedUnitPrice?: number; capturedPricingQuantity?: number; capturedRateId?: string;
-  charges: { id: string; catalogId: string; label: string; quantity: number; unitPrice: number }[];
+  charges: { usage?: "purchase" | "extra_charge"; id: string; catalogId: string; label: string; quantity: number; unitPrice: number }[];
   breakfast: Record<string, { status: "included" | "skipped"; meal: string; drink: string }>;
 }
 
@@ -35,13 +35,13 @@ export function buildReservationPriceLines(rooms: RoomPricingDraft[], durationId
       baseUnitPrice: roundMoney(unitPrice, currency), pricingQuantity: quantity, ...calculateTax(price),
     }, ...room.charges.map((charge): ReservationPriceLine => ({
       id: charge.id, label: `${charge.label} × ${charge.quantity}`, amount: roundMoney(charge.quantity * roundMoney(charge.unitPrice, currency), currency),
-      roomNumber: room.roomNumber, kind: "charge", catalogId: charge.catalogId,
+      roomNumber: room.roomNumber, kind: "charge", usage: charge.usage ?? "extra_charge", catalogId: charge.catalogId,
       quantity: charge.quantity, unitPrice: roundMoney(charge.unitPrice, currency), baseUnitPrice: roundMoney(charge.unitPrice, currency),
       pricingQuantity: charge.quantity, currency, ...calculateTax(charge.quantity * charge.unitPrice),
     })), ...Object.entries(room.breakfast).filter(([, breakfast]) => breakfast.status === "included").map(([key, breakfast]): ReservationPriceLine => {
       const [stayDate, guestIndex] = key.split(":");
       return { id: `breakfast:${room.roomNumber}:${stayDate}:${guestIndex}`, label: `${stayDate} · Guest ${Number(guestIndex) + 1}: ${breakfast.meal} + ${breakfast.drink}`,
-        amount: 0, roomNumber: room.roomNumber, kind: "breakfast", quantity: 1, unitPrice: 0, currency, ...calculateTax(0) };
+        amount: 0, roomNumber: room.roomNumber, kind: "breakfast", usage: "complimentary_breakfast", quantity: 1, unitPrice: 0, currency, ...calculateTax(0) };
     })];
   });
 }

@@ -10,31 +10,22 @@ export type CalendarView =
   | "month"
   | "year";
 
-export function calendarStayClassName(stay: {
-  status: string;
-  housekeepingState?: "clean" | "dirty" | "cleaning";
-  roomOperational?: boolean;
-}) {
-  if (
-    stay.status === "cancelled" ||
-    stay.status === "no_show" ||
-    stay.status === "checked_out"
-  ) {
+export type CalendarOccupancy = "vacant" | "reserved" | "occupied" | "overdue";
+export const calendarOccupancyColors: Record<CalendarOccupancy, string> = {
+  vacant: "border-slate-300 bg-slate-100 text-slate-700",
+  reserved: "border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100",
+  occupied: "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+  overdue: "border-rose-400 bg-rose-100 text-rose-900 hover:bg-rose-200",
+};
+export function getCalendarOccupancy(stay: { status: string; checkOut?: Date }, now = new Date()): CalendarOccupancy {
+  if (stay.status === "checked_in") return stay.checkOut && now.getTime() > stay.checkOut.getTime() ? "overdue" : "occupied";
+  return stay.status === "confirmed" || stay.status === "reserved" ? "reserved" : "vacant";
+}
+export function calendarStayClassName(stay: { status: string; checkOut?: Date; housekeepingState?: "clean" | "dirty" | "cleaning"; roomOperational?: boolean }, now = new Date()) {
+  if (stay.status === "cancelled" || stay.status === "no_show" || stay.status === "checked_out") {
     return "border-slate-300 bg-slate-100 text-slate-500 opacity-70";
   }
-  if (stay.roomOperational === false) {
-    return "border-slate-400 bg-slate-200 text-slate-700";
-  }
-  switch (stay.housekeepingState) {
-    case "clean":
-      return "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100";
-    case "dirty":
-      return "border-rose-300 bg-rose-50 text-rose-900 hover:bg-rose-100";
-    case "cleaning":
-      return "border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100";
-    default:
-      return "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100";
-  }
+  return calendarOccupancyColors[getCalendarOccupancy(stay, now)];
 }
 
 export interface CalendarRange {

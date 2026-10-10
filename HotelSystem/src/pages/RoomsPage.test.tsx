@@ -109,7 +109,7 @@ describe("room inventory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Room types" }));
 
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByText("Suite").closest("article")!);
+    fireEvent.click(screen.getByRole("heading", { name: "Suite" }).closest("article")!);
     expect(screen.getByRole("dialog", { name: "Edit room type" })).toBeTruthy();
     expect(
       screen.getByRole("group", { name: "Default amenities" }),
@@ -163,7 +163,7 @@ describe("room inventory", () => {
       </ReservationDemoProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Room types" }));
-    const suite = screen.getByText("Suite").closest("article") as HTMLElement;
+    const suite = screen.getByRole("heading", { name: "Suite" }).closest("article") as HTMLElement;
     expect(
       within(suite).getByRole("button", { name: "Archive" }).hasAttribute("disabled"),
     ).toBe(true);

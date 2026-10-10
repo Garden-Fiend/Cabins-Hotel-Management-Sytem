@@ -127,3 +127,13 @@ rounding, preserved legacy order, contextual UI, manual editing, invalidation,
 historical configuration changes and printing. See `discountPresets.test.ts`,
 `unifiedPricing.test.ts`, `DiscountPresetsEditor.test.tsx` and
 `ReservationDiscounts.test.tsx`, along with the existing pricing/page tests.
+
+
+## External accommodation totals
+
+Booking channel agreements can permit a single externally confirmed accommodation
+total for the reservation. The channel extension applies it once after this
+calculator, preserving original room prices and hotel discount allocations.
+Purchases and extra charges retain their existing discounted amounts. Commission
+and hotel settlements remain separate from guest charges. See
+[Booking channels](./booking-channels.md) for monetary, collection and history rules.

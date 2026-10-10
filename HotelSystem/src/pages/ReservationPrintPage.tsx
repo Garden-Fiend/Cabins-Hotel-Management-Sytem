@@ -1,3 +1,4 @@
+import { ChannelGuestSummary } from "../components/channels/ChannelGuestSummary";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { useReservationDemo } from "../app/useReservationDemo";
@@ -109,6 +110,7 @@ export function ReservationPrintPage() {
           <p><strong>Phone:</strong> {guest?.phone || "Not provided"}</p>
           <p><strong>Email:</strong> {guest?.email || "Not provided"}</p>
           <p><strong>Source:</strong> {reservation.bookingSourceLabel}</p>
+          {reservation.channelTerms && <p><strong>Booking reference:</strong> {reservation.channelTerms.externalReference || "Not recorded"}; collection: {reservation.channelTerms.collection.responsibility} / {reservation.channelTerms.collection.status}; tax basis: {reservation.channelTerms.taxBasis}</p>}
           <p><strong>Check-in:</strong> {dateTime(reservation.checkIn)}</p>
           <p><strong>Check-out:</strong> {dateTime(reservation.checkOut)}</p>
           {reservation.actualCheckInAt && (
@@ -137,7 +139,7 @@ export function ReservationPrintPage() {
               ))}
               {room.charges.map((item) => (
                 <p key={item.id}>
-                  Charge: {item.label} × {item.quantity} ·{" "}
+                  {item.usage === "purchase" ? "Purchased item" : "Charge"}: {item.label} × {item.quantity} ·{" "}
                   {money(item.quantity * item.unitPrice, room.capturedCurrency)}
                 </p>
               ))}
@@ -187,8 +189,9 @@ export function ReservationPrintPage() {
               <span>{money(reservation.pricing.amountOwed, currency)}</span>
             </li>
           </ul>
+          <ChannelGuestSummary pricing={reservation.pricing} />
           <p className="mt-4 text-[0.7rem]">
-            Amounts reflect the saved reservation snapshot. No payment record is available.
+            {reservation.channelTerms ? "Amounts reflect the saved reservation snapshot and verified collection. Channel payouts are separate." : "Amounts reflect the saved reservation snapshot. No payment record is available."}
           </p>
         </section>
         {reservation.note && (

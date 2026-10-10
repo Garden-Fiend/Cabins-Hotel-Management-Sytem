@@ -71,16 +71,18 @@ describe("dashboard reservation flow", () => {
     vi.useRealTimers();
   });
 
-  it("places room readiness and inactive-reservation controls beside the calendar toolbar", () => {
+  it("places occupancy colors and inactive-reservation controls beside the calendar toolbar", () => {
     renderDashboard();
 
     const toolbarButton = screen.getByRole("button", { name: "Today" });
-    const legend = screen.getByLabelText("Room readiness legend");
+    const legend = screen.getByLabelText("Calendar occupancy legend");
     const inactiveFilter = screen.getByRole("checkbox", {
       name: "Show inactive reservations",
     });
     const toolbarPanel = toolbarButton.closest(".rounded-2xl");
 
+    expect(legend.textContent).toContain("Reserved");
+    expect(legend.textContent).toContain("Overdue");
     expect(toolbarPanel).not.toBeNull();
     expect(legend.closest(".rounded-2xl")).toBe(toolbarPanel);
     expect(inactiveFilter.closest(".rounded-2xl")).toBe(toolbarPanel);

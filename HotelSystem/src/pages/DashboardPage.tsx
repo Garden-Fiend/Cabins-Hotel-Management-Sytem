@@ -362,15 +362,16 @@ export function DashboardPage() {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
               <div
                 className="flex flex-wrap gap-x-3 gap-y-1"
-                aria-label="Room readiness legend"
+                aria-label="Calendar occupancy legend"
               >
                 <span className="font-semibold text-slate-700">
-                  Room readiness:
+                  Occupancy:
                 </span>
-                <span className="text-emerald-800">● Clean</span>
-                <span className="text-rose-800">● Dirty</span>
-                <span className="text-amber-800">● Cleaning</span>
-                <span className="text-slate-700">● Out of service</span>
+                <span className="text-slate-600">● Vacant</span>
+                <span className="text-blue-800">● Reserved</span>
+                <span className="text-emerald-800">● Occupied</span>
+                <span className="text-rose-800">● Overdue</span>
+
               </div>
               <label className="flex items-center gap-2 font-medium text-slate-700">
                 <input
