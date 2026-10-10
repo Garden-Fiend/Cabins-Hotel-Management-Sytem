@@ -1078,6 +1078,7 @@ export function ReservationPane({
     setIsSubmitting(true);
     setErrorMessage("");
 
+    try {
     await new Promise((resolve) => window.setTimeout(resolve, 350));
 
     const nextStayId = Math.max(0, ...stays.map((stay) => stay.id)) + 1;
@@ -1277,6 +1278,11 @@ export function ReservationPane({
       onSaved?.(reservation, createdStays);
     } else {
       onCreated(reservation, createdStays);
+    }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to save the reservation. Please retry.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -1534,14 +1540,7 @@ export function ReservationPane({
         </header>
 
         <div ref={reservationScrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-100/70 px-4 py-5 sm:px-5">
-          {errorMessage && (
-            <div
-              role="alert"
-              className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800"
-            >
-              {errorMessage}
-            </div>
-          )}
+
 
           <section className={sectionClass}>
             <div>
@@ -2670,6 +2669,15 @@ export function ReservationPane({
               {formatReservationMoney(priceSummary.channel ? fromMinorUnits(priceSummary.channel.guestBalanceMinor,priceSummary.channel.currency) : priceSummary.amountOwed)}
             </span>
           </div>
+          {errorMessage && (
+            <div
+              role="alert"
+              id="reservation-save-error"
+              className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800"
+            >
+              {errorMessage}
+            </div>
+          )}
           {invalidPresets.length > 0 && <p role="alert" className="mb-3 text-sm text-rose-700">{invalidPresets.map((item) => item.label).join(", ")} no longer matches the selected room, duration, or item. Remove it or select a compatible preset before saving. The incompatible preset is excluded from this preview.</p>}
           {pricingResult.error && <p role="alert" className="mb-3 text-sm text-rose-700">{pricingResult.error}</p>}
           {roomConflicts.length > 0 && (
@@ -2710,6 +2718,7 @@ export function ReservationPane({
               type="button"
               disabled={!canCreate}
               onClick={submitReservation}
+              aria-describedby={errorMessage ? "reservation-save-error" : undefined}
               className="flex-[1.5] rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {isSubmitting
