@@ -1,0 +1,61 @@
+%% Current implemented HMS architecture, 2026-10-12.
+%% Solid arrows represent existing code paths, not a claim that each process is running.
+%% No frontend-to-backend connection or business API exists yet.
+flowchart TB
+    subgraph FRONTEND["Existing frontend - React / TypeScript / Vite"]
+        UI["Pages and components<br/>Reservations, calendars, room configuration"]
+        STATE["ReservationDemoProvider<br/>Business state in browser memory<br/>Resets on reload"]
+        RULES["Frontend domain helpers<br/>Pricing, validation, lifecycle and time"]
+        FIXTURES["Demo reservations and sample configuration"]
+        UI <--> STATE
+        UI --> RULES
+        STATE --> RULES
+        FIXTURES --> STATE
+    end
+
+    GAP["Frontend is not connected to the backend<br/>Booking APIs and server pricing are not implemented"]
+
+    subgraph BACKEND["Isolated local backend - own Python virtual environment"]
+        API["FastAPI via Uvicorn<br/>127.0.0.1:8001 when started"]
+        LIVE["GET /api/v1/live<br/>Process liveness - no database access"]
+        HEALTH["GET /api/v1/health<br/>Database readiness - SELECT 1<br/>200 healthy / 503 unavailable"]
+        CONFIG["Pydantic settings and target guard<br/>Ignored local .env<br/>Only owned loopback database targets allowed"]
+        ENGINE["SQLAlchemy + psycopg<br/>PostgreSQL connections in UTC"]
+        subgraph MODEL["SQLAlchemy table definitions - schema only"]
+            CORE["Core<br/>Companies and hotel time defaults<br/>Operational audit, mutation receipts"]
+            RES["Reservations boundary<br/>Guests, rooms, room types, durations, rates,<br/>booking sources, reservations, allocations"]
+            BILL["Billing boundary<br/>Operational pricing revisions<br/>No accounting journal or posting"]
+        end
+        ALEMBIC["Alembic<br/>Two explicit versioned schema migrations<br/>Company ownership and active-rate safeguards"]
+        SEED["Explicit development seed command<br/>Transactional, repeatable reference inserts<br/>Does not overwrite existing values"]
+        TESTS["Opt-in PostgreSQL tests<br/>Overlap, rollback, seed and constraints"]
+        API --> LIVE
+        API --> HEALTH
+        API --> CONFIG
+        HEALTH --> ENGINE
+        CONFIG --> ENGINE
+        CORE --> ALEMBIC
+        RES --> ALEMBIC
+        BILL --> ALEMBIC
+        CONFIG --> ALEMBIC
+        SEED --> ENGINE
+        TESTS --> ENGINE
+    end
+
+    subgraph DOCKER["Own Docker Compose project: hms-local-foundation"]
+        PG["PostgreSQL 17.6<br/>Host 127.0.0.1:55432 → container 5432"]
+        DEV[("hms_dev<br/>12 tables in hms schema<br/>8 seeded reference rows<br/>No business bookings yet")]
+        TESTDB[("hms_test<br/>Separate integration-test database<br/>Same migration history")]
+        VOLUME[("Own persistent Docker volume<br/>hms-local-foundation_hms_pgdata")]
+        PG --> DEV
+        PG --> TESTDB
+        PG --> VOLUME
+    end
+
+    ENGINE --> PG
+    ALEMBIC --> PG
+
+    EXCLUDED["Outside this architecture<br/>ZKBioTime: no shared Python, database or storage<br/>Supabase, native accounting and Odoo: not implemented"]
+
+    classDef note fill:#fff7dd,stroke:#a87914,color:#332700;
+    class GAP,EXCLUDED note;

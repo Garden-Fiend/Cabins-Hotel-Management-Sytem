@@ -1,0 +1,182 @@
+{
+  "hms_dev": {
+    "booking_sources": [
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "id": "fae9c1c5-12b8-5128-9f96-1daf69cf45ba",
+        "label": "Direct",
+        "source_id": "direct"
+      }
+    ],
+    "companies": [
+      {
+        "currency": "PHP",
+        "hotel_timezone": "Asia/Manila",
+        "id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "name": "HMS Development"
+      }
+    ],
+    "durations": [
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "id": "3057aaa3-78f8-5fef-900c-f4f77892bf54",
+        "kind": "hourly",
+        "minutes": 360,
+        "nights": null,
+        "source_id": "6-hours"
+      },
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "id": "3b919f60-8f18-5a79-bbdd-b796c69a5d1a",
+        "kind": "overnight",
+        "minutes": null,
+        "nights": 1,
+        "source_id": "1-night"
+      }
+    ],
+    "guests": [],
+    "mutation_receipts": [],
+    "operational_audit": [],
+    "pricing_revisions": [],
+    "reference_rates": [
+      {
+        "booking_kind": "overnight",
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "currency": "PHP",
+        "duration_id": null,
+        "enabled": true,
+        "id": "16bf7c3f-25b4-5f1b-b1bc-085e0a680cdc",
+        "room_type_id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7",
+        "source_id": "standard-nightly",
+        "unit_amount_minor": 220000
+      },
+      {
+        "booking_kind": "hourly",
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "currency": "PHP",
+        "duration_id": "3057aaa3-78f8-5fef-900c-f4f77892bf54",
+        "enabled": true,
+        "id": "9ab783b1-acaf-5a12-a381-c03e2e5da877",
+        "room_type_id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7",
+        "source_id": "standard-6-hours",
+        "unit_amount_minor": 110000
+      }
+    ],
+    "reservations": [],
+    "room_allocations": [],
+    "room_types": [
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "enabled": true,
+        "id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7",
+        "label": "Standard",
+        "source_id": "standard"
+      }
+    ],
+    "rooms": [
+      {
+        "archived": false,
+        "capacity_override": null,
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "current_occupancy_allocation_id": null,
+        "display_name": "",
+        "enabled": true,
+        "housekeeping": "clean",
+        "id": "aa3187cf-9e54-5461-8dd0-1395b7ab1559",
+        "number": "101",
+        "operational": true,
+        "room_type_id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7"
+      }
+    ]
+  },
+  "hms_test": {
+    "booking_sources": [
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "id": "fae9c1c5-12b8-5128-9f96-1daf69cf45ba",
+        "label": "Direct",
+        "source_id": "direct"
+      }
+    ],
+    "companies": [
+      {
+        "currency": "PHP",
+        "hotel_timezone": "Asia/Manila",
+        "id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "name": "HMS Development"
+      }
+    ],
+    "durations": [
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "id": "3057aaa3-78f8-5fef-900c-f4f77892bf54",
+        "kind": "hourly",
+        "minutes": 360,
+        "nights": null,
+        "source_id": "6-hours"
+      },
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "id": "3b919f60-8f18-5a79-bbdd-b796c69a5d1a",
+        "kind": "overnight",
+        "minutes": null,
+        "nights": 1,
+        "source_id": "1-night"
+      }
+    ],
+    "guests": [],
+    "mutation_receipts": [],
+    "operational_audit": [],
+    "pricing_revisions": [],
+    "reference_rates": [
+      {
+        "booking_kind": "overnight",
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "currency": "PHP",
+        "duration_id": null,
+        "enabled": true,
+        "id": "16bf7c3f-25b4-5f1b-b1bc-085e0a680cdc",
+        "room_type_id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7",
+        "source_id": "standard-nightly",
+        "unit_amount_minor": 220000
+      },
+      {
+        "booking_kind": "hourly",
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "currency": "PHP",
+        "duration_id": "3057aaa3-78f8-5fef-900c-f4f77892bf54",
+        "enabled": true,
+        "id": "9ab783b1-acaf-5a12-a381-c03e2e5da877",
+        "room_type_id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7",
+        "source_id": "standard-6-hours",
+        "unit_amount_minor": 110000
+      }
+    ],
+    "reservations": [],
+    "room_allocations": [],
+    "room_types": [
+      {
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "enabled": true,
+        "id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7",
+        "label": "Standard",
+        "source_id": "standard"
+      }
+    ],
+    "rooms": [
+      {
+        "archived": false,
+        "capacity_override": null,
+        "company_id": "d262299e-ce31-5ee9-b48a-a4296f41df6f",
+        "current_occupancy_allocation_id": null,
+        "display_name": "",
+        "enabled": true,
+        "housekeeping": "clean",
+        "id": "aa3187cf-9e54-5461-8dd0-1395b7ab1559",
+        "number": "101",
+        "operational": true,
+        "room_type_id": "f9a86fc2-c570-5b21-84e2-fc4221b12bb7"
+      }
+    ]
+  }
+}

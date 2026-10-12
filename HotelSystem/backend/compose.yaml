@@ -1,0 +1,19 @@
+name: hms-local-foundation
+services:
+  postgres:
+    image: postgres:17.6
+    environment:
+      POSTGRES_USER: hms_dev
+      POSTGRES_PASSWORD: ${HMS_DB_PASSWORD:?Set HMS_DB_PASSWORD in backend/.env}
+      POSTGRES_DB: hms_dev
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - hms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hms_dev -d hms_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+volumes:
+  hms_pgdata:
