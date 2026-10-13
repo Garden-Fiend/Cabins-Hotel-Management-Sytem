@@ -28,6 +28,8 @@ export function DashboardPage() {
     guests,
     setGuests,
     configuration,
+    mode,
+    commands,
   } = useReservationDemo();
   const lifecycle = useReservationActions();
   const navigate = useNavigate();
@@ -229,6 +231,11 @@ export function DashboardPage() {
     reservation: ReservationSnapshot,
     createdStays: Stay[],
   ) {
+    if (mode === "api") {
+      closeReservationPane();
+      setReservationNotice(`Reservation ${reservation.id} committed to PostgreSQL.`);
+      return;
+    }
     setStays((current) => [...current, ...createdStays]);
     setReservations((current) => [...current, reservation]);
     closeReservationPane();
@@ -241,6 +248,11 @@ export function DashboardPage() {
     reservation: ReservationSnapshot,
     updatedStays: Stay[],
   ) {
+    if (mode === "api") {
+      closeReservationPane();
+      setReservationNotice(`${reservation.id} saved to PostgreSQL.`);
+      return;
+    }
     setReservations((current) =>
       current.map((item) => (item.id === reservation.id ? reservation : item)),
     );
@@ -254,15 +266,16 @@ export function DashboardPage() {
     );
   }
 
-  function handleReservationCancelled(
+  async function handleReservationCancelled(
     reservationId: string,
     guestHasVacated: boolean,
   ) {
-    lifecycle.cancel(reservationId, guestHasVacated);
+    if (!await lifecycle.cancel(reservationId, guestHasVacated)) return false;
     closeReservationPane();
     setReservationNotice(
       `${reservationId} cancelled. ${guestHasVacated ? "Assigned rooms are Dirty and available." : "Room occupancy remains locked until guest departure is recorded."}`,
     );
+    return true;
   }
 
   function handleStayClick(stay: Stay) {
@@ -519,6 +532,7 @@ export function DashboardPage() {
                         {(reservation.status === "confirmed" || reservation.status === "reserved") && (
                           <button
                             type="button"
+                            disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() => lifecycle.checkIn(reservation.id)}
                             className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white"
                           >
@@ -528,6 +542,7 @@ export function DashboardPage() {
                         {reservation.status === "checked_in" && (
                           <button
                             type="button"
+                            disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() => lifecycle.checkOut(reservation.id)}
                             className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white"
                           >
@@ -539,6 +554,7 @@ export function DashboardPage() {
                           reservation.status === "checked_in") && (
                           <button
                             type="button"
+                            disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() =>
                               setPendingCalendarCancellation(reservation.id)
                             }
@@ -551,6 +567,7 @@ export function DashboardPage() {
                           reservation.status === "reserved") && (
                           <button
                             type="button"
+                            disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() => lifecycle.noShow(reservation.id)}
                             className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"
                           >
@@ -560,6 +577,7 @@ export function DashboardPage() {
                         {reservation.occupancyLockRoomNumbers?.length ? (
                           <button
                             type="button"
+                            disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() => lifecycle.recordDeparture(reservation.id)}
                             className="rounded-lg bg-rose-800 px-3 py-2 text-sm font-semibold text-white"
                           >
@@ -628,9 +646,8 @@ export function DashboardPage() {
                   <>
                     <button
                       type="button"
-                      onClick={() => {
-                        lifecycle.cancel(pendingCalendarCancellation, false);
-                        setPendingCalendarCancellation(null);
+                      onClick={async () => {
+                        if (await lifecycle.cancel(pendingCalendarCancellation, false)) setPendingCalendarCancellation(null);
                       }}
                       className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800"
                     >
@@ -638,9 +655,8 @@ export function DashboardPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        lifecycle.cancel(pendingCalendarCancellation, true);
-                        setPendingCalendarCancellation(null);
+                      onClick={async () => {
+                        if (await lifecycle.cancel(pendingCalendarCancellation, true)) setPendingCalendarCancellation(null);
                       }}
                       className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white"
                     >
@@ -650,9 +666,8 @@ export function DashboardPage() {
                 ) : (
                   <button
                     type="button"
-                    onClick={() => {
-                      lifecycle.cancel(pendingCalendarCancellation, true);
-                      setPendingCalendarCancellation(null);
+                    onClick={async () => {
+                      if (await lifecycle.cancel(pendingCalendarCancellation, true)) setPendingCalendarCancellation(null);
                     }}
                     className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white"
                   >
@@ -688,7 +703,7 @@ export function DashboardPage() {
             onSaved={handleReservationSaved}
             onCancelReservation={handleReservationCancelled}
             onGuestCreated={(guest) =>
-              setGuests((current) =>
+              mode !== "api" && setGuests((current) =>
                 current.some((item) => item.id === guest.id)
                   ? current
                   : [

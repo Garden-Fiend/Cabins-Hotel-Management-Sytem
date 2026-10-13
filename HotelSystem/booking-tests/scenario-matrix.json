@@ -1,0 +1,3086 @@
+{
+  "rules": [
+    {
+      "id": "R01",
+      "description": "Creation needs a primary guest, an assigned room, an active source and valid stay.",
+      "reference": "src/components/reservations/ReservationPane.tsx:canCreate"
+    },
+    {
+      "id": "R02",
+      "description": "Hourly charges are package totals; nightly charges are base rate times configured nights.",
+      "reference": "docs/room-pricing.md"
+    },
+    {
+      "id": "R03",
+      "description": "Hotel timestamps use Asia/Manila; hourly timestamps preserve minute precision.",
+      "reference": "AGENTS.md; src/lib/hotelTime.ts"
+    },
+    {
+      "id": "R04",
+      "description": "Operational blocks and overlapping confirmed stays prevent assignment; touching endpoints do not overlap.",
+      "reference": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom"
+    },
+    {
+      "id": "R05",
+      "description": "Checked-in stays and cancelled occupancy locks block assignment independently of scheduled end.",
+      "reference": "src/utils/availability.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "R06",
+      "description": "Check-in requires a confirmed/reserved record, all rooms clean/active/operational, and now inside each scheduled window.",
+      "reference": "src/lib/reservationLifecycle.ts:validateReservationCheckIn"
+    },
+    {
+      "id": "R07",
+      "description": "Checkout changes all assigned rooms to Dirty, releases occupancy and saves actual timestamps/audit.",
+      "reference": "src/lib/reservationLifecycle.ts:checkOutReservation"
+    },
+    {
+      "id": "R08",
+      "description": "Cancellation releases a future booking; occupied cancellation retains locks until departure unless vacated.",
+      "reference": "src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "R09",
+      "description": "No-show requires confirmed/reserved and now at/after scheduled arrival; it releases availability.",
+      "reference": "src/lib/reservationLifecycle.ts:markReservationNoShow"
+    },
+    {
+      "id": "R10",
+      "description": "Unrelated edits preserve captured prices, dates, actual timestamps, labels and audit. Explicit duration edits resolve current rates.",
+      "reference": "AGENTS.md; docs/room-pricing.md; docs/discounts.md"
+    },
+    {
+      "id": "R11",
+      "description": "Room-type defaults are replaced on assignment changes; manual inclusions survive; shared positive overrides survive. Zero inherited defaults are restored on switching type.",
+      "reference": "src/lib/roomTypeInclusions.ts; src/components/reservations/ReservationInclusions.test.tsx"
+    },
+    {
+      "id": "R12",
+      "description": "Reservation inclusions clamp to nonnegative integers. Room-type defaults require positive integer quantities and unique products.",
+      "reference": "src/lib/roomTypeInclusions.ts"
+    },
+    {
+      "id": "R13",
+      "description": "Purchases use active sellable ordinary products; extras use extra products; positive whole quantities, captured unit price, billed once.",
+      "reference": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "R14",
+      "description": "Nightly breakfast allows one zero-priced meal/beverage pair per adult/child per service date; hourly has none. Stay/guest edits trim entitlement.",
+      "reference": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "R15",
+      "description": "Final prices apply first, room/item reductions next, reservation reductions last; percentages use remaining eligible balance; fixed discounts cap at that balance.",
+      "reference": "docs/discounts.md"
+    },
+    {
+      "id": "R16",
+      "description": "Presets match stable room/product/rate/currency; incompatible selections warn and block save; same nightly rate survives night-count changes.",
+      "reference": "docs/discounts.md"
+    },
+    {
+      "id": "R17",
+      "description": "Manual room discount includes room charges; preset room discount covers accommodation only; item discount targets one line.",
+      "reference": "docs/discounts.md"
+    },
+    {
+      "id": "R18",
+      "description": "Manual discounts must be >0; percentages <=100. Reservation presets apply explicitly and cannot be duplicated.",
+      "reference": "src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md"
+    },
+    {
+      "id": "R19",
+      "description": "Signed nonzero adjustments require a reason; total charges cannot be negative; money rounds by currency precision.",
+      "reference": "docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "R20",
+      "description": "Historical disabled options remain readable and retained on unchanged records, unavailable for new selection.",
+      "reference": "AGENTS.md; docs/discounts.md; docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "R21",
+      "description": "Source selection captures an agreement by booking-entry hotel date and never marks collection received. OTA references may be required.",
+      "reference": "docs/booking-channels.md"
+    },
+    {
+      "id": "R22",
+      "description": "One permitted external accommodation total replaces discounted accommodation once; extras retain discounts; reason required when configured.",
+      "reference": "docs/booking-channels.md"
+    },
+    {
+      "id": "R23",
+      "description": "Financial decimal inputs reject negative, overflow, excess precision and nonnumeric values; new values use exact minor units.",
+      "reference": "src/lib/channelFinance.ts:parseMinor; docs/booking-channels.md"
+    },
+    {
+      "id": "R24",
+      "description": "Verified collection is append-only with evidence; refund/reversal cannot exceed collection; signed guest balance permits credit.",
+      "reference": "docs/booking-channels.md; src/lib/channelActions.ts"
+    },
+    {
+      "id": "R25",
+      "description": "Commission estimates, documented liability, expected settlement and actual payout are separate and never reduce guest charges.",
+      "reference": "docs/booking-channels.md"
+    },
+    {
+      "id": "R26",
+      "description": "Settlement allocations retain channel/currency attribution and sum exactly; reconciliation requires an explanation and audit.",
+      "reference": "docs/booking-channels.md"
+    },
+    {
+      "id": "R27",
+      "description": "Source changes require review, preserve previous terms/collection/confirmations, and retain historical collection in guest balance.",
+      "reference": "docs/booking-channels.md"
+    },
+    {
+      "id": "R28",
+      "description": "Calendar distinguishes reserved/occupied/overdue/vacant; checked-in is overdue strictly after checkout; inactive visibility is optional.",
+      "reference": "src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "R29",
+      "description": "Details and both print layouts consume saved billing; guest print excludes accounting controls.",
+      "reference": "docs/discounts.md; docs/booking-channels.md; src/pages/ReservationPrintPage.tsx"
+    },
+    {
+      "id": "R30",
+      "description": "All data is session memory and reload resets changes; no backend/authentication/bank integration/tax computation exists.",
+      "reference": "AGENTS.md; src/app/ReservationDemoContext.tsx"
+    },
+    {
+      "id": "R31",
+      "description": "Guest creation requires a trimmed name; phone/email are optional.",
+      "reference": "src/components/reservations/ReservationPane.tsx:createGuest"
+    },
+    {
+      "id": "R32",
+      "description": "Lifecycle actions and edits append readable, timestamped audit history.",
+      "reference": "src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "R33",
+      "description": "Capabilities gate accounting domain actions; published agreements cannot rewrite financial rules; active ranges cannot overlap.",
+      "reference": "docs/booking-channels.md; src/lib/channelActions.ts; src/lib/channelFinance.ts"
+    },
+    {
+      "id": "R34",
+      "description": "Physical room capacity override, description and operational notes are optional; blanks must permit other room configuration changes.",
+      "reference": "src/features/configuration/types.ts:RoomConfiguration; src/pages/ConfigurationPage.tsx:save optionalKeys and persist rooms"
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "BOOK-STA-1",
+      "module": "creation",
+      "description": "Standard: save 6-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "101",
+        "duration": "6-hours",
+        "total": 1100
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 1100; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-STA-2",
+      "module": "creation",
+      "description": "Standard: save 8-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "101",
+        "duration": "8-hours",
+        "total": 1300
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 1300; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-STA-3",
+      "module": "creation",
+      "description": "Standard: save 12-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "101",
+        "duration": "12-hours",
+        "total": 1650
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 1650; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-STA-4",
+      "module": "creation",
+      "description": "Standard: save 1-night",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "101",
+        "duration": "1-night",
+        "total": 2200
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 2200; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-STA-5",
+      "module": "creation",
+      "description": "Standard: save 2-nights",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "101",
+        "duration": "2-nights",
+        "total": 4400
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 4400; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-STA-6",
+      "module": "creation",
+      "description": "Standard: save 3-nights",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "101",
+        "duration": "3-nights",
+        "total": 6600
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 6600; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-DEL-1",
+      "module": "creation",
+      "description": "Deluxe: save 6-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "107",
+        "duration": "6-hours",
+        "total": 1500
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 1500; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-DEL-2",
+      "module": "creation",
+      "description": "Deluxe: save 8-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "107",
+        "duration": "8-hours",
+        "total": 1800
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 1800; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-DEL-3",
+      "module": "creation",
+      "description": "Deluxe: save 12-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "107",
+        "duration": "12-hours",
+        "total": 2200
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 2200; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-DEL-4",
+      "module": "creation",
+      "description": "Deluxe: save 1-night",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "107",
+        "duration": "1-night",
+        "total": 2900
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 2900; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-DEL-5",
+      "module": "creation",
+      "description": "Deluxe: save 2-nights",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "107",
+        "duration": "2-nights",
+        "total": 5800
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 5800; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-DEL-6",
+      "module": "creation",
+      "description": "Deluxe: save 3-nights",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "107",
+        "duration": "3-nights",
+        "total": 8700
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 8700; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-SUI-1",
+      "module": "creation",
+      "description": "Suite: save 6-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "201",
+        "duration": "6-hours",
+        "total": 2200
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 2200; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-SUI-2",
+      "module": "creation",
+      "description": "Suite: save 8-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "201",
+        "duration": "8-hours",
+        "total": 2600
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 2600; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-SUI-3",
+      "module": "creation",
+      "description": "Suite: save 12-hours",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "201",
+        "duration": "12-hours",
+        "total": 3200
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 3200; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-SUI-4",
+      "module": "creation",
+      "description": "Suite: save 1-night",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "201",
+        "duration": "1-night",
+        "total": 4200
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 4200; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-SUI-5",
+      "module": "creation",
+      "description": "Suite: save 2-nights",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "201",
+        "duration": "2-nights",
+        "total": 8400
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 8400; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "BOOK-SUI-6",
+      "module": "creation",
+      "description": "Suite: save 3-nights",
+      "rules": [
+        "R01",
+        "R02",
+        "R03",
+        "R32"
+      ],
+      "kind": "create",
+      "inputs": {
+        "room": "201",
+        "duration": "3-nights",
+        "total": 12600
+      },
+      "expected": "Saved confirmed booking; accommodation PHP 12600; calculated checkout and audit visible.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "VALID-GUEST",
+      "module": "validation",
+      "description": "Cannot save without guest",
+      "rules": [
+        "R01"
+      ],
+      "kind": "required",
+      "inputs": {
+        "missing": "guest"
+      },
+      "expected": "Create button disabled and no saved booking.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate"
+    },
+    {
+      "id": "VALID-ROOM",
+      "module": "validation",
+      "description": "Cannot save without room",
+      "rules": [
+        "R01"
+      ],
+      "kind": "required",
+      "inputs": {
+        "missing": "room"
+      },
+      "expected": "Create button disabled and no saved booking.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate"
+    },
+    {
+      "id": "VALID-SOURCE",
+      "module": "validation",
+      "description": "Cannot save without source",
+      "rules": [
+        "R01"
+      ],
+      "kind": "required",
+      "inputs": {
+        "missing": "source"
+      },
+      "expected": "Create button disabled and no saved booking.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate"
+    },
+    {
+      "id": "VALID-DATE",
+      "module": "validation",
+      "description": "Cannot save without date",
+      "rules": [
+        "R01"
+      ],
+      "kind": "required",
+      "inputs": {
+        "missing": "date"
+      },
+      "expected": "Create button disabled and no saved booking.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate"
+    },
+    {
+      "id": "INCL-ZERO",
+      "module": "inclusions",
+      "description": "Inclusion quantity 0",
+      "rules": [
+        "R12"
+      ],
+      "kind": "inclusionQuantity",
+      "inputs": {
+        "quantity": 0,
+        "expectedQuantity": 0
+      },
+      "expected": "UI normalizes to 0; saved inclusion absent at zero; bill unchanged.",
+      "priority": "P1",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts"
+    },
+    {
+      "id": "INCL-NEGATIVE",
+      "module": "inclusions",
+      "description": "Inclusion quantity -1",
+      "rules": [
+        "R12"
+      ],
+      "kind": "inclusionQuantity",
+      "inputs": {
+        "quantity": -1,
+        "expectedQuantity": 0
+      },
+      "expected": "UI normalizes to 0; saved inclusion absent at zero; bill unchanged.",
+      "priority": "P1",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts"
+    },
+    {
+      "id": "INCL-FRACTION",
+      "module": "inclusions",
+      "description": "Inclusion quantity 1.5",
+      "rules": [
+        "R12"
+      ],
+      "kind": "inclusionQuantity",
+      "inputs": {
+        "quantity": 1.5,
+        "expectedQuantity": 1
+      },
+      "expected": "UI normalizes to 1; saved inclusion absent at zero; bill unchanged.",
+      "priority": "P1",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts"
+    },
+    {
+      "id": "INCL-LARGE",
+      "module": "inclusions",
+      "description": "Inclusion quantity 999",
+      "rules": [
+        "R12"
+      ],
+      "kind": "inclusionQuantity",
+      "inputs": {
+        "quantity": 999,
+        "expectedQuantity": 999
+      },
+      "expected": "UI normalizes to 999; saved inclusion absent at zero; bill unchanged.",
+      "priority": "P1",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts"
+    },
+    {
+      "id": "INCL-SWITCH",
+      "module": "inclusions",
+      "description": "Manual additions and positive shared overrides survive type changes",
+      "rules": [
+        "R11",
+        "R02"
+      ],
+      "kind": "inclusionSwitch",
+      "inputs": {},
+      "expected": "Water 3 and manual Towels 2 survive Standard → Deluxe → Standard; Deluxe-only defaults disappear.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts; src/components/reservations/ReservationInclusions.test.tsx; docs/room-pricing.md"
+    },
+    {
+      "id": "INCL-RESTORE",
+      "module": "inclusions",
+      "description": "Zero inherited default restored when switching room type",
+      "rules": [
+        "R11"
+      ],
+      "kind": "inclusionRestore",
+      "inputs": {},
+      "expected": "Standard water 0 becomes Deluxe default 2 on type switch.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts; src/components/reservations/ReservationInclusions.test.tsx"
+    },
+    {
+      "id": "INCL-SAME",
+      "module": "inclusions",
+      "description": "Same room type reassignment preserves manual quantities",
+      "rules": [
+        "R11"
+      ],
+      "kind": "inclusionSame",
+      "inputs": {},
+      "expected": "Water 3 remains 3 on assignment 101 → 102; accommodation unchanged.",
+      "priority": "P0",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts; src/components/reservations/ReservationInclusions.test.tsx"
+    },
+    {
+      "id": "TIME-MIDNIGHT",
+      "module": "time",
+      "description": "Stay crosses midnight boundary",
+      "rules": [
+        "R02",
+        "R03"
+      ],
+      "kind": "time",
+      "inputs": {
+        "start": "2026-11-10T22:30",
+        "duration": "6-hours",
+        "end": "Nov 11, 2026, 4:30 AM",
+        "total": 1100
+      },
+      "expected": "Checkout Nov 11, 2026, 4:30 AM; saved/print timestamps retain local date and minute precision.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts"
+    },
+    {
+      "id": "TIME-MONTH",
+      "module": "time",
+      "description": "Stay crosses month boundary",
+      "rules": [
+        "R02",
+        "R03"
+      ],
+      "kind": "time",
+      "inputs": {
+        "start": "2026-11-30T23:45",
+        "duration": "8-hours",
+        "end": "Dec 1, 2026, 7:45 AM",
+        "total": 1300
+      },
+      "expected": "Checkout Dec 1, 2026, 7:45 AM; saved/print timestamps retain local date and minute precision.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts"
+    },
+    {
+      "id": "TIME-YEAR",
+      "module": "time",
+      "description": "Stay crosses year boundary",
+      "rules": [
+        "R02",
+        "R03"
+      ],
+      "kind": "time",
+      "inputs": {
+        "start": "2026-12-31T23:30",
+        "duration": "6-hours",
+        "end": "Jan 1, 2027, 5:30 AM",
+        "total": 1100
+      },
+      "expected": "Checkout Jan 1, 2027, 5:30 AM; saved/print timestamps retain local date and minute precision.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts"
+    },
+    {
+      "id": "TIME-LEAP",
+      "module": "time",
+      "description": "Stay crosses leap boundary",
+      "rules": [
+        "R02",
+        "R03"
+      ],
+      "kind": "time",
+      "inputs": {
+        "start": "2028-02-28T14:00",
+        "duration": "2-nights",
+        "end": "Mar 1, 2028, 12:00 PM",
+        "total": 4400
+      },
+      "expected": "Checkout Mar 1, 2028, 12:00 PM; saved/print timestamps retain local date and minute precision.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts"
+    },
+    {
+      "id": "TIME-MINUTE",
+      "module": "time",
+      "description": "Stay crosses minute boundary",
+      "rules": [
+        "R02",
+        "R03"
+      ],
+      "kind": "time",
+      "inputs": {
+        "start": "2026-11-10T14:07",
+        "duration": "6-hours",
+        "end": "Nov 10, 2026, 8:07 PM",
+        "total": 1100
+      },
+      "expected": "Checkout Nov 10, 2026, 8:07 PM; saved/print timestamps retain local date and minute precision.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts"
+    },
+    {
+      "id": "AVAIL-HOUSEKEEPING",
+      "module": "availability",
+      "description": "housekeeping room cannot be newly assigned",
+      "rules": [
+        "R04",
+        "R05"
+      ],
+      "kind": "unavailable",
+      "inputs": {
+        "room": "103"
+      },
+      "expected": "Room option disabled; + Add room cannot assign it.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom; src/utils/availability.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "AVAIL-MAINTENANCE",
+      "module": "availability",
+      "description": "maintenance room cannot be newly assigned",
+      "rules": [
+        "R04",
+        "R05"
+      ],
+      "kind": "unavailable",
+      "inputs": {
+        "room": "106"
+      },
+      "expected": "Room option disabled; + Add room cannot assign it.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom; src/utils/availability.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "AVAIL-OCCUPIED",
+      "module": "availability",
+      "description": "occupied room cannot be newly assigned",
+      "rules": [
+        "R04",
+        "R05"
+      ],
+      "kind": "unavailable",
+      "inputs": {
+        "room": "202"
+      },
+      "expected": "Room option disabled; + Add room cannot assign it.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom; src/utils/availability.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "AVAIL-CONFLICT",
+      "module": "availability",
+      "description": "Same room overlapping second reservation rejected",
+      "rules": [
+        "R04"
+      ],
+      "kind": "conflict",
+      "inputs": {},
+      "expected": "New same-interval room 101 option disabled after first booking saved.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom"
+    },
+    {
+      "id": "AVAIL-TOUCH",
+      "module": "availability",
+      "description": "Checkout exactly equals next arrival",
+      "rules": [
+        "R04"
+      ],
+      "kind": "touch",
+      "inputs": {},
+      "expected": "Room 101 available when next stay starts exactly at prior scheduled checkout.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom"
+    },
+    {
+      "id": "AVAIL-EDIT",
+      "module": "availability",
+      "description": "Changing existing stay into a conflict is rejected",
+      "rules": [
+        "R04",
+        "R10"
+      ],
+      "kind": "editConflict",
+      "inputs": {},
+      "expected": "Availability warning; save rejects overlapping stay; original saved stay preserved.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom; AGENTS.md; docs/room-pricing.md; docs/discounts.md"
+    },
+    {
+      "id": "AVAIL-DUPROOM",
+      "module": "availability",
+      "description": "Assigned room cannot be added twice",
+      "rules": [
+        "R04"
+      ],
+      "kind": "duplicateRoom",
+      "inputs": {},
+      "expected": "Already added option disabled; one accommodation line.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom"
+    },
+    {
+      "id": "LIFE-CHECKOUT",
+      "module": "lifecycle",
+      "description": "Multi-room check-in and checkout synchronizes records",
+      "rules": [
+        "R06",
+        "R07",
+        "R28",
+        "R32"
+      ],
+      "kind": "lifecycle",
+      "inputs": {},
+      "expected": "All rooms checked in then checked out; actual timestamps, audit, Dirty readiness, calendar and availability agree.",
+      "priority": "P0",
+      "category": "state",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn; src/lib/reservationLifecycle.ts:checkOutReservation; src/lib/calendar.ts; src/pages/DashboardPage.tsx; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "CHECKIN-BEFORE",
+      "module": "lifecycle",
+      "description": "Check-in before boundary",
+      "rules": [
+        "R06"
+      ],
+      "kind": "checkinBoundary",
+      "inputs": {
+        "now": "2026-11-10T13:59:59+08:00",
+        "allowed": false
+      },
+      "expected": "Check-in rejected; confirmed status retained.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn"
+    },
+    {
+      "id": "CHECKIN-AT",
+      "module": "lifecycle",
+      "description": "Check-in at boundary",
+      "rules": [
+        "R06"
+      ],
+      "kind": "checkinBoundary",
+      "inputs": {
+        "now": "2026-11-10T14:00:00+08:00",
+        "allowed": true
+      },
+      "expected": "Check-in accepted at arrival inclusive.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn"
+    },
+    {
+      "id": "CHECKIN-END",
+      "module": "lifecycle",
+      "description": "Check-in end boundary",
+      "rules": [
+        "R06"
+      ],
+      "kind": "checkinBoundary",
+      "inputs": {
+        "now": "2026-11-10T20:00:00+08:00",
+        "allowed": false
+      },
+      "expected": "Check-in rejected; confirmed status retained.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn"
+    },
+    {
+      "id": "CHECKIN-AFTER",
+      "module": "lifecycle",
+      "description": "Check-in after boundary",
+      "rules": [
+        "R06"
+      ],
+      "kind": "checkinBoundary",
+      "inputs": {
+        "now": "2026-11-10T20:00:01+08:00",
+        "allowed": false
+      },
+      "expected": "Check-in rejected; confirmed status retained.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn"
+    },
+    {
+      "id": "CAL-END-BEFORE",
+      "module": "calendar",
+      "description": "Occupied checkout before boundary",
+      "rules": [
+        "R28"
+      ],
+      "kind": "overdue",
+      "inputs": {
+        "record": "DEMO-6",
+        "now": "2026-10-10T13:59:59+08:00",
+        "overdue": false
+      },
+      "expected": "Calendar displays occupied, not overdue.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-6; fixed hotel clock 2026-10-10T13:59:59+08:00.",
+      "references": "src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "CAL-END-AT",
+      "module": "calendar",
+      "description": "Occupied checkout at boundary",
+      "rules": [
+        "R28"
+      ],
+      "kind": "overdue",
+      "inputs": {
+        "record": "DEMO-6",
+        "now": "2026-10-10T14:00:00+08:00",
+        "overdue": false
+      },
+      "expected": "Calendar displays occupied, not overdue.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-6; fixed hotel clock 2026-10-10T14:00:00+08:00.",
+      "references": "src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "CAL-END-AFTER",
+      "module": "calendar",
+      "description": "Occupied checkout after boundary",
+      "rules": [
+        "R28"
+      ],
+      "kind": "overdue",
+      "inputs": {
+        "record": "DEMO-6",
+        "now": "2026-10-10T14:00:01+08:00",
+        "overdue": true
+      },
+      "expected": "Calendar displays overdue.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-6; fixed hotel clock 2026-10-10T14:00:01+08:00.",
+      "references": "src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "LIFE-FUTURE",
+      "module": "lifecycle",
+      "description": "Future fixture cannot be checked in",
+      "rules": [
+        "R06"
+      ],
+      "kind": "future",
+      "inputs": {
+        "record": "DEMO-2",
+        "now": "2026-10-08T15:00:00+08:00"
+      },
+      "expected": "Rejected outside scheduled stay; no actual check-in.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-2; fixed hotel clock 2026-10-08T15:00:00+08:00.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn"
+    },
+    {
+      "id": "LIFE-CANCEL-FUTURE",
+      "module": "lifecycle",
+      "description": "Cancel unoccupied booking releases room",
+      "rules": [
+        "R08",
+        "R28",
+        "R32"
+      ],
+      "kind": "cancelFuture",
+      "inputs": {},
+      "expected": "Cancelled status/audit; no occupancy lock; room available; billing retained.",
+      "priority": "P0",
+      "category": "state",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts; src/lib/calendar.ts; src/pages/DashboardPage.tsx; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "LIFE-CANCEL-LOCK",
+      "module": "lifecycle",
+      "description": "Cancel checked-in fixture, vacated=false",
+      "rules": [
+        "R05",
+        "R07",
+        "R08",
+        "R32"
+      ],
+      "kind": "cancelOccupied",
+      "inputs": {
+        "record": "DEMO-6",
+        "now": "2026-10-08T15:00:00+08:00",
+        "vacated": false
+      },
+      "expected": "Room 202 locked even beyond scheduled end; departure releases lock and marks Dirty.",
+      "priority": "P0",
+      "category": "state",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-6; fixed hotel clock 2026-10-08T15:00:00+08:00.",
+      "references": "src/utils/availability.ts; src/lib/reservationLifecycle.ts; src/lib/reservationLifecycle.ts:checkOutReservation; src/lib/reservationLifecycle.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "LIFE-CANCEL-VACATED",
+      "module": "lifecycle",
+      "description": "Cancel checked-in fixture, vacated=true",
+      "rules": [
+        "R05",
+        "R07",
+        "R08",
+        "R32"
+      ],
+      "kind": "cancelOccupied",
+      "inputs": {
+        "record": "DEMO-6",
+        "now": "2026-10-08T15:00:00+08:00",
+        "vacated": true
+      },
+      "expected": "Room Dirty; no active occupancy lock.",
+      "priority": "P0",
+      "category": "state",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-6; fixed hotel clock 2026-10-08T15:00:00+08:00.",
+      "references": "src/utils/availability.ts; src/lib/reservationLifecycle.ts; src/lib/reservationLifecycle.ts:checkOutReservation; src/lib/reservationLifecycle.ts; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "NOSHOW-EARLY",
+      "module": "lifecycle",
+      "description": "No-show early arrival",
+      "rules": [
+        "R09",
+        "R28"
+      ],
+      "kind": "noShow",
+      "inputs": {
+        "record": "DEMO-3",
+        "now": "2026-10-18T13:59:59+08:00",
+        "allowed": false
+      },
+      "expected": "No-show rejected before arrival; confirmed retained.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-3; fixed hotel clock 2026-10-18T13:59:59+08:00.",
+      "references": "src/lib/reservationLifecycle.ts:markReservationNoShow; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "NOSHOW-AT",
+      "module": "lifecycle",
+      "description": "No-show at arrival",
+      "rules": [
+        "R09",
+        "R28"
+      ],
+      "kind": "noShow",
+      "inputs": {
+        "record": "DEMO-3",
+        "now": "2026-10-18T14:00:00+08:00",
+        "allowed": true
+      },
+      "expected": "No-show saved; inactive calendar visibility; no check-in control.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-3; fixed hotel clock 2026-10-18T14:00:00+08:00.",
+      "references": "src/lib/reservationLifecycle.ts:markReservationNoShow; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "LIFE-TERMINAL",
+      "module": "lifecycle",
+      "description": "Completed records expose no lifecycle or edit controls",
+      "rules": [
+        "R07",
+        "R08",
+        "R09"
+      ],
+      "kind": "terminal",
+      "inputs": {
+        "record": "DEMO-6",
+        "now": "2026-10-08T15:00:00+08:00"
+      },
+      "expected": "After checkout, check-in/out/cancel/edit controls absent; duplicate checkout impossible through UI.",
+      "priority": "P1",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-6; fixed hotel clock 2026-10-08T15:00:00+08:00.",
+      "references": "src/lib/reservationLifecycle.ts:checkOutReservation; src/lib/reservationLifecycle.ts; src/lib/reservationLifecycle.ts:markReservationNoShow"
+    },
+    {
+      "id": "CAL-DAY",
+      "module": "calendar",
+      "description": "Calendar day selection opens correct saved details",
+      "rules": [
+        "R03",
+        "R28"
+      ],
+      "kind": "calendarView",
+      "inputs": {
+        "view": "day",
+        "now": "2026-10-08T15:00:00+08:00"
+      },
+      "expected": "Saved Bob Wilson stay opens Room 202 details in the selected calendar view. Inactive filtering is independently covered by NOSHOW-AT.",
+      "priority": "P1",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/lib/hotelTime.ts; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "CAL-WEEK",
+      "module": "calendar",
+      "description": "Calendar week selection opens correct saved details",
+      "rules": [
+        "R03",
+        "R28"
+      ],
+      "kind": "calendarView",
+      "inputs": {
+        "view": "week",
+        "now": "2026-10-08T15:00:00+08:00"
+      },
+      "expected": "Saved Bob Wilson stay opens Room 202 details in the selected calendar view. Inactive filtering is independently covered by NOSHOW-AT.",
+      "priority": "P1",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/lib/hotelTime.ts; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "CAL-MONTH",
+      "module": "calendar",
+      "description": "Calendar month selection opens correct saved details",
+      "rules": [
+        "R03",
+        "R28"
+      ],
+      "kind": "calendarView",
+      "inputs": {
+        "view": "month",
+        "now": "2026-10-08T15:00:00+08:00"
+      },
+      "expected": "Saved Bob Wilson stay opens Room 202 details in the selected calendar view. Inactive filtering is independently covered by NOSHOW-AT.",
+      "priority": "P1",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/lib/hotelTime.ts; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "CAL-YEAR",
+      "module": "calendar",
+      "description": "Calendar year selection opens correct saved details",
+      "rules": [
+        "R03",
+        "R28"
+      ],
+      "kind": "calendarView",
+      "inputs": {
+        "view": "year",
+        "now": "2026-10-08T15:00:00+08:00"
+      },
+      "expected": "Saved Bob Wilson stay opens Room 202 details in the selected calendar view. Inactive filtering is independently covered by NOSHOW-AT.",
+      "priority": "P1",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/lib/hotelTime.ts; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "EDIT-NOTE",
+      "module": "editing",
+      "description": "Unrelated edit preserves historic price and schedule",
+      "rules": [
+        "R10",
+        "R20",
+        "R32"
+      ],
+      "kind": "editNote",
+      "inputs": {
+        "record": "DEMO-8"
+      },
+      "expected": "Note saved; historical base PHP 7000 retained rather than current PHP 7800; audit readable.",
+      "priority": "P0",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-8; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "AGENTS.md; docs/room-pricing.md; docs/discounts.md; AGENTS.md; docs/discounts.md; docs/inventory-breakfast-purchases.md; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "EDIT-ACTUAL",
+      "module": "editing",
+      "description": "Unchanged save preserves actual check-in and audit",
+      "rules": [
+        "R10",
+        "R32"
+      ],
+      "kind": "editActual",
+      "inputs": {
+        "record": "DEMO-2",
+        "now": "2026-10-14T17:00:00+08:00"
+      },
+      "expected": "Actual 5 PM check-in retained after edit/save; checked-in audit remains.",
+      "priority": "P0",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-2; fixed hotel clock 2026-10-14T17:00:00+08:00.",
+      "references": "AGENTS.md; docs/room-pricing.md; docs/discounts.md; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "EDIT-DISCARD",
+      "module": "editing",
+      "description": "Discard draft requires explicit confirmation",
+      "rules": [
+        "R10"
+      ],
+      "kind": "discard",
+      "inputs": {},
+      "expected": "Keep editing retains values; Discard changes closes without saving.",
+      "priority": "P1",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; docs/room-pricing.md; docs/discounts.md"
+    },
+    {
+      "id": "DISC-FIXED",
+      "module": "discounts",
+      "description": "Manual fixed discount 100",
+      "rules": [
+        "R15",
+        "R18",
+        "R19"
+      ],
+      "kind": "manualDiscount",
+      "inputs": {
+        "method": "fixed",
+        "value": 100,
+        "total": 1000
+      },
+      "expected": "Saved guest charges PHP 1000; no negative eligible balance.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md; docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "DISC-PERCENT",
+      "module": "discounts",
+      "description": "Manual percentage discount 10",
+      "rules": [
+        "R15",
+        "R18",
+        "R19"
+      ],
+      "kind": "manualDiscount",
+      "inputs": {
+        "method": "percentage",
+        "value": 10,
+        "total": 990
+      },
+      "expected": "Saved guest charges PHP 990; no negative eligible balance.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md; docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "DISC-CAP",
+      "module": "discounts",
+      "description": "Manual fixed discount 99999",
+      "rules": [
+        "R15",
+        "R18",
+        "R19"
+      ],
+      "kind": "manualDiscount",
+      "inputs": {
+        "method": "fixed",
+        "value": 99999,
+        "total": 0
+      },
+      "expected": "Saved guest charges PHP 0; no negative eligible balance.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md; docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "DISC-FULL",
+      "module": "discounts",
+      "description": "Manual percentage discount 100",
+      "rules": [
+        "R15",
+        "R18",
+        "R19"
+      ],
+      "kind": "manualDiscount",
+      "inputs": {
+        "method": "percentage",
+        "value": 100,
+        "total": 0
+      },
+      "expected": "Saved guest charges PHP 0; no negative eligible balance.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md; docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "DISC-INVALID-ZERO",
+      "module": "discounts",
+      "description": "Reject fixed 0",
+      "rules": [
+        "R18"
+      ],
+      "kind": "invalidDiscount",
+      "inputs": {
+        "method": "fixed",
+        "value": 0
+      },
+      "expected": "Validation alert; no applied manual discount; total unchanged.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md"
+    },
+    {
+      "id": "DISC-INVALID-NEG",
+      "module": "discounts",
+      "description": "Reject fixed -1",
+      "rules": [
+        "R18"
+      ],
+      "kind": "invalidDiscount",
+      "inputs": {
+        "method": "fixed",
+        "value": -1
+      },
+      "expected": "Validation alert; no applied manual discount; total unchanged.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md"
+    },
+    {
+      "id": "DISC-INVALID-OVER",
+      "module": "discounts",
+      "description": "Reject percentage 100.01",
+      "rules": [
+        "R18"
+      ],
+      "kind": "invalidDiscount",
+      "inputs": {
+        "method": "percentage",
+        "value": 100.01
+      },
+      "expected": "Validation alert; no applied manual discount; total unchanged.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md"
+    },
+    {
+      "id": "DISC-SEQUENCE",
+      "module": "discounts",
+      "description": "Room final price + manual room + reservation percentage",
+      "rules": [
+        "R15",
+        "R17"
+      ],
+      "kind": "discountSequence",
+      "inputs": {},
+      "expected": "Base 2200 → final 1950 → manual -100 → reservation -10% = PHP 1665.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; docs/discounts.md"
+    },
+    {
+      "id": "DISC-PRESET-DUP",
+      "module": "discounts",
+      "description": "Reservation preset explicitly applied once",
+      "rules": [
+        "R18"
+      ],
+      "kind": "duplicatePreset",
+      "inputs": {},
+      "expected": "Second Apply rejected; one 10% reduction; total PHP 990.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:addDiscount; docs/discounts.md"
+    },
+    {
+      "id": "DISC-RATE-INVALID",
+      "module": "discounts",
+      "description": "Hourly duration invalidates partial preset",
+      "rules": [
+        "R16"
+      ],
+      "kind": "invalidPreset",
+      "inputs": {},
+      "expected": "Standard Special 6h → 8h warns and blocks save; removal restores PHP 1300.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md"
+    },
+    {
+      "id": "DISC-NIGHTS",
+      "module": "discounts",
+      "description": "Nightly preset survives changed night count",
+      "rules": [
+        "R02",
+        "R16"
+      ],
+      "kind": "presetNights",
+      "inputs": {},
+      "expected": "Standard Special 1 → 3 nights yields 1950 × 3 = PHP 5850.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md; docs/discounts.md"
+    },
+    {
+      "id": "DISC-ROOM-SCOPE",
+      "module": "discounts",
+      "description": "Manual room scope includes extras",
+      "rules": [
+        "R17"
+      ],
+      "kind": "roomScope",
+      "inputs": {},
+      "expected": "Room 1100 + Laundry 120, manual room 10% gives PHP 1098.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md"
+    },
+    {
+      "id": "DISC-ITEM",
+      "module": "discounts",
+      "description": "Item unit override and quantity multiplication",
+      "rules": [
+        "R13",
+        "R15",
+        "R17"
+      ],
+      "kind": "itemDiscount",
+      "inputs": {},
+      "expected": "Laundry 2 × 120; preset 2 × 90; total 1100+180=1280; removing line removes targeted discount.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md; docs/discounts.md; docs/discounts.md"
+    },
+    {
+      "id": "BILL-ADJ-POS",
+      "module": "billing",
+      "description": "Signed adjustment 200",
+      "rules": [
+        "R19"
+      ],
+      "kind": "adjustment",
+      "inputs": {
+        "amount": 200,
+        "total": 1300
+      },
+      "expected": "Saved charges PHP 1300; reason in detail/print.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "BILL-ADJ-NEG",
+      "module": "billing",
+      "description": "Signed adjustment -200",
+      "rules": [
+        "R19"
+      ],
+      "kind": "adjustment",
+      "inputs": {
+        "amount": -200,
+        "total": 900
+      },
+      "expected": "Saved charges PHP 900; reason in detail/print.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "BILL-ADJ-FLOOR",
+      "module": "billing",
+      "description": "Signed adjustment -99999",
+      "rules": [
+        "R19"
+      ],
+      "kind": "adjustment",
+      "inputs": {
+        "amount": -99999,
+        "total": 0
+      },
+      "expected": "Saved charges PHP 0; reason in detail/print.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "BILL-ADJ-INVALID-ZERO",
+      "module": "billing",
+      "description": "Reject adjustment zero",
+      "rules": [
+        "R19"
+      ],
+      "kind": "invalidAdjustment",
+      "inputs": {
+        "amount": "0",
+        "reason": "Evidence"
+      },
+      "expected": "Alert requires nonzero amount and reason; bill unchanged.",
+      "priority": "P1",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "BILL-ADJ-INVALID-REASON",
+      "module": "billing",
+      "description": "Reject adjustment reason",
+      "rules": [
+        "R19"
+      ],
+      "kind": "invalidAdjustment",
+      "inputs": {
+        "amount": "200",
+        "reason": ""
+      },
+      "expected": "Alert requires nonzero amount and reason; bill unchanged.",
+      "priority": "P1",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "PURCHASE-ONE",
+      "module": "purchases",
+      "description": "Purchased Pancit quantity 1",
+      "rules": [
+        "R13"
+      ],
+      "kind": "purchase",
+      "inputs": {
+        "qty": 1,
+        "total": 1220
+      },
+      "expected": "Charge quantity 1; captured PHP 120 unit; single charge only; saved total PHP 1220.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "PURCHASE-MANY",
+      "module": "purchases",
+      "description": "Purchased Pancit quantity 3",
+      "rules": [
+        "R13"
+      ],
+      "kind": "purchase",
+      "inputs": {
+        "qty": 3,
+        "total": 1460
+      },
+      "expected": "Charge quantity 3; captured PHP 120 unit; single charge only; saved total PHP 1460.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "PURCHASE-ZERO",
+      "module": "purchases",
+      "description": "Purchased Pancit quantity 0",
+      "rules": [
+        "R13"
+      ],
+      "kind": "purchase",
+      "inputs": {
+        "qty": 0,
+        "total": 1220
+      },
+      "expected": "Charge quantity clamped to one by UI; captured PHP 120 unit; single charge only; saved total PHP 1220.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "PURCHASE-FRACTION",
+      "module": "purchases",
+      "description": "Purchased Pancit quantity 1.5",
+      "rules": [
+        "R13"
+      ],
+      "kind": "purchase",
+      "inputs": {
+        "qty": 1.5,
+        "total": 1220
+      },
+      "expected": "Charge quantity 1; captured PHP 120 unit; single charge only; saved total PHP 1220.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "BREAKFAST-HOURLY",
+      "module": "breakfast",
+      "description": "Hourly package has no complimentary breakfast choices",
+      "rules": [
+        "R14"
+      ],
+      "kind": "breakfastHourly",
+      "inputs": {},
+      "expected": "No breakfast dates; purchases remain separate.",
+      "priority": "P1",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "BREAKFAST-NIGHTLY",
+      "module": "breakfast",
+      "description": "Meal and beverage included without selling-price charge",
+      "rules": [
+        "R13",
+        "R14"
+      ],
+      "kind": "breakfastNightly",
+      "inputs": {},
+      "expected": "One night, two adults and one child: 3 entitlement selectors; included pair contributes PHP 0; saved total PHP 2200.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md; docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "BREAKFAST-TRIM",
+      "module": "breakfast",
+      "description": "Reducing guests trims saved breakfast entitlement",
+      "rules": [
+        "R14"
+      ],
+      "kind": "breakfastTrim",
+      "inputs": {},
+      "expected": "Guest 3 breakfast discarded when guests reduce to 2; no duplicate charges.",
+      "priority": "P1",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "GUEST-NAME",
+      "module": "guests",
+      "description": "Empty or whitespace name rejected",
+      "rules": [
+        "R31"
+      ],
+      "kind": "guestEmpty",
+      "inputs": {},
+      "expected": "Use guest shows validation and does not select/create guest.",
+      "priority": "P1",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:createGuest"
+    },
+    {
+      "id": "GUEST-OPTIONAL",
+      "module": "guests",
+      "description": "Name-only guest booking supported",
+      "rules": [
+        "R01",
+        "R31"
+      ],
+      "kind": "guestOptional",
+      "inputs": {},
+      "expected": "Trimmed guest name saved; phone/email absent; booking searchable.",
+      "priority": "P1",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; src/components/reservations/ReservationPane.tsx:createGuest"
+    },
+    {
+      "id": "HISTORY-OPTIONS",
+      "module": "history",
+      "description": "Retired source, breakfast and charges visible on historic fixture",
+      "rules": [
+        "R20",
+        "R29"
+      ],
+      "kind": "history",
+      "inputs": {
+        "record": "DEMO-8"
+      },
+      "expected": "Agoda inactive, American breakfast, Legacy minibar, saved rates/totals retained.",
+      "priority": "P0",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-8; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "AGENTS.md; docs/discounts.md; docs/inventory-breakfast-purchases.md; docs/discounts.md; docs/booking-channels.md; src/pages/ReservationPrintPage.tsx"
+    },
+    {
+      "id": "PRINT-DOCUMENT",
+      "module": "printing",
+      "description": "Saved document guest print excludes accounting UI",
+      "rules": [
+        "R29"
+      ],
+      "kind": "print",
+      "inputs": {
+        "record": "CHANNEL-2",
+        "layout": "document"
+      },
+      "expected": "Guest balance and saved accommodation visible; accounting/settlement controls absent.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/discounts.md; docs/booking-channels.md; src/pages/ReservationPrintPage.tsx"
+    },
+    {
+      "id": "PRINT-THERMAL",
+      "module": "printing",
+      "description": "Saved thermal guest print excludes accounting UI",
+      "rules": [
+        "R29"
+      ],
+      "kind": "print",
+      "inputs": {
+        "record": "CHANNEL-2",
+        "layout": "thermal"
+      },
+      "expected": "Guest balance and saved accommodation visible; accounting/settlement controls absent.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/discounts.md; docs/booking-channels.md; src/pages/ReservationPrintPage.tsx"
+    },
+    {
+      "id": "SESSION-RESET",
+      "module": "history",
+      "description": "Reload resets session-only reservation",
+      "rules": [
+        "R30"
+      ],
+      "kind": "reload",
+      "inputs": {},
+      "expected": "Created booking disappears after browser reload; no persistence claimed.",
+      "priority": "P1",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/app/ReservationDemoContext.tsx"
+    },
+    {
+      "id": "CHANNEL-PENDING",
+      "module": "channels",
+      "description": "OTA source selection does not imply payment",
+      "rules": [
+        "R21",
+        "R25"
+      ],
+      "kind": "channelPending",
+      "inputs": {},
+      "expected": "Booking.com agreement v1 captured; collection pending; paid zero; guest charges 1100.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md; docs/booking-channels.md"
+    },
+    {
+      "id": "CHANNEL-REFERENCE",
+      "module": "channels",
+      "description": "Required OTA reference missing blocks save",
+      "rules": [
+        "R21"
+      ],
+      "kind": "channelReference",
+      "inputs": {},
+      "expected": "Visible reference error; correcting it permits save.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md"
+    },
+    {
+      "id": "CHANNEL-OVERRIDE",
+      "module": "channels",
+      "description": "External accommodation plus discounted extra",
+      "rules": [
+        "R15",
+        "R22",
+        "R25"
+      ],
+      "kind": "channelOverride",
+      "inputs": {},
+      "expected": "Room 1100 hotel-discounted; external room total 800 + Laundry 102 = PHP 902; commission separate.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; docs/booking-channels.md; docs/booking-channels.md"
+    },
+    {
+      "id": "CHANNEL-REASON",
+      "module": "channels",
+      "description": "Override requires documented reason",
+      "rules": [
+        "R22"
+      ],
+      "kind": "channelReason",
+      "inputs": {},
+      "expected": "Missing reason rejects save; correcting allows override.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md"
+    },
+    {
+      "id": "CHANNEL-INVALID-NEG",
+      "module": "channels",
+      "description": "Reject external amount -1",
+      "rules": [
+        "R23"
+      ],
+      "kind": "invalidChannelAmount",
+      "inputs": {
+        "value": "-1"
+      },
+      "expected": "Amount alert; save cannot silently retain previous valid override.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/channelFinance.ts:parseMinor; docs/booking-channels.md"
+    },
+    {
+      "id": "CHANNEL-INVALID-PRECISION",
+      "module": "channels",
+      "description": "Reject external amount 1.001",
+      "rules": [
+        "R23"
+      ],
+      "kind": "invalidChannelAmount",
+      "inputs": {
+        "value": "1.001"
+      },
+      "expected": "Amount alert; save cannot silently retain previous valid override.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/channelFinance.ts:parseMinor; docs/booking-channels.md"
+    },
+    {
+      "id": "CHANNEL-INVALID-TEXT",
+      "module": "channels",
+      "description": "Reject external amount oops",
+      "rules": [
+        "R23"
+      ],
+      "kind": "invalidChannelAmount",
+      "inputs": {
+        "value": "oops"
+      },
+      "expected": "Amount alert; save cannot silently retain previous valid override.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/channelFinance.ts:parseMinor; docs/booking-channels.md"
+    },
+    {
+      "id": "CHANNEL-INVALID-OVERFLOW",
+      "module": "channels",
+      "description": "Reject external amount 900719925474099.99",
+      "rules": [
+        "R23"
+      ],
+      "kind": "invalidChannelAmount",
+      "inputs": {
+        "value": "900719925474099.99"
+      },
+      "expected": "Amount alert; save cannot silently retain previous valid override.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/channelFinance.ts:parseMinor; docs/booking-channels.md"
+    },
+    {
+      "id": "COLLECT-PARTIAL",
+      "module": "collection",
+      "description": "Verified collection PHP 100",
+      "rules": [
+        "R21",
+        "R24"
+      ],
+      "kind": "collection",
+      "inputs": {
+        "amount": 100,
+        "balance": 1000,
+        "source": "booking-com"
+      },
+      "expected": "Saved charges 1100; paid 100; signed balance 1000; no hotel payout implied.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md; docs/booking-channels.md; src/lib/channelActions.ts"
+    },
+    {
+      "id": "COLLECT-FULL",
+      "module": "collection",
+      "description": "Verified collection PHP 1100",
+      "rules": [
+        "R21",
+        "R24"
+      ],
+      "kind": "collection",
+      "inputs": {
+        "amount": 1100,
+        "balance": 0,
+        "source": "booking-com"
+      },
+      "expected": "Saved charges 1100; paid 1100; signed balance 0; no hotel payout implied.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md; docs/booking-channels.md; src/lib/channelActions.ts"
+    },
+    {
+      "id": "COLLECT-CREDIT",
+      "module": "collection",
+      "description": "Verified collection PHP 1200",
+      "rules": [
+        "R21",
+        "R24"
+      ],
+      "kind": "collection",
+      "inputs": {
+        "amount": 1200,
+        "balance": -100,
+        "source": "booking-com"
+      },
+      "expected": "Saved charges 1100; paid 1200; signed balance -100; no hotel payout implied.",
+      "priority": "P0",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md; docs/booking-channels.md; src/lib/channelActions.ts"
+    },
+    {
+      "id": "COLLECT-REFUND",
+      "module": "collection",
+      "description": "Verified refund increases balance",
+      "rules": [
+        "R24"
+      ],
+      "kind": "refund",
+      "inputs": {
+        "record": "CHANNEL-2"
+      },
+      "expected": "Refund PHP 100 against channel collection 2400 increases balance from 120 to 220; original collection retained.",
+      "priority": "P0",
+      "category": "state",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/booking-channels.md; src/lib/channelActions.ts"
+    },
+    {
+      "id": "COLLECT-EXCESS",
+      "module": "collection",
+      "description": "Refund exceeding collection rejected",
+      "rules": [
+        "R24"
+      ],
+      "kind": "excessRefund",
+      "inputs": {
+        "record": "CHANNEL-2"
+      },
+      "expected": "Refund PHP 2400.01 rejected; original bill/collection unchanged.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/booking-channels.md; src/lib/channelActions.ts"
+    },
+    {
+      "id": "CHANNEL-SOURCE-REVIEW",
+      "module": "channels",
+      "description": "Reviewed source change preserves prior verified collection",
+      "rules": [
+        "R27"
+      ],
+      "kind": "sourceReview",
+      "inputs": {
+        "record": "CHANNEL-2"
+      },
+      "expected": "Keep source cancels review; confirmed switch archives Agoda terms and retains paid 2400; new source uses original saved room pricing without former external override.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/booking-channels.md"
+    },
+    {
+      "id": "FIN-COMMISSION",
+      "module": "financials",
+      "description": "Document commission independent of guest balance",
+      "rules": [
+        "R25",
+        "R32"
+      ],
+      "kind": "commission",
+      "inputs": {
+        "record": "CHANNEL-2"
+      },
+      "expected": "Confirmed liability PHP 310/evidence recorded; guest billing unchanged.",
+      "priority": "P0",
+      "category": "happy",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/booking-channels.md; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "FIN-BATCH",
+      "module": "financials",
+      "description": "Two-reservation batch payout and reconciliation",
+      "rules": [
+        "R26",
+        "R25",
+        "R32"
+      ],
+      "kind": "batch",
+      "inputs": {
+        "record": "CHANNEL-2"
+      },
+      "expected": "100+200=300 batch payout, two allocations; guest billing unchanged; reconciliation saved with explanation.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/booking-channels.md; docs/booking-channels.md; src/lib/reservationAudit.ts; src/lib/reservationLifecycle.ts"
+    },
+    {
+      "id": "FIN-RECON-REASON",
+      "module": "financials",
+      "description": "Reconciliation without explanation rejected",
+      "rules": [
+        "R26"
+      ],
+      "kind": "reconcileEmpty",
+      "inputs": {
+        "record": "CHANNEL-2"
+      },
+      "expected": "Existing partial reconciliation unchanged; required explanation validation shown.",
+      "priority": "P1",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "docs/booking-channels.md"
+    },
+    {
+      "id": "FIN-ALLOC-INVALID",
+      "module": "financials",
+      "description": "Negative batch allocation rejected",
+      "rules": [
+        "R23",
+        "R26"
+      ],
+      "kind": "negativeAllocation",
+      "inputs": {
+        "record": "CHANNEL-2"
+      },
+      "expected": "No new settlement; negative amount error.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture CHANNEL-2; fixed hotel clock 2026-11-10T15:00:00+08:00.",
+      "references": "src/lib/channelFinance.ts:parseMinor; docs/booking-channels.md; docs/booking-channels.md"
+    },
+    {
+      "id": "GAP-RATE-ZERO",
+      "module": "pricing",
+      "description": "Zero configured rate is valid; disabled exact package rate blocks new assignment",
+      "rules": [
+        "R02"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Zero-rate reservation saves PHP 0; disabling standard-6-hours prevents a new Standard hourly assignment.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md"
+    },
+    {
+      "id": "GAP-SNAPSHOT-CONFIG",
+      "module": "history",
+      "description": "Rate configuration changes preserve saved prices until explicit duration edit",
+      "rules": [
+        "R10",
+        "R20"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Captured 1100 survives current rate 9999 and unrelated edit; changing duration to 2 nights at new nightly 3333 captures 6666.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; docs/room-pricing.md; docs/discounts.md; AGENTS.md; docs/discounts.md; docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "GAP-INCL-CONFIG",
+      "module": "inclusions",
+      "description": "Default inclusion quantities validate and do not rewrite saved reservations",
+      "rules": [
+        "R11",
+        "R12"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Zero default rejected; duplicate option absent; saved water 1 retained while new assignments inherit water 9.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/roomTypeInclusions.ts; src/components/reservations/ReservationInclusions.test.tsx; src/lib/roomTypeInclusions.ts"
+    },
+    {
+      "id": "GAP-INVENTORY-RETIRED",
+      "module": "purchases",
+      "description": "Sale-disabled product is excluded from new purchases; captured price retained",
+      "rules": [
+        "R13",
+        "R20"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Saved Pancit remains 120 despite current price 999; sale-disabled product absent from new purchase selector.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md; AGENTS.md; docs/discounts.md; docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "GAP-PRESET-CURRENCY",
+      "module": "discounts",
+      "description": "Disabled/changed presets retain saved snapshots; presets above current base are excluded",
+      "rules": [
+        "R16"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Captured 950 survives edited preset 900 and disabling; new selections exclude disabled and above-base presets.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md"
+    },
+    {
+      "id": "GAP-MONEY-ROUND",
+      "module": "billing",
+      "description": "Nightly units round before multiplication; percentage discounts round at application",
+      "rules": [
+        "R19",
+        "R23"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Nightly 1.005 → 1.01 × 3 = 3.03; 50% reduction rounds to 1.52; owed 1.51.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/discounts.md; src/lib/money.ts; src/lib/channelFinance.ts:parseMinor; docs/booking-channels.md"
+    },
+    {
+      "id": "GAP-AGREEMENT",
+      "module": "channels",
+      "description": "Published agreements immutable; adjacent effective dates capture by hotel entry date",
+      "rules": [
+        "R21",
+        "R33"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Published rules disabled and demotion rejected; overlapping inclusive dates rejected; v1/v2 captured on entry endpoints, saved snapshot retained.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md; docs/booking-channels.md; src/lib/channelActions.ts; src/lib/channelFinance.ts"
+    },
+    {
+      "id": "GAP-CAPABILITIES",
+      "module": "financials",
+      "description": "Denied accounting capabilities enforce domain actions",
+      "rules": [
+        "R33"
+      ],
+      "kind": null,
+      "inputs": {},
+      "expected": "Review or additional browser setup required.",
+      "priority": "P1",
+      "category": "gap",
+      "executable": false,
+      "implemented": false,
+      "gap": "All demo capabilities are granted; no UI to change identity/capabilities. Do not inject application state.",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md; src/lib/channelActions.ts; src/lib/channelFinance.ts"
+    },
+    {
+      "id": "GAP-ALLOC-ZERO",
+      "module": "financials",
+      "description": "Exact accommodation cent allocation across equal and zero-price rooms",
+      "rules": [
+        "R22",
+        "R26"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "External 0.01 allocates 0.01 to first room and 0 to second for equal original values and zero-price fallback; exact guest total 0.01.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md; docs/booking-channels.md"
+    },
+    {
+      "id": "GAP-COMMISSION-METHODS",
+      "module": "financials",
+      "description": "Configured commission methods/bases and settlement estimates stay separate from guest charges",
+      "rules": [
+        "R25"
+      ],
+      "kind": "configuration",
+      "inputs": {
+        "variants": [
+          "fixed",
+          "none",
+          "manual",
+          "percentage/reference_value",
+          "percentage/explicit_amount"
+        ]
+      },
+      "expected": "Fixed 12.34; none 0; manual Pending; 15% reference 600 → 90; 15% explicit 333.33 → 50; deducted/gross/manual/offset settlement expectations verified independently.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/booking-channels.md"
+    },
+    {
+      "id": "GAP-DOMAIN-TRANSITIONS",
+      "module": "lifecycle",
+      "description": "Invalid direct domain transitions despite hidden UI controls",
+      "rules": [
+        "R06",
+        "R07",
+        "R08",
+        "R09"
+      ],
+      "kind": null,
+      "inputs": {},
+      "expected": "Review or additional browser setup required.",
+      "priority": "P1",
+      "category": "gap",
+      "executable": false,
+      "implemented": false,
+      "gap": "UI cannot call hidden domain actions; existing unit tests cover some, cancellation lacks explicit domain guard.",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn; src/lib/reservationLifecycle.ts:checkOutReservation; src/lib/reservationLifecycle.ts; src/lib/reservationLifecycle.ts:markReservationNoShow"
+    },
+    {
+      "id": "GAP-OCCUPANCY-INTEGERS",
+      "module": "validation",
+      "description": "Fractional/over-capacity adults and children",
+      "rules": [
+        "R01",
+        "R14"
+      ],
+      "kind": null,
+      "inputs": {},
+      "expected": "Review or additional browser setup required.",
+      "priority": "P1",
+      "category": "gap",
+      "executable": true,
+      "implemented": false,
+      "gap": "Whole-guest and capacity policy unclear: UI minima exist, capacity/integer enforcement appears absent; review before asserting invented limits.",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "GAP-GUEST-CONTACT",
+      "module": "guests",
+      "description": "Invalid email and phone business validation",
+      "rules": [
+        "R31"
+      ],
+      "kind": null,
+      "inputs": {},
+      "expected": "Review or additional browser setup required.",
+      "priority": "P1",
+      "category": "gap",
+      "executable": true,
+      "implemented": false,
+      "gap": "Phone/email optional; no documented validation policy beyond input type; request policy review.",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:createGuest"
+    },
+    {
+      "id": "GAP-CANCEL-FINANCE",
+      "module": "billing",
+      "description": "Cancellation refunds, commission reversals and penalties",
+      "rules": [
+        "R08",
+        "R24"
+      ],
+      "kind": null,
+      "inputs": {},
+      "expected": "Review or additional browser setup required.",
+      "priority": "P1",
+      "category": "gap",
+      "executable": false,
+      "implemented": false,
+      "gap": "Cancellation retains captured bill; automatic refund/penalty policy not documented or implemented.",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts; docs/booking-channels.md; src/lib/channelActions.ts"
+    },
+    {
+      "id": "GAP-REAL-PERSISTENCE",
+      "module": "history",
+      "description": "Backend persistence, real payment and bank settlement",
+      "rules": [
+        "R30"
+      ],
+      "kind": null,
+      "inputs": {},
+      "expected": "Review or additional browser setup required.",
+      "priority": "P1",
+      "category": "gap",
+      "executable": false,
+      "implemented": false,
+      "gap": "No backend, authenticated actor or banking integration implemented.",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/app/ReservationDemoContext.tsx"
+    },
+    {
+      "id": "GAP-DUPLICATE-SUBMIT",
+      "module": "creation",
+      "description": "Duplicate submit guard and independent adjustment removal under same timestamp",
+      "rules": [
+        "R01",
+        "R19"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Double-click saves one record; independent +100/+200 adjustments total 1400; removing A must retain B and total 1300.",
+      "priority": "P0",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/components/reservations/ReservationPane.tsx:canCreate; docs/discounts.md; src/lib/money.ts"
+    },
+    {
+      "id": "GAP-BREAKFAST-STAY",
+      "module": "breakfast",
+      "description": "Shortening stay removes out-of-entitlement breakfast dates",
+      "rules": [
+        "R14"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Three-night Guest 1 third-date breakfast removed on shortening to one night; two unrecorded selectors remain; total 2200.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/inventory-breakfast-purchases.md"
+    },
+    {
+      "id": "GAP-CALENDAR-GEOMETRY",
+      "module": "calendar",
+      "description": "Minute-precise CSS and rendered occupancy bar widths across four views",
+      "rules": [
+        "R03",
+        "R28"
+      ],
+      "kind": "configuration",
+      "inputs": {
+        "start": "2026-11-10T14:07",
+        "duration": "6-hours",
+        "guestName": "PW Geometry Guest",
+        "viewport": "1600 × 1050"
+      },
+      "expected": "A six-hour stay starting 14:07 retains precise left/width ratios, and rendered pixel width matches scheduled interval within one pixel.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/lib/hotelTime.ts; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "STAY-CUSTOM",
+      "module": "time",
+      "description": "Rooms retain independent stay dates, durations and package prices",
+      "rules": [
+        "R02",
+        "R03",
+        "R04"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Room 101: 6h/1100; Room 102: 8h/1300 from 15:30 to 23:30; saved total 2400.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "docs/room-pricing.md; AGENTS.md; src/lib/hotelTime.ts; src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom"
+    },
+    {
+      "id": "CHECKIN-DIRTY",
+      "module": "lifecycle",
+      "description": "One Dirty room prevents atomic multi-room check-in",
+      "rules": [
+        "R06",
+        "R34"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Dirty room 102 with explicit capacity 2 can be reserved but check-in rejects all rooms; reservation stays confirmed and no check-in audit added.",
+      "priority": "P0",
+      "category": "negative",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn; src/features/configuration/types.ts:RoomConfiguration; src/pages/ConfigurationPage.tsx:save optionalKeys and persist rooms"
+    },
+    {
+      "id": "CONFIG-OPTIONAL-CAPACITY",
+      "module": "validation",
+      "description": "Room readiness edit saves with optional capacity override blank",
+      "rules": [
+        "R34"
+      ],
+      "kind": "configuration",
+      "inputs": {
+        "room": "102",
+        "capacityOverride": "",
+        "housekeeping": "dirty",
+        "description": "PW room fixture",
+        "operationalNotes": "PW readiness fixture"
+      },
+      "expected": "A blank optional capacity override remains unset; Dirty readiness is saved.",
+      "priority": "P1",
+      "category": "boundary",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/features/configuration/types.ts:RoomConfiguration; src/pages/ConfigurationPage.tsx:save optionalKeys and persist rooms"
+    },
+    {
+      "id": "CAL-EXTEND",
+      "module": "calendar",
+      "description": "Extending checkout updates overdue occupancy status",
+      "rules": [
+        "R10",
+        "R28"
+      ],
+      "kind": "configuration",
+      "inputs": {
+        "record": "DEMO-6",
+        "now": "2026-10-10T15:00:00+08:00"
+      },
+      "expected": "Initially overdue; selecting 3 nights extends checkout and changes calendar to occupied; billing follows explicit duration edit.",
+      "priority": "P0",
+      "category": "interaction",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; saved fixture DEMO-6; fixed hotel clock 2026-10-10T15:00:00+08:00.",
+      "references": "AGENTS.md; docs/room-pricing.md; docs/discounts.md; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    },
+    {
+      "id": "REMEDY-ROOM-CONTRACT",
+      "module": "validation",
+      "description": "Optional clears, dynamic display fallback, invalid capacity and occupied readiness guard",
+      "rules": [
+        "R06",
+        "R10",
+        "R34"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Both editors preserve clears/custom names; type fallback updates; occupied readiness change refused.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "src/lib/reservationLifecycle.ts:validateReservationCheckIn; AGENTS.md; docs/room-pricing.md; docs/discounts.md; src/features/configuration/types.ts:RoomConfiguration; src/pages/ConfigurationPage.tsx:save optionalKeys and persist rooms"
+    },
+    {
+      "id": "REMEDY-ROOM-METADATA",
+      "module": "validation",
+      "description": "Archived room metadata survives generic edits",
+      "rules": [
+        "R10",
+        "R34"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Archiving through Rooms UI remains archived after generic optional-field edit.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; docs/room-pricing.md; docs/discounts.md; src/features/configuration/types.ts:RoomConfiguration; src/pages/ConfigurationPage.tsx:save optionalKeys and persist rooms"
+    },
+    {
+      "id": "REMEDY-CALENDAR-INTERACTION",
+      "module": "calendar",
+      "description": "Subpixel marker, explicit target choice, keyboard details and nearby empty slot",
+      "rules": [
+        "R03",
+        "R04",
+        "R28"
+      ],
+      "kind": "configuration",
+      "inputs": {},
+      "expected": "Two adjacent six-hour stays keep true geometry; pointer conflicts require a choice; keyboard identifies the exact stay; empty-slot actions remain usable.",
+      "priority": "P1",
+      "category": "regression",
+      "executable": true,
+      "implemented": true,
+      "gap": "",
+      "preconditions": "Fresh demo session; fixed hotel clock 2026-11-10 15:00 Asia/Manila; seeded configuration; existing John Doe unless specified.",
+      "references": "AGENTS.md; src/lib/hotelTime.ts; src/utils/availability.ts; src/components/reservations/ReservationPane.tsx:addRoom; src/lib/calendar.ts; src/pages/DashboardPage.tsx"
+    }
+  ],
+  "limitations": [
+    "UI tests exercise the actual React/Vite app. All business records and financial transactions are simulated frontend session memory, not persisted or externally verified.",
+    "Chromium desktop, Asia/Manila, single property only. No claims for other browsers, mobile layouts, accessibility completeness, production authentication, or backend concurrency.",
+    "Explicit documented rules provide independent expected arithmetic. Source-only behavior is labeled an implementation contract and can still represent a product defect.",
+    "No full Cartesian product: all 18 monetary rate cells are tested; selected boundary/equivalence partitions and high-risk interactions cover the rest. No formal pairwise coverage claim for all dimensions.",
+    "Unsupported workflows and pending scenarios are counted separately, with reasons. Passing the implemented batch never means complete booking coverage.",
+    "Unclear policies: guest capacity/fractional counts, contact validation, no-show grace period, cancellation refunds, permitted overpayment policy, tax basis and reconciliation evidence need business review.",
+    "No existing on-demand Playwright utility or dependency was present in the repository; this isolated utility supplies that missing infrastructure without editing application logic."
+  ]
+}

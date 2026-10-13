@@ -31,6 +31,7 @@ def test_readiness_failure_is_explicit_and_redacted(monkeypatch):
         "postgresql+psycopg://hms_dev@127.0.0.1:55432/biotime",
         "postgresql+psycopg://hms_dev@db.example.com:55432/hms_dev",
         "sqlite:///hms_dev",
+        "postgresql+psycopg://hms_dev@127.0.0.1:55432/hms_dev?host=db.example.com",
     ],
 )
 def test_admin_tools_refuse_unrelated_databases(url):

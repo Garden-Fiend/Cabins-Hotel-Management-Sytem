@@ -1,4 +1,5 @@
 import { InfoTip } from "../InfoTip";
+import { adjustmentIdentityError, createAdjustment, removeAdjustment } from "../../lib/reservationAdjustments";
 import { fromMinorUnits } from "../../lib/money";
 import { useReservationDemo } from "../../app/useReservationDemo";
 import type { ReservationChannelTerms, CollectionTransaction } from "../../features/channels/types";
@@ -10,6 +11,7 @@ import { switchInclusionDefaults, setInclusionQuantity } from "../../lib/roomTyp
 import { getBreakfastProducts, getSellableProducts } from "../../lib/inventoryProducts";
 import { useCallback, useState } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { createChargeId, createDemoChargeId } from "../../lib/reservationCharges";
 
 import { useHotelConfiguration } from "../../features/configuration/useHotelConfiguration";
 import type { HotelConfigurationData } from "../../features/configuration/types";
@@ -49,12 +51,12 @@ interface ReservationPaneProps {
   initialRoom?: string;
   initialReservation?: ReservationSnapshot;
   onClose: () => void;
-  onCreated: (reservation: ReservationSnapshot, stays: Stay[]) => void;
-  onSaved?: (reservation: ReservationSnapshot, stays: Stay[]) => void;
+  onCreated: (reservation: ReservationSnapshot, stays: Stay[]) => void | Promise<void>;
+  onSaved?: (reservation: ReservationSnapshot, stays: Stay[]) => void | Promise<void>;
   onCancelReservation?: (
     reservationId: string,
     guestHasVacated: boolean,
-  ) => void;
+  ) => void | boolean | Promise<void | boolean>;
   onGuestCreated: (guest: ReservationGuest) => void;
   onDraftContextChange?: (
     contexts: { roomId: string; start: Date; end: Date }[],
@@ -360,7 +362,7 @@ export function ReservationPane({
   guests,
   initialCheckIn,
   initialRoom,
-  initialReservation,
+  initialReservation: suppliedReservation,
   onClose,
   onCreated,
   onSaved,
@@ -368,8 +370,10 @@ export function ReservationPane({
   onGuestCreated,
   onDraftContextChange,
 }: ReservationPaneProps) {
+  const [initialReservation] = useState(suppliedReservation);
   const { configuration } = useHotelConfiguration();
-  const { capabilities, actor } = useReservationDemo();
+  const { capabilities, actor, commands, mode } = useReservationDemo();
+  const persistent = mode === "api";
   const reservationDurations = configuration.durations;
   const activeRoomTypeIds = new Set(
     configuration.roomTypes
@@ -569,6 +573,7 @@ export function ReservationPane({
       : [];
   });
   const [selectedRoomNumber, setSelectedRoomNumber] = useState("");
+  const purchaseIds = useRef(new Set(roomDrafts.flatMap(room => room.charges.map(charge => charge.id))));
   const [expandedRoom, setExpandedRoom] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (expandedRoom !== null || !scrollToRoomsAfterCollapseRef.current) return;
@@ -604,7 +609,7 @@ export function ReservationPane({
     }catch(error){setErrorMessage(error instanceof Error ? error.message : "Unable to capture channel agreement.");}
   }
   const [bookingSource, setBookingSource] = useState(
-    initialReservation?.bookingSourceId ?? "",
+    initialReservation?.bookingSourceId ?? (persistent ? bookingSources.find(source => source.enabled)?.id ?? "" : ""),
   );
   const [note, setNote] = useState(initialReservation?.note ?? "");
   const [discounts, setDiscounts] = useState<ReservationDiscount[]>(
@@ -614,6 +619,7 @@ export function ReservationPane({
     initialReservation?.adjustments.map((adjustment) => ({ ...adjustment })) ??
       [],
   );
+  const adjustmentsRef = useRef(adjustments);
   const [discountScope, setDiscountScope] =
     useState<DiscountScope>("reservation");
   const [discountMethod, setDiscountMethod] =
@@ -682,7 +688,7 @@ export function ReservationPane({
     }
   })();
   const channelPricingResult = (() => { try { return {summary:applyChannelPricing(pricingResult.summary,channelTerms,channelHistory),error:""}; } catch (error) {return {summary:pricingResult.summary,error:error instanceof Error ? error.message : "Invalid channel pricing."};} })();
-  const priceSummary = channelPricingResult.summary;
+  const priceSummary = persistent && initialReservation ? initialReservation.pricing : channelPricingResult.summary;
 
   function selectLinePreset(line: ReservationPriceLine, presetId: string) {
     const scope = line.kind === "room" ? "room" : "item";
@@ -912,6 +918,13 @@ export function ReservationPane({
     if (!option?.enabled) {
       return;
     }
+    let id: string;
+    try {
+      id = persistent ? createChargeId(Array.from(purchaseIds.current, id => ({ id }))) : createDemoChargeId();
+      if (persistent) purchaseIds.current.add(id);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to add purchase."); return;
+    }
 
     setRoomDrafts((current) =>
       current.map((room) =>
@@ -921,7 +934,7 @@ export function ReservationPane({
               charges: [
                 ...room.charges,
                 {
-                  id: `charge-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                  id,
                   usage,
                   catalogId: option.id,
                   label: option.label,
@@ -991,20 +1004,20 @@ export function ReservationPane({
       return;
     }
 
-    setAdjustments((current) => [
-      ...current,
-      {
-        id: `adjustment-${Date.now()}`,
-        amount,
-        reason: adjustmentReason.trim(),
-      },
-    ]);
+    try {
+      const next = [...adjustmentsRef.current, createAdjustment(adjustmentsRef.current, amount, adjustmentReason.trim())];
+      adjustmentsRef.current = next;
+      setAdjustments(next);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Adjustment creation failed; no records changed.");
+      return;
+    }
     setAdjustmentAmount("");
     setAdjustmentReason("");
     markDirty();
   }
 
-  function createGuest() {
+  async function createGuest() {
     const name = newGuestName.trim();
     if (!name) {
       setErrorMessage("Enter the guest's name.");
@@ -1017,8 +1030,15 @@ export function ReservationPane({
       phone: newGuestPhone.trim(),
       email: newGuestEmail.trim(),
     };
-    onGuestCreated(createdGuest);
-    setGuestId(createdGuest.id);
+    let savedGuest = createdGuest;
+    try {
+      if (commands) savedGuest = await commands.createGuest({ name, phone: createdGuest.phone, email: createdGuest.email });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to save guest.");
+      return;
+    }
+    onGuestCreated(savedGuest);
+    setGuestId(savedGuest.id);
     setGuestQuery("");
     setShowCreateGuest(false);
     setNewGuestName("");
@@ -1028,9 +1048,29 @@ export function ReservationPane({
   }
 
   async function submitReservation() {
+    if (commands) {
+      if (isSubmitting || !guest || roomDrafts.length !== 1) return;
+      const room = roomDrafts[0];
+      setIsSubmitting(true);
+      setErrorMessage("");
+      try {
+        const saved = initialReservation
+          ? await commands.patch(initialReservation, { charges: room.charges, adjustments, guestId: guest.id, roomNumber: room.roomNumber, durationId, start: reservationCheckIn, note, adults: room.adults, children: room.children })
+          : await commands.create({ guestId: guest.id, bookingSourceId: bookingSource, roomNumber: room.roomNumber,
+              durationId, start: reservationCheckIn, adults: room.adults, children: room.children, note });
+        const savedStays = stays.filter(s => s.reservationId === saved.id);
+        if (initialReservation) await onSaved?.(saved, savedStays);
+        else await onCreated(saved, savedStays);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Unable to persist reservation. Your draft is retained.");
+      } finally { setIsSubmitting(false); }
+      return;
+    }
+    const identityError = adjustmentIdentityError(adjustmentsRef.current);
+    if (identityError) { setErrorMessage(identityError); return; }
     if (!channelInputsValid || pendingSource !== undefined) {setErrorMessage("Correct channel amounts and finish the source change review before saving.");return;}
     if (initialReservation && !isDirty) {
-      onSaved?.(initialReservation, stays.filter((stay) => stay.reservationId === initialReservation.id));
+      await onSaved?.(initialReservation, stays.filter((stay) => stay.reservationId === initialReservation.id));
       return;
     }
     if (!canCreate) {
@@ -1275,9 +1315,9 @@ export function ReservationPane({
     ];
 
     if (initialReservation) {
-      onSaved?.(reservation, createdStays);
+      await onSaved?.(reservation, createdStays);
     } else {
-      onCreated(reservation, createdStays);
+      await onCreated(reservation, createdStays);
     }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to save the reservation. Please retry.");
@@ -1390,7 +1430,7 @@ export function ReservationPane({
   function renderChargeSection(room: RoomDraft, purchase: boolean) {
     const options = purchase ? purchasedProducts : reservationExtraCharges;
     return (
-                          <div className={roomSectionClass}>
+                          <fieldset disabled={persistent && (!purchase || !commands?.canEditPurchases || !initialReservation)}><div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               {purchase ? "Purchased Items" : "Extra charges"}
                             </h4>
@@ -1496,7 +1536,7 @@ export function ReservationPane({
                               ))}
                             </select>
                              {purchase && <p className="mt-3 text-sm font-semibold">Purchased items total: {formatReservationMoney(room.charges.filter((charge) => charge.usage === "purchase").reduce((total, charge) => total + charge.quantity * charge.unitPrice, 0))}</p>}
-                          </div>
+                          </div></fieldset>
     );
   }
 
@@ -1525,7 +1565,7 @@ export function ReservationPane({
               {initialReservation ? "Edit Reservation" : "Create Reservation"}
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Demo workflow · prices and availability use sample data
+              {persistent ? "API mode · saved prices are server-authoritative; new prices are estimates until commit" : "Demo workflow · prices and availability use sample data"}
             </p>
           </div>
           <button
@@ -1540,9 +1580,10 @@ export function ReservationPane({
         </header>
 
         <div ref={reservationScrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-100/70 px-4 py-5 sm:px-5">
+          {persistent && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">Persistent direct single-room booking. Saved edits support primary guest, notes, guest counts, purchased items and billing adjustments. Before check-in, room assignment, arrival and duration can also change. Assignment/duration changes capture the current server rate; earlier pricing revisions remain preserved. Save a new reservation before adding purchases or adjustments. Custom room stays, inclusions, extra-charge categories, breakfast and discounts are not yet available.</p>}
 
 
-          <section className={sectionClass}>
+          <fieldset disabled={persistent && Boolean(initialReservation) && !commands?.canEditGuest}><section className={sectionClass}>
             <div>
               <ReservationStageHeading step={1} title="Primary guest" help="Choose the primary guest or add a new guest. Set the adult and child counts for each room under Rooms." />
               <p className="mt-1 text-sm text-slate-500">
@@ -1675,9 +1716,9 @@ export function ReservationPane({
                 )}
               </>
             )}
-          </section>
+          </section></fieldset>
 
-          <section className={sectionClass}>
+          <fieldset disabled={persistent && Boolean(initialReservation) && (!commands?.canEditStay || !["confirmed", "reserved"].includes(initialReservation!.status))}><section className={sectionClass}>
             <div>
               <ReservationStageHeading step={2} title="Reservation stay" help="Set arrival and duration. These dates apply to all rooms unless you configure an individual room stay." />
               <p className="mt-1 text-sm text-slate-500">
@@ -1749,7 +1790,7 @@ export function ReservationPane({
                   : formatDateTime(reservationCheckOut)}
               </span>
             </p>
-          </section>
+          </section></fieldset>
 
           <section ref={roomsStageRef} className={sectionClass}>
             <div>
@@ -1857,6 +1898,7 @@ export function ReservationPane({
                           </button>
                           <button
                             type="button"
+                            disabled={persistent && Boolean(initialReservation)}
                             onClick={() => removeRoom(room.roomNumber)}
                             aria-label={`Remove room ${room.roomNumber}`}
                             className="rounded-lg px-2 py-2 text-sm text-slate-500 hover:bg-slate-100"
@@ -1871,7 +1913,7 @@ export function ReservationPane({
                       </div>
                       {expandedRoom === room.roomNumber && (
                         <div id={`room-settings-${encodeURIComponent(room.roomNumber)}`} className="space-y-4 border-t border-slate-200 bg-slate-100/70 p-4">
-                          <div className={roomSectionClass}>
+                          <fieldset disabled={persistent}><div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Stay
                             </h4>
@@ -1949,7 +1991,7 @@ export function ReservationPane({
                                 </p>
                               </div>
                             )}
-                          </div>
+                          </div></fieldset>
 
                           <div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
@@ -1981,14 +2023,12 @@ export function ReservationPane({
                           </div>
 
                           <div className={roomSectionClass}>
-                            <h4 className="text-sm font-semibold text-slate-900">
-                              Inclusions
-                            </h4>
                             {(!initialReservation || initialReservation.status === "confirmed" || initialReservation.status === "reserved") && <label className="mt-3 block text-sm font-medium">Assigned room
-                              <select aria-label={`Assigned room ${room.roomNumber}`} value={room.roomNumber} onChange={(event) => changeAssignedRoom(room, event.target.value)} className={`${inputClass} mt-1`}>
+                              <select disabled={persistent && !commands?.canEditStay} aria-label={`Assigned room ${room.roomNumber}`} value={room.roomNumber} onChange={(event) => changeAssignedRoom(room, event.target.value)} className={`${inputClass} mt-1`}>
                                 {reservationRooms.filter((item) => item.number === room.roomNumber || !roomDrafts.some((draft) => draft.roomNumber === item.number)).map((item) => <option key={item.number} value={item.number}>Room {item.number} - {item.type}</option>)}
                               </select>
                             </label>}
+                            <fieldset disabled={persistent}><h4 className="text-sm font-semibold text-slate-900">Inclusions</h4>
                             <div className="mt-2 space-y-2">
                               {inclusionOptions.map((item) => (
                                 <label
@@ -2015,10 +2055,11 @@ export function ReservationPane({
                                 </label>
                               ))}
                             </div>
+                            </fieldset>
                           </div>
 
                           {renderChargeSection(room, false)}
-                          <div className={roomSectionClass}>
+                          <fieldset disabled={persistent}><div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Breakfast
                             </h4>
@@ -2231,7 +2272,7 @@ export function ReservationPane({
                                 ))}
                               </div>
                             )}
-                          </div>
+                          </div></fieldset>
                           {renderChargeSection(room, true)}
                           <div className="flex justify-end border-t border-slate-300 pt-4">
                             <button
@@ -2314,7 +2355,7 @@ export function ReservationPane({
               </select>
               <button
                 type="button"
-                disabled={!selectedRoomNumber}
+                disabled={!selectedRoomNumber || (persistent && roomDrafts.length >= 1)}
                 onClick={addRoom}
                 className="shrink-0 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
               >
@@ -2336,6 +2377,7 @@ export function ReservationPane({
             <label>
               <span className={labelClass}>Booking source *</span>
               <select
+                disabled={persistent}
                 className={inputClass}
                 onChange={(event) => {
                   changeSource(event.target.value);
@@ -2374,6 +2416,7 @@ export function ReservationPane({
             <label className="mt-3 block">
               <span className={labelClass}>Reservation note</span>
               <textarea
+                aria-label="Reservation note"
                 className={inputClass}
                 maxLength={1000}
                 onChange={(event) => {
@@ -2387,7 +2430,7 @@ export function ReservationPane({
             </label></details>
           </section>
 
-          <details className={sectionClass} open={discounts.length > 0 || undefined}>
+          <fieldset disabled={persistent}><details className={sectionClass} open={discounts.length > 0 || undefined}>
             <summary className="cursor-pointer text-sm font-semibold text-slate-700">Discounts <span className="font-normal text-slate-500">/ optional{discounts.length ? ` / ${discounts.length} applied` : ""}</span> <InfoTip label="Discounts">Use a preset or a manual reduction when the guest qualifies. Final-price offers apply first, followed by room/item and reservation reductions. A manual room discount includes its extras. A channel accommodation total replaces the discounted accommodation amount.</InfoTip></summary>
             <div className="space-y-4 pt-2">
             <div className="space-y-2 rounded-lg bg-slate-50 p-3">
@@ -2532,10 +2575,11 @@ export function ReservationPane({
             </button>
             {editingDiscountId && <button type="button" className="ml-2 text-sm underline" onClick={() => { setEditingDiscountId(null); setManualDiscountLabel(""); setDiscountValue(""); }}>Cancel manual edit</button>}
             </div>
-          </details>
+          </details></fieldset>
 
-          <details className={sectionClass} open={adjustments.length > 0 || undefined}>
+          <fieldset disabled={persistent && (!commands?.canEditAdjustments || !initialReservation)}><details className={sectionClass} open={adjustments.length > 0 || undefined}>
             <summary className="cursor-pointer text-sm font-semibold text-slate-700">Billing adjustments <span className="font-normal text-slate-500">/ optional{adjustments.length ? ` / ${adjustments.length} applied` : ""}</span> <InfoTip label="Billing adjustments">Use a documented billing correction. Positive amounts add charges; negative amounts reduce them. This does not record payment or OTA commission. A reason is required.</InfoTip></summary>
+            {adjustmentIdentityError(adjustments) && <p role="alert" className="mt-2 text-sm text-rose-700">{adjustmentIdentityError(adjustments)}</p>}
             <div className="space-y-4 pt-2">
             {adjustments.length > 0 && (
               <ul className="space-y-2">
@@ -2551,10 +2595,14 @@ export function ReservationPane({
                     <button
                       type="button"
                       onClick={() => {
-                        setAdjustments((current) =>
-                          current.filter((item) => item.id !== adjustment.id),
-                        );
-                        markDirty();
+                        try {
+                          const next = removeAdjustment(adjustmentsRef.current, adjustment.id);
+                          adjustmentsRef.current = next;
+                          setAdjustments(next);
+                          markDirty();
+                        } catch (error) {
+                          setErrorMessage(error instanceof Error ? error.message : "Removal refused; records preserved.");
+                        }
                       }}
                       className="text-slate-500 underline"
                     >
@@ -2599,7 +2647,7 @@ export function ReservationPane({
               Apply adjustment
             </button>
             </div>
-          </details>
+          </details></fieldset>
 
           <section className={`${sectionClass} pb-6`}>
             <div>
@@ -2653,7 +2701,7 @@ export function ReservationPane({
                 <span>{formatReservationMoney(priceSummary.amountOwed)}</span>
               </div>
               <p className="text-xs text-slate-500">
-                Original prices and applied reductions are captured for this reservation in memory.
+                {persistent ? "This is the last saved server total. Draft billing and stay changes take effect after a successful Save; prior captures remain in pricing history." : "Original prices and applied reductions are captured for this reservation in memory."}
               </p>
               </div></details>
             </div>
@@ -2675,9 +2723,11 @@ export function ReservationPane({
               id="reservation-save-error"
               className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-800"
             >
-              {errorMessage}
+              {[errorMessage, commands?.error].filter(Boolean).join(" ")}
+              {commands?.conflict && <button type="button" className="mt-2 block underline" onClick={() => void commands.reviewLatest?.()}>Load latest version for review; keep my draft</button>}
             </div>
           )}
+          {commands?.reviewMessage && <p role="status" className="mb-3 rounded-lg bg-sky-50 p-3 text-sm">{commands.reviewMessage}</p>}
           {invalidPresets.length > 0 && <p role="alert" className="mb-3 text-sm text-rose-700">{invalidPresets.map((item) => item.label).join(", ")} no longer matches the selected room, duration, or item. Remove it or select a compatible preset before saving. The incompatible preset is excluded from this preview.</p>}
           {pricingResult.error && <p role="alert" className="mb-3 text-sm text-rose-700">{pricingResult.error}</p>}
           {roomConflicts.length > 0 && (
@@ -2699,7 +2749,7 @@ export function ReservationPane({
               initialReservation.status !== "no_show" && (
               <button
                 type="button"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (persistent && !commands?.lifecycle)}
                 onClick={() => setShowCancelPrompt(true)}
                 className="rounded-lg border border-rose-200 px-3 py-2.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
               >
@@ -2825,15 +2875,17 @@ export function ReservationPane({
                     (initialReservation?.status === "checked_in" &&
                       guestHasVacated === null)
                   }
-                  onClick={() => {
+                  onClick={async () => {
                     if (!initialReservation || !onCancelReservation) return;
                     setIsSubmitting(true);
-                    onCancelReservation(
-                      initialReservation.id,
-                      initialReservation.status === "checked_in"
-                        ? guestHasVacated === true
-                        : true,
-                    );
+                    try {
+                      const accepted = await onCancelReservation(
+                        initialReservation.id,
+                        initialReservation.status === "checked_in" ? guestHasVacated === true : true,
+                      );
+                      if (accepted === false) setErrorMessage("Cancellation was not confirmed. Your choice is retained.");
+                    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "Cancellation failed."); }
+                    finally { setIsSubmitting(false); }
                   }}
                   className="rounded-lg bg-rose-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 >

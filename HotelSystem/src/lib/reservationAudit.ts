@@ -54,6 +54,13 @@ export function formatReservationAudit(records: ReservationAuditEntry[], configu
       case "inclusion_changed": case "extra_changed": case "breakfast_changed": case "discount_changed": case "adjustment_changed": {
         const list = (value: unknown) => Array.isArray(value) ? value.map(object) : Object.keys(object(value)).length ? [object(value)] : [];
         const key = (item: Data) => text(item.id ?? item.catalogId ?? `${item.stayDate}:${item.guestNumber}`);
+        if (record.eventType === "adjustment_changed" && [list(before), list(after)].some(items => new Set(items.map(key)).size !== items.length)) {
+          result.push("Adjustment identity integrity warning: historical duplicate IDs make this change ambiguous. Original audit records are preserved; a reviewed repair is required.");
+          for (const [label, items] of [["Before", list(before)], ["After", list(after)]] as const) {
+            items.forEach((item, index) => result.push(`${label} adjustment ${index + 1}: ${text(item.reason)}, ${money(item.amount)}`));
+          }
+          break;
+        }
         const previous = new Map(list(before).map((item) => [key(item), item]));
         const current = new Map(list(after).map((item) => [key(item), item]));
         for (const id of new Set([...previous.keys(), ...current.keys()])) {

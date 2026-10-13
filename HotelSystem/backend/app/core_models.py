@@ -25,6 +25,11 @@ companies = sa.Table(
     sa.Column("default_check_in_time", sa.Time(), nullable=False, server_default="14:00:00"),
     sa.Column("default_check_out_time", sa.Time(), nullable=False, server_default="12:00:00"),
     sa.CheckConstraint("currency = 'PHP'", name="php_only"),
+    sa.CheckConstraint("hotel_timezone = 'Asia/Manila'", name="hotel_timezone_supported"),
+    sa.CheckConstraint(
+        "default_check_in_time < TIME '24:00' AND default_check_out_time < TIME '24:00'",
+        name="hotel_times_valid",
+    ),
 )
 audit_events = sa.Table(
     "operational_audit",
@@ -33,6 +38,11 @@ audit_events = sa.Table(
     ownership(),
     sa.Column("reservation_id", UUID(as_uuid=True), sa.ForeignKey("hms.reservations.id")),
     sa.Column("event_type", sa.Text, nullable=False),
+    sa.Column("reservation_version", sa.Integer),
+    sa.CheckConstraint(
+        "reservation_version IS NULL OR reservation_version > 0",
+        name="reservation_version_positive",
+    ),
     sa.Column("actor", sa.Text, nullable=False),
     sa.Column("attribution", sa.Text, nullable=False),
     sa.Column(

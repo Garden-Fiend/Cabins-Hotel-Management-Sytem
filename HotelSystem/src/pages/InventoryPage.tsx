@@ -1,5 +1,7 @@
 import { BreakfastEligibilityEditor } from "../features/inventory/BreakfastEligibilityEditor";
 import { useState } from "react";
+import { useReservationDemo } from "../app/useReservationDemo";
+import { phpDecimal, formatPhp } from "../app/api/presentation";
 import { InventoryDialog } from "../features/inventory/InventoryDialog";
 
 import { useHotelConfiguration } from "../features/configuration/useHotelConfiguration";
@@ -23,6 +25,11 @@ function slug(value: string) {
 }
 
 export function InventoryPage() {
+  const { mode, commands } = useReservationDemo();
+  const persistent = mode === "api";
+  const [saving, setSaving] = useState(false);
+  const [editingCategoryVersion, setEditingCategoryVersion] = useState<number>();
+  const [editingProductVersion, setEditingProductVersion] = useState<number>();
   const { configuration, setConfiguration } = useHotelConfiguration();
   const [categoryName, setCategoryName] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -55,11 +62,37 @@ export function InventoryPage() {
     setAvailableForSale(true); setNotice(""); setProductDialogOpen(true);
   }
 
-  function toggleProduct(product: CatalogConfiguration) {
+  async function toggleProduct(product: CatalogConfiguration) {
     const archived = product.archived || !product.enabled;
+    if (persistent) {
+      setSaving(true);
+      try {
+        await commands!.saveDefinition!("catalogItems", product.id, { label: product.label, categoryId: product.categoryId,
+          price: product.serverUnitAmountMinor === undefined ? String(product.price) : phpDecimal(product.serverUnitAmountMinor), availableForSale: product.availableForSale ?? false, enabled: Boolean(archived), archived: !archived }, editingProductVersion);
+        setProductDialogOpen(false); setNotice("Product change committed to PostgreSQL.");
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Save not confirmed. Draft retained."); }
+      finally { setSaving(false); }
+      return;
+    }
     setConfiguration((current) => ({ ...current, catalogItems: current.catalogItems.map((item) => item.id === product.id ? { ...item, enabled: Boolean(archived), archived: !archived } : item) }));
     setProductDialogOpen(false);
     setNotice(`${product.label} ${archived ? "restored" : "archived"}.`);
+  }
+
+  async function toggleCategory(category: InventoryCategoryConfiguration) {
+    if (persistent) {
+      setSaving(true);
+      try {
+        await commands!.saveDefinition!("inventoryCategories", category.id,
+          { label: category.label, type: category.type, enabled: !category.enabled }, category.serverVersion);
+        if (selectedCategoryId === category.id && category.enabled) setSelectedCategoryId("all");
+        setNotice("Category change committed to PostgreSQL.");
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Save not confirmed. Draft retained."); }
+      finally { setSaving(false); }
+      return;
+    }
+    setConfiguration(current => ({ ...current, inventoryCategories: current.inventoryCategories.map(item => item.id === category.id ? { ...item, enabled: !item.enabled } : item) }));
+    if (selectedCategoryId === category.id && category.enabled) setSelectedCategoryId("all");
   }
 
 
@@ -67,7 +100,7 @@ export function InventoryPage() {
     (category) => category.enabled && category.type !== "breakfast",
   );
 
-  function saveCategory(event: React.FormEvent<HTMLFormElement>) {
+  async function saveCategory(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const label = categoryName.trim();
     if (!label) {
@@ -81,6 +114,17 @@ export function InventoryPage() {
     );
     if (duplicate) {
       setNotice("A category with that name already exists.");
+      return;
+    }
+    if (persistent) {
+      setSaving(true);
+      const previous = configuration.inventoryCategories.find(c => c.id === editingCategoryId);
+      try {
+        await commands!.saveDefinition!("inventoryCategories", editingCategoryId ?? undefined,
+          { label, type: previous?.type ?? "ordinary", enabled: previous?.enabled ?? true }, editingCategoryVersion);
+        setCategoryName(""); setEditingCategoryId(null); setNotice("Category committed to PostgreSQL.");
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Save not confirmed. Draft retained."); }
+      finally { setSaving(false); }
       return;
     }
     if (editingCategoryId) {
@@ -113,7 +157,7 @@ export function InventoryPage() {
     setNotice("Category saved for this session.");
   }
 
-  function saveProduct(event: React.FormEvent<HTMLFormElement>) {
+  async function saveProduct(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = productName.trim();
     const category = configuration.inventoryCategories.find(
@@ -132,6 +176,19 @@ export function InventoryPage() {
     );
     if (duplicate) {
       setNotice("A product with that name already exists in this category.");
+      return;
+    }
+    if (persistent) {
+      setSaving(true);
+      const previous = configuration.catalogItems.find(p => p.id === editingProductId);
+      try {
+        await commands!.saveDefinition!("catalogItems", editingProductId ?? undefined, { label: name, categoryId: category.id,
+          price: category.type === "amenities" ? "0" : productPrice, availableForSale: category.type === "ordinary" && availableForSale,
+          enabled: previous?.enabled ?? true, archived: previous?.archived ?? false }, editingProductVersion);
+        setProductDialogOpen(false); setProductName(""); setProductPrice("0"); setEditingProductId(null);
+        setSelectedCategoryId(category.id); setNotice("Product committed to PostgreSQL.");
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Save not confirmed. Draft retained."); }
+      finally { setSaving(false); }
       return;
     }
     const id = editingProductId ?? `product-${category.id}-${slug(name)}`;
@@ -169,8 +226,9 @@ export function InventoryPage() {
     );
     if (!product) return;
     setEditingProductId(product.id);
+    setEditingProductVersion(product.serverVersion);
     setProductName(product.label);
-    setProductPrice(String(product.price));
+    setProductPrice(product.serverUnitAmountMinor === undefined ? String(product.price) : phpDecimal(product.serverUnitAmountMinor));
     setProductCategoryId(product.categoryId);
     setAvailableForSale(product.availableForSale !== false);
     setNotice(""); setProductDialogOpen(true);
@@ -212,7 +270,7 @@ export function InventoryPage() {
           </div>
         </div>
 
-        {selectedCategoryId === "special-breakfast" && <button type="button" onClick={() => setBreakfastDialogOpen(true)} className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Configure breakfast</button>}
+        {selectedCategoryId === "special-breakfast" && <button type="button" disabled={persistent} title={persistent ? "Breakfast persistence is not supported yet" : undefined} onClick={() => setBreakfastDialogOpen(true)} className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Configure breakfast</button>}
 
         <div className="my-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-700">{filteredProducts.length} item{filteredProducts.length === 1 ? "" : "s"}{selectedCategoryId !== "all" ? ` in ${configuration.inventoryCategories.find((item) => item.id === selectedCategoryId)?.label ?? "category"}` : " in catalog"}</h2>
@@ -233,7 +291,7 @@ export function InventoryPage() {
                 <p className="text-xs font-medium text-slate-500">{category?.label ?? product.categoryId}</p>
                 <h3 className="font-semibold text-slate-900">{product.label}{product.breakfastType ? ` · ${product.breakfastType}` : ""}</h3>
                 <div className="flex items-center justify-between gap-2 pt-2">
-                  <span className="text-sm font-semibold text-slate-900">{product.category === "amenities" ? "Amenity" : money(product.price)}</span>
+                  <span className="text-sm font-semibold text-slate-900">{product.category === "amenities" ? "Amenity" : product.serverUnitAmountMinor === undefined ? money(product.price) : formatPhp(product.serverUnitAmountMinor)}</span>
                   <span aria-hidden="true" className="text-slate-400 transition group-hover:translate-x-1">→</span>
                 </div>
               </div>
@@ -243,7 +301,7 @@ export function InventoryPage() {
         {!filteredProducts.length && <div className="rounded-xl border border-dashed border-slate-300 px-5 py-12 text-center"><h3 className="font-semibold text-slate-700">No items found</h3><p className="mt-2 text-sm text-slate-500">Try another search or category, or add a product.</p></div>}
       </section>
 
-      {productDialogOpen && <InventoryDialog title={selectedProduct ? `Item details: ${selectedProduct.label}` : "Add product"} onClose={() => setProductDialogOpen(false)}>
+      {productDialogOpen && <InventoryDialog title={selectedProduct ? `Item details: ${selectedProduct.label}` : "Add product"} onClose={() => !saving && setProductDialogOpen(false)}><fieldset disabled={saving} className="min-w-0">
         <div className="grid gap-6 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
           <aside className="space-y-4">
             <InventoryItemArtwork category={selectedProductCategory?.type ?? "ordinary"} large />
@@ -322,11 +380,11 @@ export function InventoryPage() {
           </form>
           </div>
         </div>
-      </InventoryDialog>}
+      </fieldset></InventoryDialog>}
 
-      {breakfastDialogOpen && <InventoryDialog title="Breakfast Configuration" onClose={() => setBreakfastDialogOpen(false)}><BreakfastEligibilityEditor /></InventoryDialog>}
+      {breakfastDialogOpen && !persistent && <InventoryDialog title="Breakfast Configuration" onClose={() => setBreakfastDialogOpen(false)}><BreakfastEligibilityEditor /></InventoryDialog>}
 
-      {categoryDialogOpen && <InventoryDialog title="Manage categories" onClose={() => setCategoryDialogOpen(false)}>
+      {categoryDialogOpen && <InventoryDialog title="Manage categories" onClose={() => !saving && setCategoryDialogOpen(false)}><fieldset disabled={saving}>
         <form onSubmit={saveCategory} className="mt-5 flex flex-wrap gap-2">
           <input className={input} aria-label="Category name" placeholder="Category name" value={categoryName} onChange={(event) => setCategoryName(event.target.value)} />
           <button className="shrink-0 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">{editingCategoryId ? "Save" : "Add category"}</button>
@@ -339,25 +397,22 @@ export function InventoryPage() {
             return <article key={category.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
               <div><h3 className="font-semibold text-slate-900">{category.label}</h3><p className="mt-1 text-xs text-slate-500">{category.systemDefined ? `Special category · ${category.type}` : `${products.length} linked products`}{!category.enabled ? " · Archived" : ""}</p></div>
               <div className="flex gap-3 text-sm">
-                {category.type === "breakfast" && <button type="button" onClick={() => { setCategoryDialogOpen(false); setBreakfastDialogOpen(true); }} className="font-semibold text-slate-700 underline">Configure breakfast</button>}
-                <button type="button" onClick={() => { setEditingCategoryId(category.id); setCategoryName(category.label); }} className="font-semibold text-slate-700 underline">Rename</button>
+                {category.type === "breakfast" && <button type="button" disabled={persistent} onClick={() => { setCategoryDialogOpen(false); setBreakfastDialogOpen(true); }} className="font-semibold text-slate-700 underline">Configure breakfast</button>}
+                <button type="button" onClick={() => { setEditingCategoryId(category.id); setEditingCategoryVersion(category.serverVersion); setCategoryName(category.label); }} className="font-semibold text-slate-700 underline">Rename</button>
                 {!category.systemDefined && <>
-                  {category.enabled && <button type="button" disabled={products.length > 0} title={products.length ? "Archive categories containing products" : undefined} onClick={() => {
+                  {category.enabled && <button type="button" disabled={persistent || products.length > 0} title={persistent ? "Persistent categories can be archived; deletion is unavailable" : products.length ? "Archive categories containing products" : undefined} onClick={() => {
                     setConfiguration((current) => ({ ...current, inventoryCategories: current.inventoryCategories.filter((item) => item.id !== category.id) }));
                     if (selectedCategoryId === category.id) setSelectedCategoryId("all");
                     if (editingCategoryId === category.id) { setEditingCategoryId(null); setCategoryName(""); }
                   }} className="font-semibold text-slate-700 underline disabled:opacity-40">Delete</button>}
-                  <button type="button" onClick={() => {
-                    setConfiguration((current) => ({ ...current, inventoryCategories: current.inventoryCategories.map((item) => item.id === category.id ? { ...item, enabled: !item.enabled } : item) }));
-                    if (selectedCategoryId === category.id && category.enabled) setSelectedCategoryId("all");
-                  }} className="font-semibold text-slate-700 underline">{category.enabled ? "Archive" : "Restore"}</button>
+                  <button type="button" onClick={() => void toggleCategory(category)} className="font-semibold text-slate-700 underline">{category.enabled ? "Archive" : "Restore"}</button>
                 </>}
               </div>
             </article>;
           })}
         </div>
         <p className="mt-4 text-xs text-slate-500">Special category types are stable and cannot be deleted or reclassified.</p>
-      </InventoryDialog>}
+      </fieldset></InventoryDialog>}
     </div>
   );
 }

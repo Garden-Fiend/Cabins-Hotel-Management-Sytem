@@ -33,7 +33,7 @@ export function GuestsPage() {
               </span>
             </div>
             <p className="mt-3 text-sm text-slate-600">
-              {Math.max(guest.stayCount, guest.reservationCount)} stays
+                {Math.max(guest.stayCount ?? 0, guest.reservationCount)} stays
             </p>
             <p className="mt-1 text-sm text-slate-500">
               {guest.phone || "No phone"} · {guest.email || "No email"}

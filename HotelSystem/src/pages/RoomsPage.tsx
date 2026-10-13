@@ -1,4 +1,5 @@
 import { validateDefaultInclusions } from "../lib/roomTypeInclusions";
+import { normalizeRoomFields, roomDisplayName, roomReadinessError } from "../lib/roomConfiguration";
 import { RoomTypeInclusionsEditor } from "../features/configuration/RoomTypeInclusionsEditor";
 import { useState } from "react";
 
@@ -59,9 +60,12 @@ export function RoomsPage() {
     reservations,
     configuration,
     setConfiguration,
+    mode,
+    commands,
   } = useReservationDemo();
   const [roomForm, setRoomForm] = useState<RoomForm>(emptyRoom);
   const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+  const [editingRoomVersion, setEditingRoomVersion] = useState<number | undefined>();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [roomFormVisible, setRoomFormVisible] = useState(false);
   const [roomTypeForm, setRoomTypeForm] = useState<RoomTypeForm>({
@@ -70,6 +74,7 @@ export function RoomsPage() {
     amenities: [],
   });
   const [editingRoomTypeId, setEditingRoomTypeId] = useState<string | null>(null);
+  const [editingTypeVersion, setEditingTypeVersion] = useState<number | undefined>();
   const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
   const [roomTypeFormVisible, setRoomTypeFormVisible] = useState(false);
   const [notice, setNotice] = useState("");
@@ -105,59 +110,49 @@ export function RoomsPage() {
     );
   }
 
-  function saveRoom(event: React.FormEvent<HTMLFormElement>) {
+  async function saveRoom(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const number = roomForm.number.trim();
-    const activeRoomType = roomTypes.find(
-      (item) => item.id === roomForm.roomTypeId && item.enabled,
-    );
-    const duplicate = configuration.rooms.some(
-      (room) =>
-        room.number.toLowerCase() === number.toLowerCase() &&
-        room.id !== editingRoomId,
-    );
-    if (!number || !activeRoomType || duplicate) {
-      setNotice(
-        duplicate
-          ? "A room with that number already exists."
-          : "Enter a room number and select an active room type.",
-      );
-      return;
-    }
-    if (
-      roomForm.capacityOverride &&
-      (!Number.isInteger(Number(roomForm.capacityOverride)) ||
-        Number(roomForm.capacityOverride) < 1)
-    ) {
-      setNotice("Room capacity overrides must be positive whole numbers.");
-      return;
-    }
     const current = editingRoomId
       ? configuration.rooms.find((item) => item.id === editingRoomId)
       : undefined;
+    let normalized;
+    try {
+      normalized = normalizeRoomFields({ ...roomForm, housekeepingState: current?.housekeepingState ?? "clean" }, configuration, current);
+      if (current && normalized.number !== current.number && (stays.some(stay => stay.room === current.number) || reservations.some(reservation => reservation.rooms.some(room => room.roomNumber === current.number)))) throw new Error("Room numbers referenced by reservations cannot be changed here.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Invalid room configuration."); return; }
     const next: RoomConfiguration = {
+      ...current,
       id: current?.id ?? makeId("room", number),
       number,
-      roomTypeId: activeRoomType.id,
-      displayType: roomForm.displayType.trim() || activeRoomType.label,
+      roomTypeId: normalized.roomTypeId,
+      displayType: normalized.displayType,
       roomStatusId: roomForm.roomStatusId,
       enabled: current?.enabled ?? true,
       archived: current?.archived ?? false,
       housekeepingState: current?.housekeepingState ?? "clean",
-      ...(roomForm.capacityOverride
-        ? { capacityOverride: Number(roomForm.capacityOverride) }
-        : {}),
+      capacityOverride: normalized.capacityOverride,
       description: roomForm.description.trim(),
       amenitiesAdditions: roomForm.amenities.filter(
-        (amenity) => !roomTypeDefaults(activeRoomType.id).includes(amenity),
+        (amenity) => !roomTypeDefaults(normalized.roomTypeId).includes(amenity),
       ),
-      amenitiesRemovals: roomTypeDefaults(activeRoomType.id).filter(
+      amenitiesRemovals: roomTypeDefaults(normalized.roomTypeId).filter(
         (amenity) => !roomForm.amenities.includes(amenity),
       ),
       operationalNotes: roomForm.operationalNotes.trim(),
       occupancyLockReservationId: current?.occupancyLockReservationId,
     };
-    setConfiguration((currentConfig) => ({
+    if (mode === "api") {
+      if (!commands?.saveDefinition) return;
+      try {
+        await commands.saveDefinition("rooms", current?.id, {
+          number, roomTypeId: normalized.roomTypeId, displayType: normalized.displayType,
+          roomStatusId: roomForm.roomStatusId, enabled: current?.enabled ?? true,
+          capacityOverride: roomForm.capacityOverride, description: roomForm.description,
+          operationalNotes: roomForm.operationalNotes, amenities: roomForm.amenities,
+        }, editingRoomVersion);
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Room save failed; draft retained."); return; }
+    } else setConfiguration((currentConfig) => ({
       ...currentConfig,
       rooms: currentConfig.rooms.some((item) => item.id === next.id)
         ? currentConfig.rooms.map((item) =>
@@ -173,6 +168,7 @@ export function RoomsPage() {
   }
 
   function editRoom(room: RoomConfiguration) {
+    setEditingRoomVersion(room.serverVersion);
     setEditingRoomId(room.id);
     setSelectedRoomId(room.id);
     setRoomFormVisible(true);
@@ -195,7 +191,32 @@ export function RoomsPage() {
     setTab("rooms");
   }
 
-  function setReadiness(roomId: string, state: HousekeepingState) {
+  async function setOperationalStatus(room: RoomConfiguration, status: string) {
+    if (mode !== "api") {
+      setConfiguration(current => ({ ...current, rooms: current.rooms.map(item => item.id === room.id ? { ...item, roomStatusId: status } : item) }));
+      return;
+    }
+    if (!commands?.saveDefinition || !commands.canEditRoomStatus) return;
+    try {
+      await commands.saveDefinition("rooms", room.id, { number: room.number, roomTypeId: room.roomTypeId,
+        displayType: room.displayType, roomStatusId: status, enabled: room.enabled, archived: room.archived ?? false,
+        capacityOverride: room.capacityOverride?.toString() ?? "", description: room.description, operationalNotes: room.operationalNotes,
+        amenities: [...roomTypeDefaults(room.roomTypeId).filter(id => !room.amenitiesRemovals.map(resolveAmenityId).includes(id)), ...room.amenitiesAdditions.map(resolveAmenityId)] }, room.serverVersion);
+      setNotice(`Room ${room.number} status saved.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Status save failed; room state retained."); }
+  }
+
+  async function setReadiness(roomId: string, state: HousekeepingState) {
+    const room = configuration.rooms.find(item => item.id === roomId);
+    if (!room) return;
+    if (mode === "api") {
+      if (!commands?.readiness || state === "dirty") { setNotice("This readiness action is unavailable in API mode."); return; }
+      try { await commands.readiness(room, state); setNotice("Readiness committed to PostgreSQL."); }
+      catch (error) { setNotice(error instanceof Error ? error.message : "Readiness was not saved."); }
+      return;
+    }
+    const error = roomReadinessError(room, state, stays, new Date());
+    if (error) { setNotice(error); return; }
     setConfiguration((current) => ({
       ...current,
       rooms: current.rooms.map((room) =>
@@ -204,7 +225,7 @@ export function RoomsPage() {
     }));
   }
 
-  function saveRoomType(event: React.FormEvent<HTMLFormElement>) {
+  async function saveRoomType(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const label = roomTypeForm.label.trim();
     const defaultCapacity = Number(roomTypeForm.defaultCapacity);
@@ -233,7 +254,12 @@ export function RoomsPage() {
       amenities: roomTypeForm.amenities,
       defaultInclusions: roomTypeForm.defaultInclusions.map((item) => ({ ...item })),
     };
-    setConfiguration((current) => ({
+    if (mode === "api") {
+      if (!commands?.saveDefinition) return;
+      try { await commands.saveDefinition("roomTypes", editingRoomTypeId ?? undefined, { label, defaultCapacity,
+        amenities: roomTypeForm.amenities, enabled: next.enabled, archived: next.archived ?? false }, editingTypeVersion); }
+      catch (error) { setNotice(error instanceof Error ? error.message : "Room type save failed; draft retained."); return; }
+    } else setConfiguration((current) => ({
       ...current,
       roomTypes: current.roomTypes.some((item) => item.id === next.id)
         ? current.roomTypes.map((item) =>
@@ -249,6 +275,7 @@ export function RoomsPage() {
   }
 
   function editRoomType(roomType: RoomTypeConfiguration) {
+    setEditingTypeVersion(roomType.serverVersion);
     setEditingRoomTypeId(roomType.id);
     setSelectedRoomTypeId(roomType.id);
     setRoomTypeFormVisible(true);
@@ -275,6 +302,7 @@ export function RoomsPage() {
 
   return (
     <div className="space-y-6">
+      {mode === "api" && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">API mode: supported readiness, room status and room/type edits persist. Archive and deletion controls and catalog inclusions are not yet supported.</p>}
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
           Inventory
@@ -314,7 +342,7 @@ export function RoomsPage() {
       {tab === "rooms" ? (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
+            <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)}
               type="button"
               onClick={() => {
                 setEditingRoomId(null);
@@ -349,7 +377,7 @@ export function RoomsPage() {
               <h2 id="room-form-title" className="text-lg font-semibold">
                 {editingRoomId ? "Edit room" : "Add room"}
               </h2>
-              <button
+              <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)}
                 type="button"
                 aria-label="Close room form"
                 onClick={() => {
@@ -393,7 +421,7 @@ export function RoomsPage() {
                 >
                   <option value="">Choose room type</option>
                   {roomTypes
-                    .filter((item) => item.enabled && !item.archived)
+                    .filter((item) => (item.enabled && !item.archived) || (editingRoomId !== null && item.id === configuration.rooms.find(room => room.id === editingRoomId)?.roomTypeId))
                     .map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.label}
@@ -489,10 +517,10 @@ export function RoomsPage() {
                 />
               </label>
               <div className="flex gap-2">
-                <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+                <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                   {editingRoomId ? "Save room" : "Add room"}
                 </button>
-                <button
+                <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)}
                   type="button"
                   onClick={() => {
                     setEditingRoomId(null);
@@ -585,7 +613,7 @@ export function RoomsPage() {
                     <div>
                       <h2 className="text-lg font-semibold">Room {room.number}</h2>
                       <p className="mt-1 text-sm text-slate-600">
-                        {roomType?.label ?? room.roomTypeId} · {room.displayType}
+                        {roomType?.label ?? room.roomTypeId} · {roomDisplayName(room, configuration)}
                       </p>
                     </div>
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium">
@@ -597,23 +625,15 @@ export function RoomsPage() {
                       Readiness: {room.housekeepingState}
                     </span>
                     <select
+                      disabled={mode === "api" && (!commands?.canEditRoomStatus || commands.busy)}
                       aria-label={`Room ${room.number} status`}
                       value={room.roomStatusId}
                       onClick={(event) => event.stopPropagation()}
-                      onChange={(event) =>
-                        setConfiguration((current) => ({
-                          ...current,
-                          rooms: current.rooms.map((item) =>
-                            item.id === room.id
-                              ? { ...item, roomStatusId: event.target.value }
-                              : item,
-                          ),
-                        }))
-                      }
+                      onChange={(event) => void setOperationalStatus(room, event.target.value)}
                       className="rounded-full border-0 bg-amber-50 px-2.5 py-1 text-xs text-amber-800 focus:ring-2 focus:ring-amber-500"
                     >
                       {configuration.roomStatuses.map((item) => (
-                        <option key={item.id} value={item.id}>
+                        <option key={item.id} value={item.id} disabled={!item.enabled && item.id !== room.roomStatusId}>
                           {item.label}
                         </option>
                       ))}
@@ -641,7 +661,7 @@ export function RoomsPage() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      disabled={room.housekeepingState === "cleaning" || Boolean(currentStay)}
+                      disabled={(mode === "api" && (!commands?.readiness || commands.busy)) || room.housekeepingState === "cleaning" || Boolean(currentStay)}
                       onClick={() => setReadiness(room.id, "cleaning")}
                       className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold disabled:opacity-40"
                     >
@@ -649,7 +669,7 @@ export function RoomsPage() {
                     </button>
                     <button
                       type="button"
-                      disabled={room.housekeepingState === "clean" || Boolean(currentStay)}
+                      disabled={(mode === "api" && (!commands?.readiness || commands.busy)) || room.housekeepingState === "clean" || Boolean(currentStay)}
                       onClick={() => setReadiness(room.id, "clean")}
                       className="rounded-lg border border-emerald-300 px-3 py-2 text-xs font-semibold text-emerald-800 disabled:opacity-40"
                     >
@@ -658,7 +678,7 @@ export function RoomsPage() {
                     {room.enabled && !room.archived ? (
                       <button
                         type="button"
-                        disabled={reservations.some(
+                        disabled={mode === "api" || reservations.some(
                           (reservation) =>
                             (reservation.status === "confirmed" ||
                               reservation.status === "checked_in" ||
@@ -682,7 +702,7 @@ export function RoomsPage() {
                         Archive
                       </button>
                     ) : (
-                      <button
+                      <button disabled={mode === "api"}
                         type="button"
                         onClick={() =>
                           setConfiguration((current) => ({
@@ -700,7 +720,7 @@ export function RoomsPage() {
                       </button>
                     )}
                     {!hasHistory && (
-                      <button
+                      <button disabled={mode === "api"}
                         type="button"
                         onClick={() =>
                           setConfiguration((current) => ({
@@ -729,7 +749,7 @@ export function RoomsPage() {
       ) : (
         <div className="space-y-4">
           <div className="flex justify-end">
-            <button
+            <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)}
               type="button"
               onClick={() => {
                 setEditingRoomTypeId(null);
@@ -772,7 +792,7 @@ export function RoomsPage() {
               <h2 id="room-type-form-title" className="text-lg font-semibold">
                 {editingRoomTypeId ? "Edit room type" : "Add room type"}
               </h2>
-              <button
+              <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)}
                 type="button"
                 aria-label="Close room type form"
                 onClick={() => {
@@ -854,11 +874,11 @@ export function RoomsPage() {
                   )}
                 </div>
               </fieldset>
-              <RoomTypeInclusionsEditor configuration={configuration} value={roomTypeForm.defaultInclusions} onChange={(defaultInclusions) => setRoomTypeForm((current) => ({ ...current, defaultInclusions }))} />
-              <button className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+              <fieldset disabled={mode === "api"}><RoomTypeInclusionsEditor configuration={configuration} value={roomTypeForm.defaultInclusions} onChange={(defaultInclusions) => setRoomTypeForm((current) => ({ ...current, defaultInclusions }))} /></fieldset>
+              <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                 {editingRoomTypeId ? "Save room type" : "Add room type"}
               </button>
-              <button
+              <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)}
                 type="button"
                 onClick={() => {
                   setEditingRoomTypeId(null);
@@ -944,7 +964,7 @@ export function RoomsPage() {
                     {roomType.enabled ? (
                       <button
                         type="button"
-                        disabled={activeAssignments.length > 0}
+                        disabled={mode === "api" || activeAssignments.length > 0}
                         title={
                           activeAssignments.length > 0
                             ? "Reassign rooms before archiving this type."
@@ -965,7 +985,7 @@ export function RoomsPage() {
                         Archive
                       </button>
                     ) : (
-                      <button
+                      <button disabled={mode === "api"}
                         type="button"
                         onClick={() =>
                           setConfiguration((current) => ({
@@ -983,7 +1003,7 @@ export function RoomsPage() {
                       </button>
                     )}
                     {assignedRooms.length === 0 && !usedByReservation && (
-                      <button
+                      <button disabled={mode === "api"}
                         type="button"
                         onClick={() =>
                           setConfiguration((current) => ({

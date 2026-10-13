@@ -40,6 +40,8 @@ export function ReservationDetailPage() {
     guests,
     setGuests,
     configuration,
+    mode,
+    commands,
   } = useReservationDemo();
   const actions = useReservationActions();
   const [editing, setEditing] = useState(false);
@@ -85,6 +87,7 @@ export function ReservationDetailPage() {
     nextReservation: ReservationSnapshot,
     nextStays: typeof stays,
   ) {
+    if (mode === "api") { setEditing(false); return; }
     setReservations((current) =>
       current.some((item) => item.id === nextReservation.id)
         ? current.map((item) =>
@@ -99,9 +102,8 @@ export function ReservationDetailPage() {
     setEditing(false);
   }
 
-  function cancel(guestHasVacated: boolean) {
-    actions.cancel(reservationId, guestHasVacated);
-    setCancelChoice(null);
+  async function cancel(guestHasVacated: boolean) {
+    if (await actions.cancel(reservationId, guestHasVacated)) setCancelChoice(null);
   }
 
   return (
@@ -134,14 +136,16 @@ export function ReservationDetailPage() {
             <>
               <button
                 type="button"
-                onClick={() => actions.checkIn(reservation.id)}
+                disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+                            onClick={() => actions.checkIn(reservation.id)}
                 className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white"
               >
                 Check in
               </button>
               <button
                 type="button"
-                onClick={() => actions.noShow(reservation.id)}
+                disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+                            onClick={() => actions.noShow(reservation.id)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"
               >
                 Mark No-show
@@ -151,7 +155,8 @@ export function ReservationDetailPage() {
           {reservation.status === "checked_in" && (
             <button
               type="button"
-              onClick={() => actions.checkOut(reservation.id)}
+              disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+                            onClick={() => actions.checkOut(reservation.id)}
               className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white"
             >
               Check out
@@ -160,7 +165,8 @@ export function ReservationDetailPage() {
           {canCancel && (
             <button
               type="button"
-              onClick={() => setCancelChoice("vacated")}
+              disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+                onClick={() => setCancelChoice("vacated")}
               className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800"
             >
               Cancel reservation
@@ -169,7 +175,8 @@ export function ReservationDetailPage() {
           {reservation.occupancyLockRoomNumbers?.length ? (
             <button
               type="button"
-              onClick={() => actions.recordDeparture(reservation.id)}
+              disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+                            onClick={() => actions.recordDeparture(reservation.id)}
               className="rounded-lg bg-rose-800 px-3 py-2 text-sm font-semibold text-white"
             >
               Record Guest Departure
@@ -420,9 +427,11 @@ export function ReservationDetailPage() {
                 ? "Has the guest vacated all assigned rooms?"
                 : "Cancel this confirmed reservation?"}
             </p>
+            {mode === "api" && actions.message && <p role="alert" className="mt-3 text-sm text-rose-800">{actions.message} {commands?.error}</p>}
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
+                disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                 onClick={() => setCancelChoice(null)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"
               >
@@ -469,12 +478,13 @@ export function ReservationDetailPage() {
             onClose={() => setEditing(false)}
             onCreated={saveReservation}
             onSaved={saveReservation}
-            onCancelReservation={(id, vacated) => {
-              actions.cancel(id, vacated);
+            onCancelReservation={async (id, vacated) => {
+              if (!await actions.cancel(id, vacated)) return false;
               setEditing(false);
+              return true;
             }}
             onGuestCreated={(createdGuest) =>
-              setGuests((current) =>
+              mode !== "api" && setGuests((current) =>
                 current.some((item) => item.id === createdGuest.id)
                   ? current
                   : [

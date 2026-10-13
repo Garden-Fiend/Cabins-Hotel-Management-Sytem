@@ -20,8 +20,8 @@ export interface SampleRoom extends ReservationRoomOption {
 }
 
 export interface SampleGuest extends ReservationGuest {
-  stayCount: number;
-  segment: "New" | "Returning" | "VIP" | "Loyal";
+  stayCount?: number;
+  segment?: "New" | "Returning" | "VIP" | "Loyal";
 }
 
 export interface SampleRoomType extends ReservationConfigOption {

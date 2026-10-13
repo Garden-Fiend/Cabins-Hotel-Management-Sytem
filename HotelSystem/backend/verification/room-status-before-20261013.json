@@ -1,0 +1,459 @@
+{
+  "hms_dev": {
+    "booking_sources": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled"
+      ],
+      "rows": [
+        "08fdcc9f55f93141134a242a49064e83f2a3fa6a2f1fceffae326842aff91b0a"
+      ]
+    },
+    "catalog_products": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "category_id",
+        "label",
+        "unit_amount_minor",
+        "currency",
+        "available_for_sale",
+        "enabled",
+        "archived",
+        "version"
+      ],
+      "rows": [
+        "011dcf6fb64aa1b7762bc7b3b1de8aeebc130a61266a217749a0f26881650fab"
+      ]
+    },
+    "companies": {
+      "columns": [
+        "id",
+        "name",
+        "currency",
+        "hotel_timezone",
+        "default_check_in_time",
+        "default_check_out_time"
+      ],
+      "rows": [
+        "d6dc5272c212af652bbc48f18e4efd7e0f520fc069fe794120afa40b089c5e97"
+      ]
+    },
+    "durations": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "kind",
+        "minutes",
+        "nights",
+        "enabled",
+        "version",
+        "label"
+      ],
+      "rows": [
+        "8c80946e2b81a2c1cf932e2edacc3ce74e443f1bb35d93e42abd360821c192ac",
+        "af5a370f894107b1e07b5fa85419195a589d899d75a03a347b6fac91d0da240e"
+      ]
+    },
+    "guests": {
+      "columns": [
+        "id",
+        "company_id",
+        "name",
+        "phone",
+        "email"
+      ],
+      "rows": [
+        "29def46bad53242b5204dc6e41ea4d497e188ecc9f0b814b854132d76c3c9f34"
+      ]
+    },
+    "inventory_categories": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "type",
+        "enabled",
+        "system_defined",
+        "version"
+      ],
+      "rows": [
+        "a7279bd5f86969b396fb591e584da7cf70da0d2e5cd57603867d628581a7d335"
+      ]
+    },
+    "mutation_receipts": {
+      "columns": [
+        "id",
+        "company_id",
+        "operation",
+        "request_key",
+        "request_hash",
+        "reservation_id",
+        "response",
+        "created_at"
+      ],
+      "rows": [
+        "311137091b4d0beedbe81987f9f7b7e28595681f85c86b82c4322a6dbc818650",
+        "6f761492ec1b0e6fed7c0ed67f177960a405788a2a06905ced2fe369d9595784",
+        "97fc5f5bc9d4b6460a92fdc4d4f265c7ced98530b9a0994a6c3f0058dc86d199",
+        "abcf2aebe7679fc3e8db0faf6331f95b8186cb1bd51b7a12d73a1cc675abbaff",
+        "b339b09345be316253dea66a856995a7f6067bab0dd0c477d2fd2bfcc8148565"
+      ]
+    },
+    "operational_audit": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "event_type",
+        "actor",
+        "attribution",
+        "occurred_at",
+        "before",
+        "after",
+        "reservation_version"
+      ],
+      "rows": [
+        "2c975d2ac019f51b26120ce6b77704bf3f21754cb6c401652dd393c69a8c0f46",
+        "4680668f18d490c5e784257e19efe273226a2b54c07b66568e3a47ad2d636851",
+        "62474ae32e29e09ee76891dcb90b77c34f05c71e64a88e34e23271e5a1920629",
+        "9a7dc121a0b221159560a4d897237a710d012c09c033327102fbca9f8fecf1be",
+        "a60307a29a53c1394cbd979c2f3ec943f3275f9347a2bcec953cb55ac1b87a0a"
+      ]
+    },
+    "pricing_revisions": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "revision",
+        "currency",
+        "total_minor",
+        "calculation_version",
+        "snapshot",
+        "created_at",
+        "reservation_version"
+      ],
+      "rows": [
+        "6e3fb4dd79938654589e81cf216e6766dc3a18d51fea1a45c9df44553d13609d"
+      ]
+    },
+    "reference_rates": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "source_id",
+        "booking_kind",
+        "duration_id",
+        "unit_amount_minor",
+        "currency",
+        "enabled",
+        "version"
+      ],
+      "rows": [
+        "3eaae498d4141b166960ff27a441b2f75b436fb8d52b26fef18764c2cfe85e3d",
+        "c7ee0f42530b8c46171bce7ef62f03583d6d6d3732cf1dcdd17f6fa9378e1f7a"
+      ]
+    },
+    "reservations": {
+      "columns": [
+        "id",
+        "company_id",
+        "business_number",
+        "guest_id",
+        "booking_source_id",
+        "status",
+        "version",
+        "note",
+        "created_at",
+        "updated_at"
+      ],
+      "rows": [
+        "101354630090ffba86272867ec321ec24d3f80192a9c0cc31a4a11523ab0c809"
+      ]
+    },
+    "room_allocations": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "room_id",
+        "duration_id",
+        "scheduled_start",
+        "scheduled_end",
+        "actual_check_in",
+        "actual_check_out",
+        "blocks_availability",
+        "period",
+        "adults",
+        "children"
+      ],
+      "rows": [
+        "54d2af143fee8bbfb4a2910a43e4e4b5c659cb02d57464139a7fd50257d74266"
+      ]
+    },
+    "room_types": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled",
+        "default_capacity",
+        "version",
+        "archived",
+        "amenities"
+      ],
+      "rows": [
+        "85fd5a358944241b6a5094de7358421d27c1a6ed1a296237dab39e51a54c8963",
+        "9a0e3b0e15e30eca0d249a5b6953c07ec26d93672b5edc30330ddce7022d3749"
+      ]
+    },
+    "rooms": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "number",
+        "display_name",
+        "enabled",
+        "archived",
+        "housekeeping",
+        "operational",
+        "capacity_override",
+        "current_occupancy_allocation_id",
+        "version",
+        "amenities_additions",
+        "amenities_removals",
+        "description",
+        "operational_notes"
+      ],
+      "rows": [
+        "04f08d5767d70ffc95872603c7ad8311cac533a265bd50d1690993da4cf0f4bb"
+      ]
+    }
+  },
+  "hms_test": {
+    "booking_sources": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled"
+      ],
+      "rows": [
+        "08fdcc9f55f93141134a242a49064e83f2a3fa6a2f1fceffae326842aff91b0a"
+      ]
+    },
+    "catalog_products": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "category_id",
+        "label",
+        "unit_amount_minor",
+        "currency",
+        "available_for_sale",
+        "enabled",
+        "archived",
+        "version"
+      ],
+      "rows": []
+    },
+    "companies": {
+      "columns": [
+        "id",
+        "name",
+        "currency",
+        "hotel_timezone",
+        "default_check_in_time",
+        "default_check_out_time"
+      ],
+      "rows": [
+        "d6dc5272c212af652bbc48f18e4efd7e0f520fc069fe794120afa40b089c5e97"
+      ]
+    },
+    "durations": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "kind",
+        "minutes",
+        "nights",
+        "enabled",
+        "version",
+        "label"
+      ],
+      "rows": [
+        "8c80946e2b81a2c1cf932e2edacc3ce74e443f1bb35d93e42abd360821c192ac",
+        "af5a370f894107b1e07b5fa85419195a589d899d75a03a347b6fac91d0da240e"
+      ]
+    },
+    "guests": {
+      "columns": [
+        "id",
+        "company_id",
+        "name",
+        "phone",
+        "email"
+      ],
+      "rows": []
+    },
+    "inventory_categories": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "type",
+        "enabled",
+        "system_defined",
+        "version"
+      ],
+      "rows": []
+    },
+    "mutation_receipts": {
+      "columns": [
+        "id",
+        "company_id",
+        "operation",
+        "request_key",
+        "request_hash",
+        "reservation_id",
+        "response",
+        "created_at"
+      ],
+      "rows": []
+    },
+    "operational_audit": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "event_type",
+        "actor",
+        "attribution",
+        "occurred_at",
+        "before",
+        "after",
+        "reservation_version"
+      ],
+      "rows": []
+    },
+    "pricing_revisions": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "revision",
+        "currency",
+        "total_minor",
+        "calculation_version",
+        "snapshot",
+        "created_at",
+        "reservation_version"
+      ],
+      "rows": []
+    },
+    "reference_rates": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "source_id",
+        "booking_kind",
+        "duration_id",
+        "unit_amount_minor",
+        "currency",
+        "enabled",
+        "version"
+      ],
+      "rows": [
+        "3eaae498d4141b166960ff27a441b2f75b436fb8d52b26fef18764c2cfe85e3d",
+        "c7ee0f42530b8c46171bce7ef62f03583d6d6d3732cf1dcdd17f6fa9378e1f7a"
+      ]
+    },
+    "reservations": {
+      "columns": [
+        "id",
+        "company_id",
+        "business_number",
+        "guest_id",
+        "booking_source_id",
+        "status",
+        "version",
+        "note",
+        "created_at",
+        "updated_at"
+      ],
+      "rows": []
+    },
+    "room_allocations": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "room_id",
+        "duration_id",
+        "scheduled_start",
+        "scheduled_end",
+        "actual_check_in",
+        "actual_check_out",
+        "blocks_availability",
+        "period",
+        "adults",
+        "children"
+      ],
+      "rows": []
+    },
+    "room_types": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled",
+        "default_capacity",
+        "version",
+        "archived",
+        "amenities"
+      ],
+      "rows": [
+        "85fd5a358944241b6a5094de7358421d27c1a6ed1a296237dab39e51a54c8963"
+      ]
+    },
+    "rooms": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "number",
+        "display_name",
+        "enabled",
+        "archived",
+        "housekeeping",
+        "operational",
+        "capacity_override",
+        "current_occupancy_allocation_id",
+        "version",
+        "amenities_additions",
+        "amenities_removals",
+        "description",
+        "operational_notes"
+      ],
+      "rows": [
+        "04f08d5767d70ffc95872603c7ad8311cac533a265bd50d1690993da4cf0f4bb"
+      ]
+    }
+  }
+}

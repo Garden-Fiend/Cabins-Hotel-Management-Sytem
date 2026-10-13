@@ -1,0 +1,107 @@
+{
+  "recorded_at": "2026-10-13T00:29:44.547447+00:00",
+  "python": "3.12.0",
+  "python_prefix": "C:\\Users\\Malala\\Documents\\HotelBookingSystem\\HotelSystem\\backend\\.venv",
+  "python_base_prefix": "C:\\Users\\Malala\\AppData\\Local\\Programs\\Python\\Python312",
+  "packages": {
+    "fastapi": "0.143.0",
+    "SQLAlchemy": "2.0.54",
+    "alembic": "1.20.0",
+    "psycopg": "3.3.6",
+    "pydantic": "2.14.1",
+    "tzdata": "2026.5",
+    "pytest": "9.1.1"
+  },
+  "databases": {
+    "hms_dev": {
+      "host": "127.0.0.1",
+      "host_port": 55432,
+      "current_user": "hms_dev",
+      "timezone": "UTC",
+      "postgres": "PostgreSQL 17.6 (Debian 17.6-2.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "migration": "82f79142cdbd",
+      "row_counts": {
+        "companies": 1,
+        "booking_sources": 1,
+        "durations": 2,
+        "reservations": 0,
+        "guests": 0,
+        "room_types": 1,
+        "reference_rates": 2,
+        "rooms": 1,
+        "room_allocations": 0,
+        "mutation_receipts": 0,
+        "operational_audit": 0,
+        "pricing_revisions": 0
+      },
+      "check_constraints": {
+        "companies": [
+          "ck_companies_hotel_times_valid",
+          "ck_companies_hotel_timezone_supported",
+          "ck_companies_php_only"
+        ],
+        "room_types": [
+          "ck_room_types_capacity_positive"
+        ],
+        "room_allocations": [
+          "ck_room_allocations_finite_interval",
+          "ck_room_allocations_occupancy_counts",
+          "ck_room_allocations_positive_interval"
+        ],
+        "pricing_revisions": [
+          "ck_pricing_revisions_reservation_version_positive",
+          "ck_pricing_revisions_revision_positive",
+          "ck_pricing_revisions_valid_money"
+        ]
+      },
+      "overlap_constraint": "EXCLUDE USING gist (room_id WITH =, period WITH &&) WHERE (blocks_availability)",
+      "btree_gist": "1.7"
+    },
+    "hms_test": {
+      "host": "127.0.0.1",
+      "host_port": 55432,
+      "current_user": "hms_dev",
+      "timezone": "UTC",
+      "postgres": "PostgreSQL 17.6 (Debian 17.6-2.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "migration": "82f79142cdbd",
+      "row_counts": {
+        "booking_sources": 1,
+        "companies": 1,
+        "durations": 2,
+        "room_types": 1,
+        "guests": 0,
+        "reference_rates": 2,
+        "reservations": 0,
+        "rooms": 1,
+        "room_allocations": 0,
+        "mutation_receipts": 0,
+        "operational_audit": 0,
+        "pricing_revisions": 0
+      },
+      "check_constraints": {
+        "companies": [
+          "ck_companies_hotel_times_valid",
+          "ck_companies_hotel_timezone_supported",
+          "ck_companies_php_only"
+        ],
+        "room_types": [
+          "ck_room_types_capacity_positive"
+        ],
+        "room_allocations": [
+          "ck_room_allocations_finite_interval",
+          "ck_room_allocations_occupancy_counts",
+          "ck_room_allocations_positive_interval"
+        ],
+        "pricing_revisions": [
+          "ck_pricing_revisions_reservation_version_positive",
+          "ck_pricing_revisions_revision_positive",
+          "ck_pricing_revisions_valid_money"
+        ]
+      },
+      "overlap_constraint": "EXCLUDE USING gist (room_id WITH =, period WITH &&) WHERE (blocks_availability)",
+      "btree_gist": "1.7"
+    }
+  },
+  "pre_existing_files_checked": 153,
+  "pre_existing_file_changes": []
+}

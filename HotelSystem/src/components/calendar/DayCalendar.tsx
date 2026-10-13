@@ -1,10 +1,9 @@
+import { CalendarStayLayer } from "./CalendarStayLayer";
 import type { Stay } from "../../types/booking";
 import type { CalendarReservationContext } from "../../types/reservation";
 import { findClash } from "../../utils/availability";
 
 import {
-  calendarStayClassName,
-  getCalendarOccupancy,
   getCalendarRange,
   getStayPosition,
 } from "../../lib/calendar";
@@ -250,44 +249,8 @@ export function DayCalendar({
                     RESERVATIONS
                 ========================== */}
 
-                <div className="pointer-events-none absolute inset-0">
-                  {roomStays.map((stay) => {
-                    const position = getStayPosition(
-                      stay.checkIn,
-                      stay.checkOut,
-                      calendarRange,
-                    );
-
-                    if (!position) {
-                      return null;
-                    }
-
-                    return (
-                      <button
-                        key={stay.id}
-                        type="button"
-                        onClick={() =>
-                          onStayClick?.(stay)
-                        }
-                        className={`pointer-events-auto absolute top-2 z-10 h-12 min-w-0 cursor-pointer overflow-hidden rounded-md border px-3 text-left text-xs font-medium shadow-sm transition hover:shadow-md ${calendarStayClassName(stay, now)}`}
-                        style={{
-                          left: `${position.startRatio * 100}%`,
-                          width: `${position.widthRatio * 100}%`,
-                          marginLeft: "4px",
-                          marginRight: "4px",
-                        }}
-                      >
-                        <div className="truncate font-semibold">
-                          {stay.guest}
-                        </div>
-
-                        <div className="mt-0.5 truncate text-[10px] opacity-70">
-                          {stay.status === "checked_in" ? getCalendarOccupancy(stay, now) : stay.status.replace("_", " ")}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+                <CalendarStayLayer stays={roomStays} now={now} onStayClick={onStayClick}
+                  positionFor={stay => getStayPosition(stay.checkIn, stay.checkOut, calendarRange)} />
               </div>
             </div>
           );

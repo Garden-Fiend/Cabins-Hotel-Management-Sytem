@@ -17,6 +17,8 @@ export function useReservationActions() {
     setStays,
     configuration,
     setConfiguration,
+    mode,
+    commands,
   } = useReservationDemo();
   const [message, setMessage] = useState("");
 
@@ -34,11 +36,22 @@ export function useReservationActions() {
   );
 
   const checkIn = useCallback(
-    (reservationId: string) => {
+    async (reservationId: string) => {
       const reservation = reservations.find((item) => item.id === reservationId);
       if (!reservation) {
         setMessage(`Reservation ${reservationId} was not found.`);
         return false;
+      }
+      if (mode === "api") {
+        if (!commands?.lifecycle) { setMessage("This lifecycle command is not supported by the connected API."); return false; }
+        try {
+          await commands.lifecycle(reservation, "check-in");
+          setMessage("Lifecycle change committed to PostgreSQL.");
+          return true;
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Lifecycle failed; no success confirmed.");
+          return false;
+        }
       }
       const result = checkInReservation(
         reservation,
@@ -59,15 +72,26 @@ export function useReservationActions() {
       setMessage(`${reservationId} checked in.`);
       return true;
     },
-    [apply, configuration, reservations, stays],
+    [apply, configuration, reservations, stays, mode, commands],
   );
 
   const checkOut = useCallback(
-    (reservationId: string) => {
+    async (reservationId: string) => {
       const reservation = reservations.find((item) => item.id === reservationId);
       if (!reservation) {
         setMessage(`Reservation ${reservationId} was not found.`);
         return false;
+      }
+      if (mode === "api") {
+        if (!commands?.lifecycle) { setMessage("This lifecycle command is not supported by the connected API."); return false; }
+        try {
+          await commands.lifecycle(reservation, "check-out");
+          setMessage("Lifecycle change committed to PostgreSQL.");
+          return true;
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Lifecycle failed; no success confirmed.");
+          return false;
+        }
       }
       const result = checkOutReservation(
         reservation,
@@ -88,15 +112,26 @@ export function useReservationActions() {
       setMessage(`${reservationId} checked out. Assigned rooms are Dirty.`);
       return true;
     },
-    [apply, configuration, reservations, stays],
+    [apply, configuration, reservations, stays, mode, commands],
   );
 
   const cancel = useCallback(
-    (reservationId: string, guestHasVacated: boolean) => {
+    async (reservationId: string, guestHasVacated: boolean) => {
       const reservation = reservations.find((item) => item.id === reservationId);
       if (!reservation) {
         setMessage(`Reservation ${reservationId} was not found.`);
         return false;
+      }
+      if (mode === "api") {
+        if (!commands?.lifecycle) { setMessage("This lifecycle command is not supported by the connected API."); return false; }
+        try {
+          await commands.lifecycle(reservation, "cancel", guestHasVacated);
+          setMessage("Lifecycle change committed to PostgreSQL.");
+          return true;
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Lifecycle failed; no success confirmed.");
+          return false;
+        }
       }
       const state = cancelReservationRecord(
         reservation,
@@ -113,15 +148,26 @@ export function useReservationActions() {
       );
       return true;
     },
-    [apply, configuration, reservations, stays],
+    [apply, configuration, reservations, stays, mode, commands],
   );
 
   const recordDeparture = useCallback(
-    (reservationId: string) => {
+    async (reservationId: string) => {
       const reservation = reservations.find((item) => item.id === reservationId);
       if (!reservation) {
         setMessage(`Reservation ${reservationId} was not found.`);
         return false;
+      }
+      if (mode === "api") {
+        if (!commands?.lifecycle) { setMessage("This lifecycle command is not supported by the connected API."); return false; }
+        try {
+          await commands.lifecycle(reservation, "record-departure");
+          setMessage("Lifecycle change committed to PostgreSQL.");
+          return true;
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Lifecycle failed; no success confirmed.");
+          return false;
+        }
       }
       const result = recordGuestDeparture(
         reservation,
@@ -142,15 +188,26 @@ export function useReservationActions() {
       setMessage(`${reservationId} departure recorded. Assigned rooms are Dirty.`);
       return true;
     },
-    [apply, configuration, reservations, stays],
+    [apply, configuration, reservations, stays, mode, commands],
   );
 
   const noShow = useCallback(
-    (reservationId: string) => {
+    async (reservationId: string) => {
       const reservation = reservations.find((item) => item.id === reservationId);
       if (!reservation) {
         setMessage(`Reservation ${reservationId} was not found.`);
         return false;
+      }
+      if (mode === "api") {
+        if (!commands?.lifecycle) { setMessage("This lifecycle command is not supported by the connected API."); return false; }
+        try {
+          await commands.lifecycle(reservation, "no-show");
+          setMessage("Lifecycle change committed to PostgreSQL.");
+          return true;
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Lifecycle failed; no success confirmed.");
+          return false;
+        }
       }
       const result = markReservationNoShow(
         reservation,
@@ -171,7 +228,7 @@ export function useReservationActions() {
       setMessage(`${reservationId} marked No-show.`);
       return true;
     },
-    [apply, configuration, reservations, stays],
+    [apply, configuration, reservations, stays, mode, commands],
   );
 
   return { checkIn, checkOut, cancel, recordDeparture, noShow, message, setMessage };

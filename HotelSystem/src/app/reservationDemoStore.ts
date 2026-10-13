@@ -4,10 +4,30 @@ import { createContext } from "react";
 
 import type { Stay } from "../types/booking";
 import type { ReservationSnapshot } from "../types/reservation";
+import type { ReservationAdjustment, ReservationChargeSnapshot } from "../types/reservation";
 import type { SampleGuest } from "../data/datasample";
-import type { HotelConfigurationData } from "../features/configuration/types";
+import type { HotelConfigurationData, RoomConfiguration, ConfigurationValue } from "../features/configuration/types";
 
 export interface ReservationDemoContextValue {
+  mode?: "demo" | "api";
+  commands?: {
+    error?: string;
+    conflict?: boolean;
+    reviewMessage?: string;
+    reviewLatest?: () => Promise<void>;
+    busy?: boolean;
+    canEditGuest?: boolean;
+    canEditStay?: boolean;
+    canEditAdjustments?: boolean;
+    canEditPurchases?: boolean;
+    canEditRoomStatus?: boolean;
+    lifecycle?: (original: ReservationSnapshot, action: "check-in" | "check-out" | "cancel" | "no-show" | "record-departure", vacated?: boolean) => Promise<void>;
+    readiness?: (room: RoomConfiguration, state: "clean" | "cleaning") => Promise<void>;
+    saveDefinition?: (section: "roomTypes" | "rooms" | "durations" | "roomTypePrices" | "catalogItems" | "inventoryCategories", id: string | undefined, values: Record<string, ConfigurationValue>, version?: number) => Promise<void>;
+    create: (input: { guestId: string; bookingSourceId: string; roomNumber: string; durationId: string; start: Date; adults: number; children: number; note: string }) => Promise<ReservationSnapshot>;
+    patch: (original: ReservationSnapshot, input: { charges?: ReservationChargeSnapshot[]; adjustments?: ReservationAdjustment[]; guestId?: string; roomNumber?: string; durationId?: string; start?: Date; note: string; adults: number; children: number }) => Promise<ReservationSnapshot>;
+    createGuest: (input: { name: string; phone: string; email: string }) => Promise<SampleGuest>;
+  };
   capabilities: ChannelCapabilities;
   actor: string;
   settlements: ChannelSettlement[];

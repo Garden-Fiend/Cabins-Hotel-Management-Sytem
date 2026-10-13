@@ -221,6 +221,7 @@ export interface CalendarReservationContext {
 }
 
 export interface ReservationSnapshot {
+  serverVersion?: number;
   channelTerms?: ReservationChannelTerms;
   supersededChannelTerms?: ReservationChannelTerms[];
   id: string;

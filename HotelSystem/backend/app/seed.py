@@ -1,5 +1,6 @@
 from uuid import NAMESPACE_URL, uuid5
 
+import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db import make_engine
@@ -39,6 +40,7 @@ def seed_reference_data(url: str | None = None, *, test: bool = False) -> dict[s
                     "company_id": company_id,
                     "source_id": "standard",
                     "label": "Standard",
+                    "default_capacity": 2,
                 }
             ],
         ),
@@ -115,7 +117,18 @@ def seed_reference_data(url: str | None = None, *, test: bool = False) -> dict[s
     try:
         with engine.begin() as connection:
             for table, rows in entries:
-                connection.execute(insert(table).values(rows).on_conflict_do_nothing())
+                # Only a known stable identity can replay. Other unique conflicts must fail
+                # the transaction instead of silently omitting a reference definition.
+                connection.execute(
+                    insert(table).values(rows).on_conflict_do_nothing(index_elements=["id"])
+                )
+                for row in rows:
+                    if "company_id" in row:
+                        existing_owner = connection.scalar(
+                            sa.select(table.c.company_id).where(table.c.id == row["id"])
+                        )
+                        if existing_owner != company_id:
+                            raise ValueError("Reference identity belongs to a different company")
     finally:
         engine.dispose()
     return {table.name: len(rows) for table, rows in entries}

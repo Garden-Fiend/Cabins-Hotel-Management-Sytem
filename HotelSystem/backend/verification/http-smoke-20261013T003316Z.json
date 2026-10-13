@@ -1,0 +1,19 @@
+{
+  "timestamp": "20261013T003316Z",
+  "database": "hms_test",
+  "health": "PASS",
+  "create": "PASS",
+  "read_after_process_restart": "PASS",
+  "durable_idempotent_replay": "PASS",
+  "changed_body_conflict": "PASS",
+  "synthetic_company": "b754691e-d789-4c8d-b74b-1b0250c7b6de",
+  "counts_before_cleanup": {
+    "guests": 1,
+    "reservations": 1,
+    "room_allocations": 1,
+    "pricing_revisions": 1,
+    "operational_audit": 2,
+    "mutation_receipts": 2
+  },
+  "cleanup": "Only synthetic company rows removed; verification API stopped"
+}

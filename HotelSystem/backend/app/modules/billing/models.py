@@ -14,6 +14,8 @@ pricing_revisions = sa.Table(
         "reservation_id", UUID(as_uuid=True), sa.ForeignKey("hms.reservations.id"), nullable=False
     ),
     sa.Column("revision", sa.Integer, nullable=False),
+    sa.Column("reservation_version", sa.Integer, nullable=False, server_default="1"),
+    sa.CheckConstraint("reservation_version > 0", name="reservation_version_positive"),
     sa.Column("currency", sa.String(3), nullable=False),
     sa.Column("total_minor", sa.BigInteger, nullable=False),
     sa.Column("calculation_version", sa.Text, nullable=False),

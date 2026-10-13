@@ -1,0 +1,7 @@
+import { writeFileSync } from 'node:fs';
+import { rules, scenarios, limitations } from './matrix.mjs';
+const safe = value => String(value).replaceAll('|', '\\|').replaceAll('\n', ' ');
+const rows = scenarios.map(s => [s.id,s.module,s.category,s.description,s.preconditions,JSON.stringify(s.inputs),s.expected,s.priority,s.executable?'Yes':'No',s.implemented?'Yes':'No',s.rules.join(', '),s.references,s.gap].map(safe).join(' | '));
+writeFileSync(new URL('./SCENARIO-MATRIX.md', import.meta.url), `# Booking scenario inventory\n\n${scenarios.length} discovered; ${scenarios.filter(s=>s.implemented).length} implemented. Generated from matrix.mjs before browser execution. Executable does not mean implemented or verified.\n\n| ID | Feature | Category | Scenario | Preconditions | Inputs | Expected | Priority | Executable | Implemented | Rules | References | Gap |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n${rows.map(r=>'| '+r+' |').join('\n')}\n\n## Rule traceability\n\n| Rule | Contract | Reference | Scenarios |\n|---|---|---|---|\n${rules.map(r=>'| '+[r.id,r.description,r.reference,scenarios.filter(s=>s.rules.includes(r.id)).map(s=>s.id).join(', ')].map(safe).join(' | ')+' |').join('\n')}\n\n## Limitations and policy review\n\n${limitations.map(l=>'- '+l).join('\n')}\n`, 'utf8');
+writeFileSync(new URL('./scenario-matrix.json',import.meta.url),JSON.stringify({rules,scenarios,limitations},null,2));
+console.log(`Inventory: ${scenarios.length} scenarios, ${scenarios.filter(s=>s.implemented).length} implemented.`);

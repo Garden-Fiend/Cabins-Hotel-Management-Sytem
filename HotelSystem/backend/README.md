@@ -1,8 +1,37 @@
-# HMS backend foundation — TODAY only
+# HMS local backend — persistent single-room operations
 
-FastAPI/SQLAlchemy/PostgreSQL/Alembic scaffold. React is unchanged and remains in demo mode.
-Only `/api/v1/live` (process health) and `/api/v1/health` (real DB connectivity) are implemented.
-No reservation CRUD, pricing service, accounting, authentication or Odoo adapter exists yet.
+FastAPI/SQLAlchemy/PostgreSQL/Alembic local backend. React defaults to independent demo mode;
+an explicit API-backed branch is available at the
+[first frontend integration checkpoint](../docs/planning/frontend-api-integration-2026-10-13.md).
+Health, reference reads, independent guest creation/reads and direct single-room reservation
+creation/reads and version-checked note/count PATCH are implemented. Creates and patches are
+transactional, audited and idempotent; creates are server-priced and patches preserve pricing.
+The original rich React pages now support lifecycle/readiness, essential versioned configuration,
+guest and pre-arrival stay changes, catalog products and captured purchases/manual adjustments.
+See the [current checkpoint](../docs/planning/full-send-session-two-checkpoint-2026-10-13.md).
+This is loopback development infrastructure; authentication, native accounting and Odoo remain absent.
+
+Current migration head is `54e8c2a17d90` in both owned databases (14 HMS tables).
+The resumed session added `e921a6830fc4` (versioned reference metadata) and
+`3b36715627c4` (owned product/category catalog), following the unchanged earlier history.
+Additive `54e8c2a17d90` now records explicit room operational status. All seven revisions preserve existing rows; downgrades were not run.
+See [room status correction](../docs/planning/room-operational-status-2026-10-13.md).
+
+From HotelSystem, `run-api.bat` starts FastAPI and opens both API mode at
+`http://127.0.0.1:5173` and independent demo mode at `http://127.0.0.1:5174` for comparison.
+Press Enter in the launcher window to stop its backend and both frontends; PostgreSQL remains running.
+`run-api.bat -NoBrowser` starts the same services without opening browser tabs.
+Stop an older launcher normally
+before restarting it to expose the new routes/capabilities; this work did not terminate user servers.
+New databases still use the explicit minimal seed. Catalog data is created through Inventory,
+not populated from frontend demo fixtures. Purchases/adjustments are added after the booking is saved.
+
+Current read-only inventory and preservation checks, from backend:
+
+```powershell
+& .\scripts\python.ps1 scripts/audit-current-integration.py
+& .\scripts\python.ps1 scripts/verify-sprint-data.py check verification/session-two-data-before-20261013.json
+```
 
 ## Windows setup
 
@@ -13,7 +42,7 @@ machine the independent interpreter is:
 & 'C:\Users\Malala\AppData\Local\Programs\Python\Python312\python.exe' -I -m venv .venv
 Remove-Item Env:PYTHONHOME,Env:PYTHONPATH -ErrorAction SilentlyContinue
 & .\scripts\python.ps1 -m pip install -r requirements.lock
-& .\scripts\python.ps1 -m pip install -e . --no-deps
+& .\scripts\python.ps1 -m pip install --editable . --no-deps
 & .\scripts\initialize-local.ps1
 docker compose up -d --wait postgres
 & .\scripts\python.ps1 -m alembic upgrade head
@@ -91,9 +120,47 @@ not completed today.
 
 ## Module and transport boundaries
 
+Tuesday migration head: `82f79142cdbd`. It adds counts, active reference flags, rate/duration-kind
+ownership, finite scheduled intervals, supported hotel timezone/time checks and audit/pricing
+version provenance. Migration CHECK definitions are explicit because autogenerate misses them.
+Reference seed identities are deterministic UUIDs, repeated seed calls preserve existing values,
+and non-identity unique conflicts now fail transactionally rather than silently dropping a seed.
+
+Read [`contracts.md`](contracts.md) for supported request/response fields and endpoint limits.
+Open `http://127.0.0.1:8001/docs` while the server is running for the actual OpenAPI contract.
+`Idempotency-Key` is a required UUID header for both POST commands. The server selects the company
+from `HMS_COMPANY_ID` (default development company) and records actor `local-development`;
+this is development attribution, not authenticated staff identity. Routes fail closed outside
+`HMS_ENV=development`. The current database target guard also rejects query-string overrides.
+
+Additional explicit checks:
+
+```powershell
+& .\scripts\python.ps1 scripts/audit-foundation.py
+& .\scripts\python.ps1 scripts/http-smoke.py
+```
+
+The HTTP smoke test creates only a synthetic company in `hms_test`, starts/stops its own loopback
+API process twice, verifies read/replay after restart, then deletes only its synthetic UUID-scoped
+rows. It never writes `hms_dev`. The audit script currently expects the reference-only baseline:
+12 tables/eight rows in each DB; once real local bookings exist it will intentionally flag that
+change instead of clearing them. It is a historical foundation audit, not the current integration
+audit; use `audit-current-integration.py` for the current schema without requiring empty business tables.
+The session preservation evidence uses hashes instead of guest/contact contents;
+do not commit future snapshots of real guest/contact records.
+
+See the [Tuesday checkpoint](../docs/planning/backend-tuesday-checkpoint-2026-10-13.md).
+The subsequent [PATCH checkpoint](../docs/planning/backend-patch-checkpoint-2026-10-13.md)
+records note/count edits and their version/replay/rollback verification. PATCH requires a UUID
+`Idempotency-Key`, `expected_version` and at least one of `note`, `adults`, `children`. Omitted
+fields are preserved, empty note clears, null rejects, and successful new requests advance
+version once. Replays return the original committed response even after later edits; GET is
+the current state. Captured pricing's `reservation_version` remains its original provenance.
+
 See [API/command contract](contracts.md) and [kickoff/handoff](../docs/planning/backend-kickoff.md).
-`reservations` owns guests, rooms, rates and allocation; `billing` currently owns only captured
-operational pricing revisions. Core owns company context, operational audit and receipts.
+`reservations` owns guests, rooms, rates and allocation; `configuration` adds operational catalog
+definitions; `billing` owns captured operational pricing revisions, purchase resolution and adjustments.
+Core owns company context, operational audit and receipts.
 Future accounting, integrations and reporting boundaries are documented but have no empty
 implementation scaffolds. There is no journal, invoice finalization or posting on Save.
 

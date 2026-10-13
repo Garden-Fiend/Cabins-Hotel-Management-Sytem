@@ -2,6 +2,7 @@ import sqlalchemy as sa
 
 from app.core_models import audit_events, companies, mutation_receipts
 from app.modules.billing.models import pricing_revisions
+from app.modules.configuration.models import categories, products
 from app.modules.reservations.models import (
     allocations,
     booking_sources,
@@ -48,6 +49,13 @@ sa.Index(
     unique=True,
     postgresql_where=sa.text("enabled AND booking_kind = 'hourly'"),
 )
+rates.append_constraint(
+    sa.ForeignKeyConstraint(
+        ["duration_id", "company_id", "booking_kind"],
+        [durations.c.id, durations.c.company_id, durations.c.kind],
+        name="fk_rate_duration_company_kind",
+    )
+)
 sa.Index(
     "uq_active_nightly_rate",
     rates.c.company_id,
@@ -57,6 +65,8 @@ sa.Index(
 )
 
 __all__ = [
+    "categories",
+    "products",
     "companies",
     "audit_events",
     "mutation_receipts",

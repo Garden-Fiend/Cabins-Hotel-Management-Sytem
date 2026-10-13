@@ -11,7 +11,7 @@ const navigation = [
   { to: "/configuration", label: "Configuration" },
 ];
 
-export function AppLayout() {
+export function AppLayout({ mode = "demo" }: { mode?: "demo" | "api" }) {
   const [isNavigationCollapsed, setIsNavigationCollapsed] = useState(false);
 
   return (
@@ -121,14 +121,14 @@ export function AppLayout() {
 
             <div className="flex items-center gap-2 sm:gap-3">
               <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                Admin User
+                {mode === "api" ? "API mode · PostgreSQL" : "Admin User"}
               </span>
-              <Link
+              {mode === "demo" && <Link
                 to="/login"
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
               >
                 Login
-              </Link>
+              </Link>}
             </div>
           </header>
 

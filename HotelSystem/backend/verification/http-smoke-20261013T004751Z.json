@@ -1,0 +1,25 @@
+{
+  "timestamp": "20261013T004751Z",
+  "database": "hms_test",
+  "health": "PASS",
+  "create": "PASS",
+  "read_after_process_restart": "PASS",
+  "durable_idempotent_replay": "PASS",
+  "changed_body_conflict": "PASS",
+  "patch": "PASS",
+  "patch_get_after_restart": "PASS",
+  "durable_patch_replay": "PASS",
+  "stale_patch": "PASS",
+  "changed_patch_body_conflict": "PASS",
+  "pricing_unchanged": "PASS",
+  "synthetic_company": "5500995a-b27c-4f19-83cd-83a5c195a905",
+  "counts_before_cleanup": {
+    "guests": 1,
+    "reservations": 1,
+    "room_allocations": 1,
+    "pricing_revisions": 1,
+    "operational_audit": 3,
+    "mutation_receipts": 3
+  },
+  "cleanup": "Only synthetic company rows removed; verification API stopped"
+}

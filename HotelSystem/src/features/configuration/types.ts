@@ -4,6 +4,7 @@ import type { DiscountDefinitionConfiguration } from "../discounts/types";
 export type ConfigurationValue = string | number | boolean | string[];
 
 export interface RoomTypeConfiguration {
+  serverVersion?: number;
   id: string;
   label: string;
   enabled: boolean;
@@ -21,6 +22,7 @@ export interface RoomStatusConfiguration {
 }
 
 export interface RoomConfiguration {
+  serverVersion?: number;
   id: string;
   number: string;
   roomTypeId: string;
@@ -40,6 +42,7 @@ export interface RoomConfiguration {
 export type HousekeepingState = "clean" | "dirty" | "cleaning";
 
 export interface DurationConfiguration {
+  serverVersion?: number;
   id: string;
   label: string;
   minutes: number;
@@ -67,6 +70,7 @@ export type CatalogCategory =
 export type BreakfastProductType = "meal" | "beverage";
 
 export interface InventoryCategoryConfiguration {
+  serverVersion?: number;
   id: string;
   label: string;
   type: CatalogCategory;
@@ -75,6 +79,8 @@ export interface InventoryCategoryConfiguration {
 }
 
 export interface CatalogConfiguration {
+  serverUnitAmountMinor?: number;
+  serverVersion?: number;
   id: string;
   label: string;
   category: CatalogCategory;
@@ -87,6 +93,8 @@ export interface CatalogConfiguration {
 }
 
 export interface RoomTypePriceConfiguration {
+  serverAmountMinor?: number;
+  serverVersion?: number;
   id: string;
   roomTypeId: string;
   bookingType: "hourly" | "overnight";

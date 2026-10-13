@@ -1,8 +1,11 @@
 import { BookingChannelsEditor } from "../components/channels/BookingChannelsEditor";
+import { useReservationDemo } from "../app/useReservationDemo";
+import { normalizeRoomFields, optionalRoomFields, roomDisplayName, roomReadinessError } from "../lib/roomConfiguration";
 import { validateDefaultInclusions } from "../lib/roomTypeInclusions";
 import { RoomTypeInclusionsEditor } from "../features/configuration/RoomTypeInclusionsEditor";
 import { BreakfastEligibilityEditor } from "../features/inventory/BreakfastEligibilityEditor";
 import { useMemo, useState } from "react";
+import { phpDecimal } from "../app/api/presentation";
 
 import { useHotelConfiguration } from "../features/configuration/useHotelConfiguration";
 import type {
@@ -13,6 +16,7 @@ import type {
 } from "../features/configuration/types";
 import { configurationSections } from "../features/configuration/types";
 import { isValidHotelTime } from "../lib/hotelTime";
+import type { DefinitionSection } from "../app/api/definitionInputs";
 
 type SectionKey = ConfigurationSection["id"];
 type ConfigRow = Record<string, ConfigurationValue> & { id: string; enabled: boolean };
@@ -41,12 +45,13 @@ function getRows(section: SectionKey, data: HotelConfigurationData): ConfigRow[]
   switch (section) {
     case "roomTypes":
       return data.roomTypes.map((item) => ({
-        id: item.id, label: item.label, enabled: item.enabled, archived: item.archived ?? false, defaultCapacity: item.defaultCapacity,
+        id: item.id, serverVersion: item.serverVersion ?? 0, label: item.label, enabled: item.enabled, archived: item.archived ?? false, defaultCapacity: item.defaultCapacity,
         amenities: item.amenities.map(amenityId),
       }));
     case "rooms":
       return data.rooms.map((item) => ({
         id: item.id,
+        serverVersion: item.serverVersion ?? 0,
         number: item.number,
         roomTypeId: item.roomTypeId,
         displayType: item.displayType,
@@ -276,7 +281,11 @@ function makeId(section: SectionKey, fields: Record<string, ConfigurationValue>)
 
 export function ConfigurationPage() {
   const { configuration, setConfiguration } = useHotelConfiguration();
+  const { stays, reservations, mode, commands } = useReservationDemo();
+  const [editingVersion, setEditingVersion] = useState<number | undefined>();
   const [activeSection, setActiveSection] = useState<SectionKey>("roomTypes");
+  const supportedSection = ["roomTypes", "rooms", "durations", "roomTypePrices"].includes(activeSection);
+  const definitionUnavailable = mode === "api" && (!supportedSection || !commands?.saveDefinition);
   const [defaultInclusions, setDefaultInclusions] = useState<NonNullable<RoomTypeConfiguration["defaultInclusions"]>>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, ConfigurationValue>>(
@@ -314,6 +323,7 @@ export function ConfigurationPage() {
   }
 
   function editRow(row: ConfigRow) {
+    setEditingVersion(typeof row.serverVersion === "number" ? row.serverVersion : undefined);
     setEditingId(row.id);
     setDefaultInclusions((configuration.roomTypes.find((item) => item.id === row.id)?.defaultInclusions ?? []).map((item) => ({ ...item })));
     const editable = Object.fromEntries(
@@ -321,6 +331,7 @@ export function ConfigurationPage() {
     );
     setFields({
       ...editable,
+      ...(mode === "api" && activeSection === "roomTypePrices" && typeof row.serverAmountMinor === "number" ? { amount: phpDecimal(row.serverAmountMinor) } : {}),
       enabled: row.enabled,
       ...(activeSection === "roomStatuses"
         ? { blocksReservation: row.blocksReservation }
@@ -368,13 +379,14 @@ export function ConfigurationPage() {
             return {
               ...current,
               rooms: replaceItem(current.rooms, {
+                ...existingRoom,
                 id,
                 number: stringValue(values, "number"),
                 roomTypeId: stringValue(values, "roomTypeId"),
                 displayType: stringValue(values, "displayType"),
                 roomStatusId: stringValue(values, "roomStatusId"),
                 enabled: booleanValue(values, "enabled"),
-                archived: booleanValue(values, "archived"),
+                archived: existingRoom?.archived ?? false,
                 housekeepingState: stringValue(values, "housekeepingState") as "clean" | "dirty" | "cleaning",
                 capacityOverride:
                   stringValue(values, "capacityOverride") === ""
@@ -468,13 +480,25 @@ export function ConfigurationPage() {
     });
   }
 
-  function save(event: React.FormEvent<HTMLFormElement>) {
+  async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (activeSection === "rooms") {
+      const currentRoom = configuration.rooms.find(room => room.id === editingId);
+      try {
+        const normalized = normalizeRoomFields({ number: stringValue(fields, "number"), roomTypeId: stringValue(fields, "roomTypeId"), displayType: stringValue(fields, "displayType"), capacityOverride: stringValue(fields, "capacityOverride"), description: stringValue(fields, "description"), operationalNotes: stringValue(fields, "operationalNotes"), roomStatusId: stringValue(fields, "roomStatusId"), housekeepingState: stringValue(fields, "housekeepingState") }, configuration, currentRoom);
+        if (currentRoom) {
+          const readinessError = roomReadinessError(currentRoom, normalized.housekeepingState, stays, new Date());
+          if (readinessError) throw new Error(readinessError);
+          if (currentRoom.enabled && !booleanValue(fields, "enabled") && reservations.some(reservation => (reservation.status === "confirmed" || reservation.status === "checked_in" || reservation.occupancyLockRoomNumbers?.includes(currentRoom.number)) && reservation.rooms.some(room => room.roomNumber === currentRoom.number))) throw new Error("Rooms assigned to active reservations cannot be disabled here.");
+          if (normalized.number !== currentRoom.number && (stays.some(stay => stay.room === currentRoom.number) || reservations.some(reservation => reservation.rooms.some(room => room.roomNumber === currentRoom.number)))) throw new Error("Room numbers referenced by reservations cannot be changed here.");
+        }
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Invalid room configuration."); return; }
+    }
     const label =
       stringValue(fields, "label") ||
       stringValue(fields, "number") ||
       `${stringValue(fields, "roomTypeId")} ${stringValue(fields, "durationId")}`;
-    const optionalKeys = new Set(["capacityOverride", "description", "amenities", "operationalNotes"]);
+    const optionalKeys = activeSection === "rooms" ? optionalRoomFields : new Set(["capacityOverride", "description", "amenities", "operationalNotes"]);
     const requiredFields = visibleFields.filter(
       (field) =>
         field.kind !== "toggle" &&
@@ -595,14 +619,19 @@ export function ConfigurationPage() {
     }
     if (activeSection === "roomTypes") { const error = validateDefaultInclusions(defaultInclusions, configuration); if (error) { setNotice(error); return; } }
     const id = editingId ?? makeId(activeSection, fields);
-    persist(id, { ...fields, enabled: fields.enabled ?? true }, activeSection === "roomTypes" ? defaultInclusions : undefined);
+    if (mode === "api") {
+      if (definitionUnavailable || !commands?.saveDefinition) { setNotice("This definition is not yet supported by the API."); return; }
+      try {
+        await commands.saveDefinition(activeSection as DefinitionSection, editingId ?? undefined, { ...fields, enabled: fields.enabled ?? true }, editingVersion);
+      } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save. Your draft is retained."); return; }
+    } else persist(id, { ...fields, enabled: fields.enabled ?? true }, activeSection === "roomTypes" ? defaultInclusions : undefined);
     setDefaultInclusions([]);
     setEditingId(null);
     setFields(defaultFields(activeSection, configuration));
-    setNotice(`${label || "Configuration"} saved for this session.`);
+    setNotice(`${label || "Configuration"} ${mode === "api" ? "committed to PostgreSQL" : "saved for this session"}.`);
   }
 
-  function toggleRow(row: ConfigRow) {
+  async function toggleRow(row: ConfigRow) {
     if (
       activeSection === "roomTypes" &&
       row.enabled &&
@@ -616,7 +645,11 @@ export function ConfigurationPage() {
       setNotice("Reassign or archive rooms before disabling this room type.");
       return;
     }
-    persist(row.id, { ...row, enabled: !row.enabled });
+    if (mode === "api") {
+      if (definitionUnavailable || !commands?.saveDefinition) return;
+      try { await commands.saveDefinition(activeSection as DefinitionSection, row.id, { ...row, enabled: !row.enabled }, typeof row.serverVersion === "number" ? row.serverVersion : undefined); }
+      catch (error) { setNotice(error instanceof Error ? error.message : "Unable to update definition."); return; }
+    } else persist(row.id, { ...row, enabled: !row.enabled });
     setNotice(`${String(row.label ?? row.number ?? row.id)} updated.`);
   }
 
@@ -629,7 +662,7 @@ export function ConfigurationPage() {
         <h1 className="mt-1 text-2xl font-bold text-slate-900">Configuration</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-600">
           Manage the hotel options used by room inventory and reservation workflows.
-          Changes are held in memory for this session; historical reservations keep
+          {mode === "api" ? "Supported definitions persist to PostgreSQL;" : "Changes are held in memory for this session;"} historical reservations keep
           their captured values.
         </p>
       </header>
@@ -673,6 +706,7 @@ export function ConfigurationPage() {
           </label>
           <button
             type="button"
+            disabled={mode === "api"}
             onClick={() => {
               if (
                 !isValidHotelTime(defaultCheckInTime) ||
@@ -704,7 +738,7 @@ export function ConfigurationPage() {
       <div className="grid gap-5 xl:grid-cols-[minmax(14rem,0.65fr)_minmax(0,2fr)]">
         <nav aria-label="Configuration categories" className={`${panelClass} h-fit`}>
           <div className="space-y-5">
-          {activeSection === "catalogItems" && <BreakfastEligibilityEditor />}
+          {activeSection === "catalogItems" && <fieldset disabled={mode === "api"}><BreakfastEligibilityEditor /></fieldset>}
             {(["Rooms & Inventory", "Booking", "Catalog", "Pricing", "Operations"] as const).map(
               (group) => (
                 <section key={group}>
@@ -735,9 +769,9 @@ export function ConfigurationPage() {
           </div>
         </nav>
 
-        <div className="space-y-5">
+        <fieldset disabled={definitionUnavailable || (mode === "api" && commands?.busy)} className="min-w-0"><div className="space-y-5">
           {activeSection === "bookingSources" ? <BookingChannelsEditor /> : <>
-          {activeSection === "catalogItems" && <BreakfastEligibilityEditor />}
+          {activeSection === "catalogItems" && <fieldset disabled={mode === "api"}><BreakfastEligibilityEditor /></fieldset>}
           <section className={panelClass}>
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -805,7 +839,9 @@ export function ConfigurationPage() {
                     </div>
                   ) : field.kind === "select" ? (
                     <select
+                      disabled={mode === "api" && field.key === "housekeepingState"}
                       aria-label={field.label}
+                      required={activeSection === "rooms" && !optionalRoomFields.has(field.key)}
                       className={inputClass}
                       value={String(fields[field.key] ?? "")}
                       onChange={(event) =>
@@ -830,8 +866,8 @@ export function ConfigurationPage() {
                         })
                       }
                     >
-                      {field.options?.map((option) => (
-                        <option key={option.value} value={option.value}>
+                      {field.options?.filter(option => activeSection !== "rooms" || field.key !== "roomTypeId" || configuration.roomTypes.some(type => type.id === option.value && ((type.enabled && !type.archived) || configuration.rooms.some(room => room.id === editingId && room.roomTypeId === type.id)))).map((option) => (
+                        <option key={option.value} value={option.value} disabled={mode === "api" && activeSection === "rooms" && field.key === "roomStatusId" && !configuration.roomStatuses.some(status => status.id === option.value && status.enabled) && option.value !== configuration.rooms.find(room => room.id === editingId)?.roomStatusId}>
                           {option.label}
                         </option>
                       ))}
@@ -843,7 +879,7 @@ export function ConfigurationPage() {
                       type={field.kind === "number" ? "number" : "text"}
                       min={field.kind === "number" ? 0 : undefined}
                       step={field.kind === "number" ? "any" : undefined}
-                      required
+                      required={activeSection !== "rooms" || !optionalRoomFields.has(field.key)}
                       value={String(fields[field.key] ?? "")}
                       onChange={(event) =>
                         setFields((current) => ({
@@ -878,7 +914,7 @@ export function ConfigurationPage() {
                   Reservation blocking behavior is application-defined.
                 </p>
               )}
-              {activeSection === "roomTypes" && <div className="sm:col-span-2"><RoomTypeInclusionsEditor configuration={configuration} value={defaultInclusions} onChange={setDefaultInclusions} /></div>}
+              {activeSection === "roomTypes" && <div className="sm:col-span-2"><fieldset disabled={mode === "api"}><RoomTypeInclusionsEditor configuration={configuration} value={defaultInclusions} onChange={setDefaultInclusions} /></fieldset></div>}
               <div className="flex items-center gap-2 sm:col-span-2">
                 <button
                   type="submit"
@@ -925,7 +961,8 @@ export function ConfigurationPage() {
                       const optionLabel = field.options?.find(
                         (option) => option.value === String(row[field.key]),
                       )?.label;
-                      const value = row[field.key];
+                      const room = activeSection === "rooms" ? configuration.rooms.find(room => room.id === row.id) : undefined;
+                      const value = field.key === "displayType" && room ? roomDisplayName(room, configuration) : row[field.key];
                       return `${field.label}: ${
                         typeof value === "boolean"
                           ? value
@@ -980,7 +1017,7 @@ export function ConfigurationPage() {
             </table>
           </section>
           </>}
-        </div>
+        </div></fieldset>
       </div>
     </div>
   );

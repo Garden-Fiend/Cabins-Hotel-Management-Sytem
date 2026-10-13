@@ -1,5 +1,5 @@
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import TSTZRANGE, UUID, ExcludeConstraint
+from sqlalchemy.dialects.postgresql import JSONB, TSTZRANGE, UUID, ExcludeConstraint
 
 from app.core_models import identity, ownership
 from app.db import Base
@@ -22,7 +22,19 @@ room_types = sa.Table(
     sa.Column("source_id", sa.Text, nullable=False),
     sa.Column("label", sa.Text, nullable=False),
     sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
+    sa.Column("default_capacity", sa.Integer, nullable=False, server_default="2"),
+    sa.Column("version", sa.Integer, nullable=False, server_default="1"),
+    sa.Column("archived", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("amenities", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
+    sa.CheckConstraint("version > 0", name="version_positive"),
+    sa.CheckConstraint("default_capacity > 0", name="capacity_positive"),
     sa.UniqueConstraint("company_id", "source_id"),
+)
+sa.Index(
+    "uq_room_type_label_casefold",
+    room_types.c.company_id,
+    sa.func.lower(room_types.c.label),
+    unique=True,
 )
 rooms = sa.Table(
     "rooms",
@@ -37,8 +49,22 @@ rooms = sa.Table(
     sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
     sa.Column("archived", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("housekeeping", sa.Text, nullable=False, server_default="clean"),
+    sa.Column("version", sa.Integer, nullable=False, server_default="1"),
+    sa.CheckConstraint("version > 0", name="version_positive"),
     sa.Column("operational", sa.Boolean, nullable=False, server_default=sa.true()),
+    sa.Column("operational_status", sa.Text, nullable=False, server_default="operational"),
+    sa.CheckConstraint(
+        "operational_status IN ('operational', 'housekeeping', 'maintenance', 'unavailable')",
+        name="operational_status_values",
+    ),
+    sa.CheckConstraint(
+        "operational = (operational_status = 'operational')", name="operational_status_consistent"
+    ),
     sa.Column("capacity_override", sa.Integer),
+    sa.Column("description", sa.Text, nullable=False, server_default=""),
+    sa.Column("operational_notes", sa.Text, nullable=False, server_default=""),
+    sa.Column("amenities_additions", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
+    sa.Column("amenities_removals", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
     sa.Column("current_occupancy_allocation_id", UUID(as_uuid=True)),
     sa.CheckConstraint("length(trim(number)) > 0", name="number_required"),
     sa.CheckConstraint(
@@ -56,15 +82,26 @@ durations = sa.Table(
     identity(),
     ownership(),
     sa.Column("source_id", sa.Text, nullable=False),
+    sa.Column("label", sa.Text, nullable=False, server_default=""),
+    sa.Column("version", sa.Integer, nullable=False, server_default="1"),
+    sa.CheckConstraint("version > 0", name="version_positive"),
     sa.Column("kind", sa.Text, nullable=False),
     sa.Column("minutes", sa.Integer),
     sa.Column("nights", sa.Integer),
+    sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
+    sa.UniqueConstraint("id", "company_id", "kind", name="uq_duration_company_kind"),
     sa.CheckConstraint(
         "(kind = 'hourly' AND minutes IS NOT NULL AND minutes > 0 AND nights IS NULL) OR "
         "(kind = 'overnight' AND nights IS NOT NULL AND nights > 0 AND minutes IS NULL)",
         name="duration_definition",
     ),
     sa.UniqueConstraint("company_id", "source_id"),
+)
+sa.Index(
+    "uq_duration_label_casefold",
+    durations.c.company_id,
+    sa.func.lower(sa.func.coalesce(sa.func.nullif(durations.c.label, ""), durations.c.source_id)),
+    unique=True,
 )
 rates = sa.Table(
     "reference_rates",
@@ -75,6 +112,8 @@ rates = sa.Table(
         "room_type_id", UUID(as_uuid=True), sa.ForeignKey("hms.room_types.id"), nullable=False
     ),
     sa.Column("source_id", sa.Text, nullable=False),
+    sa.Column("version", sa.Integer, nullable=False, server_default="1"),
+    sa.CheckConstraint("version > 0", name="version_positive"),
     sa.Column("booking_kind", sa.Text, nullable=False),
     sa.Column("duration_id", UUID(as_uuid=True), sa.ForeignKey("hms.durations.id")),
     sa.Column("unit_amount_minor", sa.BigInteger, nullable=False),
@@ -96,6 +135,7 @@ booking_sources = sa.Table(
     sa.Column("source_id", sa.Text, nullable=False),
     sa.Column("label", sa.Text, nullable=False),
     sa.CheckConstraint("source_id = 'direct'", name="direct_only"),
+    sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
     sa.UniqueConstraint("company_id", "source_id"),
 )
 reservations = sa.Table(
@@ -114,6 +154,9 @@ reservations = sa.Table(
     sa.Column("status", sa.Text, nullable=False, server_default="confirmed"),
     sa.Column("version", sa.Integer, nullable=False, server_default="1"),
     sa.Column("note", sa.Text, nullable=False, server_default=""),
+    sa.Column(
+        "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+    ),
     sa.Column(
         "created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     ),
@@ -139,6 +182,12 @@ allocations = sa.Table(
     sa.Column("duration_id", UUID(as_uuid=True), sa.ForeignKey("hms.durations.id"), nullable=False),
     sa.Column("scheduled_start", sa.DateTime(timezone=True), nullable=False),
     sa.Column("scheduled_end", sa.DateTime(timezone=True), nullable=False),
+    sa.Column("adults", sa.Integer, nullable=False, server_default="1"),
+    sa.Column("children", sa.Integer, nullable=False, server_default="0"),
+    sa.CheckConstraint("adults >= 1 AND children >= 0", name="occupancy_counts"),
+    sa.CheckConstraint(
+        "isfinite(scheduled_start) AND isfinite(scheduled_end)", name="finite_interval"
+    ),
     sa.Column("actual_check_in", sa.DateTime(timezone=True)),
     sa.Column("actual_check_out", sa.DateTime(timezone=True)),
     sa.Column("blocks_availability", sa.Boolean, nullable=False, server_default=sa.true()),

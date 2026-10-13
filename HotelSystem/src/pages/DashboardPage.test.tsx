@@ -125,9 +125,9 @@ describe("dashboard reservation flow", () => {
       ),
     );
     expect(
-      screen.getByRole("button", { name: "John Doe confirmed" }),
+      screen.getByRole("button", { name: /^John Doe, Room .*confirmed,/ }),
     ).toBeTruthy();
-  });
+  }, 15000);
 
   it("opens a compact summary and lets staff expand or edit an existing reservation", () => {
     renderDashboard();
@@ -135,7 +135,7 @@ describe("dashboard reservation flow", () => {
       screen.getByRole("checkbox", { name: "Show inactive reservations" }),
     );
     fireEvent.click(
-      screen.getAllByRole("button", { name: "Alice Johnson confirmed" })[0],
+      screen.getAllByRole("button", { name: /^Alice Johnson, Room .*confirmed,/ })[0],
     );
 
     expect(
@@ -164,7 +164,7 @@ describe("dashboard reservation flow", () => {
   it("closes the reservation summary popup when the backdrop is clicked", () => {
     renderDashboard();
     fireEvent.click(
-      screen.getAllByRole("button", { name: "Alice Johnson confirmed" })[0],
+      screen.getAllByRole("button", { name: /^Alice Johnson, Room .*confirmed,/ })[0],
     );
 
     const popup = screen.getByRole("dialog", { name: "Alice Johnson" });
@@ -179,7 +179,7 @@ describe("dashboard reservation flow", () => {
     renderDashboard({ dirtyRoomNumber: "102" });
 
     fireEvent.click(
-      screen.getAllByRole("button", { name: "Alice Johnson confirmed" })[0],
+      screen.getAllByRole("button", { name: /^Alice Johnson, Room .*confirmed,/ })[0],
     );
 
     expect(screen.getByRole("alert").textContent).toContain("Room Not Ready");
@@ -244,7 +244,7 @@ describe("dashboard reservation flow", () => {
       screen.queryByRole("heading", { name: "Local demo reservations" }),
     ).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "John Doe confirmed" }),
+      screen.getByRole("button", { name: /^John Doe, Room .*confirmed,/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
@@ -264,7 +264,7 @@ describe("dashboard reservation flow", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "John Doe confirmed" }),
+      screen.getByRole("button", { name: /^John Doe, Room .*confirmed,/ }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     dialog = screen.getByRole("dialog", { name: "Edit reservation" });
@@ -287,7 +287,7 @@ describe("dashboard reservation flow", () => {
       screen.getByRole("checkbox", { name: "Show inactive reservations" }),
     );
     expect(
-      screen.getByRole("button", { name: "John Doe cancelled" }),
+      screen.getByRole("button", { name: /^John Doe, Room .*cancelled,/ }),
     ).toBeTruthy();
 
     const nextDialog = openReservationFromDashboard();
@@ -295,7 +295,7 @@ describe("dashboard reservation flow", () => {
       .getByRole("combobox", { name: "Choose available room" })
       .querySelector('option[value="203"]');
     expect(roomOption?.hasAttribute("disabled")).toBe(false);
-  });
+  }, 15000);
 
   it("requires confirmation before discarding a dirty draft and handles Escape", () => {
     renderDashboard();

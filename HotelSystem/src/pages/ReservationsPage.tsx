@@ -27,7 +27,7 @@ function formatMoney(amount: number, currency: string) {
 
 export function ReservationsPage() {
   const navigate = useNavigate();
-  const { reservations, guests, configuration } = useReservationDemo();
+  const { reservations, guests, configuration, mode, commands } = useReservationDemo();
   const { checkIn, checkOut, noShow, message, setMessage } =
     useReservationActions();
   const [query, setQuery] = useState("");
@@ -259,6 +259,7 @@ export function ReservationsPage() {
                         <>
                           <button
                             type="button"
+                            disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() => checkIn(reservation.id)}
                             className="font-semibold text-amber-800 underline"
                           >
@@ -266,6 +267,7 @@ export function ReservationsPage() {
                           </button>
                           <button
                             type="button"
+                            disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() => noShow(reservation.id)}
                             className="font-semibold text-slate-700 underline"
                           >
@@ -276,7 +278,8 @@ export function ReservationsPage() {
                       {reservation.status === "checked_in" && (
                         <button
                           type="button"
-                          onClick={() => checkOut(reservation.id)}
+                          disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+                            onClick={() => checkOut(reservation.id)}
                           className="font-semibold text-blue-800 underline"
                         >
                           Check out

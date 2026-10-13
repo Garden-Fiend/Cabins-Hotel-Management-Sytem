@@ -41,7 +41,16 @@ if sys.argv[1:] == ["capture"]:
     path.write_text(encoded + "\n", encoding="utf-8")
     print("Captured existing rows from both owned databases; no database writes")
 elif sys.argv[1:] == ["check"]:
-    if json.loads(path.read_text(encoding="utf-8")) != json.loads(encoded):
+    baseline = json.loads(path.read_text(encoding="utf-8"))
+    current = json.loads(encoded)
+    # Additive migrations may introduce columns, but every baseline value and row must remain.
+    for database, tables in baseline.items():
+        for table, rows in tables.items():
+            columns = set(rows[0]) if rows else set()
+            current[database][table] = [
+                {key: row[key] for key in columns} for row in current[database][table]
+            ]
+    if baseline != current:
         raise SystemExit("Existing data differs from the preservation baseline")
     print("PASS: all pre-existing column values and rows unchanged in both databases")
 else:
