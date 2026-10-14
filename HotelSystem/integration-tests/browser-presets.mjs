@@ -1,0 +1,104 @@
+import {chromium,expect} from '@playwright/test';
+import {spawn} from 'node:child_process';
+import {createWriteStream} from 'node:fs';
+import {writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {randomUUID} from 'node:crypto';
+const api=process.env.HMS_INTEGRATION_API,report=process.env.HMS_INTEGRATION_REPORT;
+if(!api||!report)throw new Error('Use run-presets.py');
+const checks=[],log=createWriteStream(resolve(report,'vite.log'));
+let child,demoChild,browser,context,demo,page;
+try{
+ child=spawn(process.execPath,[resolve('node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','5183','--strictPort'],{env:{...process.env,VITE_HMS_DATA_MODE:'api',VITE_HMS_API_URL:api},windowsHide:true,stdio:['ignore','pipe','pipe']});child.stdout.pipe(log);child.stderr.pipe(log);
+ for(let i=0;i<100;i++){if(child.exitCode!==null)throw new Error('Vite exited');try{if((await fetch('http://127.0.0.1:5183')).ok)break;}catch{/*startup*/}await new Promise(r=>setTimeout(r,100));}
+ browser=await chromium.launch({headless:true});context=await browser.newContext({timezoneId:'Asia/Manila',viewport:{width:1600,height:1050},recordVideo:{dir:resolve(report,'video')}});await context.tracing.start({screenshots:true,snapshots:true});page=await context.newPage();
+ const write=async(path,data,method='POST')=>{const r=await context.request.fetch(`${api}/api/v1/${path}`,{method,data,headers:{'Idempotency-Key':randomUUID()}});expect(r.ok(),await r.text()).toBe(true);return r.json();};
+ const refs=async()=>(await context.request.get(`${api}/api/v1/reference-data`)).json();
+ const original=await refs();
+ const category=await write('configuration/categories',{label:'Preset paid products',type:'ordinary'});
+ const product=await write('configuration/products',{label:'Preset paid meal',category_id:category.id,unit_amount_minor:10000});
+ await page.goto('http://127.0.0.1:5183/discounts');
+ for(const [label,scope,method,value] of [['Room ten','room','percentage','10'],['Item twenty-five','item','fixed','25'],['Reservation ten','reservation','percentage','10']]){
+   await page.getByRole('button',{name:'Create Discount',exact:true}).click();
+   await page.getByLabel('Discount Name',{exact:true}).fill(label);await page.getByLabel(/^Apply To/).selectOption(scope);
+   if(scope==='item')await page.getByLabel(/^Applicable Item/).selectOption(product.id);
+   await page.getByLabel(/^Discount Method/).selectOption(method);await page.getByLabel('Value',{exact:true}).fill(value);
+   if(scope==='room'){
+     const fail=route=>route.abort('failed');await context.route(`${api}/api/v1/configuration/discount-presets`,fail);
+     await page.getByRole('button',{name:'Save Discount',exact:true}).click();await expect(page.locator('p[role=status]')).toContainText('not confirmed');await expect(page.getByLabel('Value',{exact:true})).toHaveValue(value);
+     await context.unroute(`${api}/api/v1/configuration/discount-presets`,fail);
+   }
+   await page.getByRole('button',{name:'Save Discount',exact:true}).click();await expect(page.locator('p[role=status]')).toContainText('committed');await expect(page.getByRole('button',{name:'Save Discount',exact:true})).toHaveCount(0);
+ }
+ await page.reload();await expect(page.getByRole('cell',{name:'Room ten',exact:true})).toBeVisible();
+ const definitions=(await refs()).discount_presets;
+ checks.push('Original Discounts create supports all three scopes; failed save retains draft; retry and refresh persist');
+ const guest=await write('guests',{name:'Preset browser guest'}),day=new Date(Date.now()+3*86400000+8*3600000).toISOString().slice(0,10);
+ let saved=await write('reservations',{guest_id:guest.id,booking_source_id:original.booking_sources[0].id,room_id:original.rooms[0].id,duration_id:original.durations[0].id,scheduled_start:`${day}T14:00:00+08:00`,adults:1});
+ saved=await write(`reservations/${saved.id}/edit-charges`,{expected_version:saved.version,guest_id:guest.id,charges:[{id:randomUUID(),product_id:product.id,quantity:1,usage:'purchase'}]});
+ async function edit(){await page.goto(`http://127.0.0.1:5183/reservations/${saved.id}`);await page.getByRole('button',{name:'Edit details',exact:true}).click();const pane=page.getByRole('dialog',{name:'Edit reservation',exact:true});await pane.getByRole('button',{name:'Configure',exact:true}).click();return pane;}
+ let pane=await edit();
+ await pane.getByLabel(/^Room 101 discount/).selectOption(definitions.find(d=>d.scope==='room').id);
+ await pane.getByLabel(/^Preset paid meal.*discount/).selectOption(definitions.find(d=>d.scope==='item').id);
+ if(!(await pane.getByLabel(/^Reservation preset/).isVisible()))await pane.locator('summary').filter({hasText:/^Discounts/}).click({position:{x:10,y:10}});await pane.getByLabel(/^Reservation preset/).selectOption(definitions.find(d=>d.scope==='reservation').id);await pane.getByRole('button',{name:'Apply reservation preset',exact:true}).click();
+ const failure=route=>route.abort('failed');await context.route(`${api}/api/v1/reservations/${saved.id}/edit-discounts`,failure);
+ await pane.getByRole('button',{name:'Save Changes',exact:true}).click();await expect(pane.getByRole('alert')).toContainText('not confirmed');await expect(pane.getByLabel(/^Room 101 discount/)).not.toHaveValue('');await context.unroute(`${api}/api/v1/reservations/${saved.id}/edit-discounts`,failure);
+ await pane.getByRole('button',{name:'Save Changes',exact:true}).click();await expect(pane).toHaveCount(0);await page.reload();
+ saved=await (await context.request.get(`${api}/api/v1/reservations/${saved.id}`)).json();expect(saved.pricing.snapshot.total_minor).toBe(95850);expect(saved.pricing.snapshot.discounts.map(d=>d.provenance)).toEqual(['preset','preset','preset']);
+ checks.push('Original room/item selectors and reservation Apply persist captured identities and exact staged server totals; failed save retains selections');
+ await page.goto('http://127.0.0.1:5183/discounts');
+ let row=page.getByRole('row').filter({has:page.getByRole('cell',{name:'Room ten',exact:true})});await row.getByRole('button',{name:'Edit',exact:true}).click();await page.getByLabel('Value',{exact:true}).fill('20');
+ const remote=definitions.find(d=>d.scope==='room');
+ await write(`configuration/discount-presets/${remote.id}`,{...Object.fromEntries(Object.entries(remote).filter(([key])=>!['id','version'].includes(key))),label:'Remote room ten',expected_version:remote.version},'PATCH');
+ await page.getByRole('button',{name:'Save Discount',exact:true}).click();await expect(page.locator('p[role=status]')).toContainText('not confirmed');await expect(page.getByLabel('Value',{exact:true})).toHaveValue('20');
+ await page.getByRole('button',{name:'Load latest preset version for review',exact:true}).click();await expect(page.locator('p[role=status]')).toContainText('Your draft is unchanged');await page.getByRole('button',{name:'Save Discount',exact:true}).click();await expect(page.locator('p[role=status]')).toContainText('committed');
+ row=page.getByRole('row').filter({has:page.getByRole('cell',{name:'Room ten',exact:true})});await row.getByRole('button',{name:'Disable',exact:true}).click();await expect(row.getByRole('button',{name:'Enable',exact:true})).toBeVisible();
+ pane=await edit();await expect(pane.getByLabel(/^Room 101 discount/)).toHaveValue(remote.id);await pane.locator('summary').filter({hasText:'Reservation note'}).click({position:{x:10,y:10}});await pane.getByLabel('Reservation note',{exact:true}).fill('Historical preset stays ten');await pane.getByRole('button',{name:'Save Changes',exact:true}).click();await expect(pane).toHaveCount(0);
+ const current=await (await context.request.get(`${api}/api/v1/reservations/${saved.id}`)).json();expect(current.pricing).toEqual(saved.pricing);saved=current;
+ checks.push('Original preset Edit handles stale/review without draft loss; Disable preserves historical selections and unrelated reservation edits do not reprice');
+ await page.goto(`http://127.0.0.1:5183/reservations/${saved.id}/print`);await expect(page.locator('[data-reservation-print-document]')).toContainText('958.50');await page.screenshot({path:resolve(report,'print.png'),fullPage:true});
+ await page.goto('http://127.0.0.1:5183/');
+ await page.getByRole('button',{name:'+ Create Reservation',exact:true}).click();
+ pane=page.getByRole('dialog',{name:'Create reservation',exact:true});
+ await pane.getByRole('button',{name:/Preset browser guest/}).click();
+ const later=new Date(Date.now()+5*86400000+8*3600000).toISOString().slice(0,10);
+ await pane.getByLabel(/^Check-in/).fill(`${later}T14:00`);
+ await pane.getByLabel(/^Duration/).selectOption(original.durations[0].id);
+ await pane.getByLabel('Choose available room',{exact:true}).selectOption('101');
+ await pane.getByRole('button',{name:'+ Add room',exact:true}).click();
+ if(!(await pane.getByLabel(/^Reservation preset/).isVisible()))await pane.locator('summary').filter({hasText:/^Discounts/}).click({position:{x:10,y:10}});
+ await pane.getByLabel(/^Reservation preset/).selectOption(definitions.find(d=>d.scope==='reservation').id);
+ await pane.getByRole('button',{name:'Apply reservation preset',exact:true}).click();
+ await pane.getByRole('button',{name:'Create Reservation',exact:true}).click();await expect(pane).toHaveCount(0);await page.reload();
+ let bookings=await (await context.request.get(`${api}/api/v1/reservations`)).json();expect(bookings).toHaveLength(2);
+ expect(bookings.find(r=>r.id!==saved.id).pricing.snapshot.total_minor).toBe(99000);
+ checks.push('Original Dashboard Create Reservation persists an initial staff-selected preset and refresh retains the canonical price');
+ await page.getByRole('button',{name:'month',exact:true}).click();
+ await page.getByRole('button',{name:/Preset browser guest, Room 101, confirmed/}).first().press('Enter');
+ await page.getByRole('button',{name:'Edit',exact:true}).click();
+ pane=page.getByRole('dialog',{name:'Edit reservation',exact:true});
+ await expect(pane.getByLabel(/^Room 101 discount/)).toHaveValue(remote.id);
+ if(await pane.getByRole('button',{name:'Configure',exact:true}).count())await pane.getByRole('button',{name:'Configure',exact:true}).click();
+ await pane.getByLabel('Adults',{exact:true}).fill('2');
+ await pane.getByRole('button',{name:'Save Changes',exact:true}).click();await expect(pane).toHaveCount(0);await page.reload();
+ const final=await (await context.request.get(`${api}/api/v1/reservations/${saved.id}`)).json();expect(final.pricing).toEqual(saved.pricing);expect(final.allocation.adults).toBe(2);
+ checks.push('Original calendar summary Edit retains disabled historical presets and changes guest counts without repricing');
+ const emptyDate=new Date(Date.now()+7*86400000),emptyLabel=new Intl.DateTimeFormat('en-PH',{dateStyle:'medium',timeZone:'Asia/Manila'}).format(emptyDate);
+ await page.getByRole('button',{name:'month',exact:true}).click();
+ await page.getByRole('button',{name:`Select Room 101 on ${emptyLabel}`,exact:true}).click();
+ pane=page.getByRole('dialog',{name:'Create reservation',exact:true});await pane.getByRole('button',{name:/Preset browser guest/}).click();
+ await pane.getByLabel(/^Duration/).selectOption(original.durations[0].id);
+ if(!(await pane.getByLabel(/^Reservation preset/).isVisible()))await pane.locator('summary').filter({hasText:/^Discounts/}).click({position:{x:10,y:10}});
+ await pane.getByLabel(/^Reservation preset/).selectOption(definitions.find(d=>d.scope==='reservation').id);await pane.getByRole('button',{name:'Apply reservation preset',exact:true}).click();
+ await pane.getByRole('button',{name:'Create Reservation',exact:true}).click();await expect(pane).toHaveCount(0);await page.reload();
+ bookings=await (await context.request.get(`${api}/api/v1/reservations`)).json();expect(bookings).toHaveLength(3);expect(bookings.filter(r=>r.pricing.snapshot.total_minor===99000)).toHaveLength(2);
+ checks.push('Original calendar empty-cell Create persists an initial reservation preset with the correct canonical total');
+ demoChild=spawn(process.execPath,[resolve('node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port','5184','--strictPort'],{env:{...process.env,VITE_HMS_DATA_MODE:'demo',VITE_HMS_API_URL:api},windowsHide:true,stdio:['ignore','pipe','pipe']});demoChild.stdout.pipe(log);demoChild.stderr.pipe(log);
+ for(let i=0;i<100;i++){if(demoChild.exitCode!==null)throw new Error('Demo Vite exited');try{if((await fetch('http://127.0.0.1:5184')).ok)break;}catch{/*startup*/}await new Promise(r=>setTimeout(r,100));}
+ demo=await browser.newContext({timezoneId:'Asia/Manila'});const dp=await demo.newPage();let calls=0;dp.on('request',request=>{if(request.url().startsWith(api))calls++;});
+ await dp.goto('http://127.0.0.1:5184/discounts');await dp.getByRole('button',{name:'Create Discount',exact:true}).click();await expect(dp.getByLabel(/^Discount Method/)).toHaveValue('final_price');
+ await dp.getByLabel('Discount Name',{exact:true}).fill('Demo preserved preset');await dp.getByLabel(/^Discount Method/).selectOption('percentage');await dp.getByLabel('Value',{exact:true}).fill('10');await dp.getByRole('button',{name:'Save Discount',exact:true}).click();await expect(dp.locator('p[role=status]')).toContainText('saved for this session');expect(calls).toBe(0);
+ checks.push('Demo preset builder retains its original final-price default and saves independently with zero API calls');
+ await writeFile(resolve(report,'results.json'),JSON.stringify({status:'PASS',checks,reservation_id:saved.id},null,2));console.log(`PASS: ${checks.length} preset browser checks`);
+}catch(error){if(page){await page.screenshot({path:resolve(report,'failure.png'),fullPage:true});await writeFile(resolve(report,'failure.html'),await page.content());}await writeFile(resolve(report,'results.json'),JSON.stringify({status:'FAIL',checks,error:String(error)},null,2));throw error;
+}finally{if(context){await context.tracing.stop({path:resolve(report,'trace.zip')});await context.close();}if(demo)await demo.close();if(browser)await browser.close();for(const owned of [child,demoChild])if(owned){owned.kill();await new Promise(r=>owned.exitCode!==null?r():owned.once('exit',r));}log.end();}

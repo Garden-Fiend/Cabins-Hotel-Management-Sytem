@@ -15,10 +15,13 @@ from app.modules.reservations.schemas import (
     GuestRead,
     LifecycleCommand,
     ReservationBillingEdit,
+    ReservationBreakfastEdit,
     ReservationChargesEdit,
     ReservationCreate,
     ReservationDetailsEdit,
+    ReservationDiscountsEdit,
     ReservationEdit,
+    ReservationInclusionsEdit,
     ReservationRead,
     ReservationStayChargesEdit,
     ReservationStayEdit,
@@ -95,6 +98,21 @@ def change_stay_purchases(
     id: UUID, request: ReservationStayChargesEdit, key: Key, service: Service
 ):
     return edit_stay(service, id, request, key)
+
+
+@router.post("/reservations/{id}/edit-discounts", response_model=ReservationRead)
+def change_discounts(id: UUID, request: ReservationDiscountsEdit, key: Key, service: Service):
+    return save_adjustments(service, id, request, key, discounts=True)
+
+
+@router.post("/reservations/{id}/edit-inclusions", response_model=ReservationRead)
+def change_inclusions(id: UUID, request: ReservationInclusionsEdit, key: Key, service: Service):
+    return save_adjustments(service, id, request, key, inclusions=True)
+
+
+@router.post("/reservations/{id}/edit-breakfast", response_model=ReservationRead)
+def change_breakfast(id: UUID, request: ReservationBreakfastEdit, key: Key, service: Service):
+    return save_adjustments(service, id, request, key, breakfast=True)
 
 
 @router.post("/reservations/{id}/edit-billing", response_model=ReservationRead)

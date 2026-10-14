@@ -526,7 +526,7 @@ export function ReservationPane({
         capturedPricingQuantity: savedRoom.capturedPricingQuantity,
         capturedRateId: savedRoom.capturedRateId,
         inclusions: Object.fromEntries(
-          savedRoom.inclusions.map((item) => [item.catalogId, item.quantity]),
+          [...(persistent ? Object.keys(savedRoom.inclusionOrigins ?? {}).map(id => [id, 0] as [string, number]) : []), ...savedRoom.inclusions.map((item) => [item.catalogId, item.quantity] as [string, number])],
         ),
         inclusionOrigins: savedRoom.inclusionOrigins ?? Object.fromEntries(savedRoom.inclusions.map((item) => [item.catalogId, { source: "manual" as const }])),
         charges: savedRoom.charges.map((charge) => ({ ...charge })),
@@ -978,8 +978,13 @@ export function ReservationPane({
 
     const label = manualDiscountLabel.trim() ||
       (discountScope === "reservation" ? "Reservation discount" : discountScope === "room" ? `Room ${discountTarget} discount` : "Charge discount");
+    let manualId = editingDiscountId;
+    if (!manualId && persistent) {
+      try { manualId = createChargeId(discounts); }
+      catch (error) { setErrorMessage(error instanceof Error ? error.message : "Unable to add discount. Draft retained."); return; }
+    }
     const manualDiscount: ReservationDiscount = {
-        id: editingDiscountId ?? crypto.randomUUID(),
+        id: manualId ?? crypto.randomUUID(),
         label,
         scope: discountScope,
         method: discountMethod,
@@ -1054,9 +1059,15 @@ export function ReservationPane({
       setIsSubmitting(true);
       setErrorMessage("");
       try {
+        const inclusionInput = commands.canEditInclusions ? { inclusions: Object.entries(room.inclusions).filter(([id]) => Boolean(initialReservation) || room.inclusionOrigins[id]?.source !== "default" || room.inclusionOrigins[id]?.overridden).map(([catalogId, quantity]) => ({ catalogId, quantity, ...(room.inclusionOrigins[catalogId]?.overridden ? { overridden: true } : {}) })) } : {};
+        const breakfastDates = configuration.durations.find(d => d.id === durationId)?.bookingType === "overnight" ? getBreakfastDates(reservationCheckIn, reservationCheckOut).map(hotelDateKey) : [];
+        const breakfastInput = commands.canEditBreakfast ? { breakfastDates, breakfast: Object.entries(room.breakfast).flatMap(([key, b]) => {
+          const [stayDate, index] = key.split(":"); const guestNumber = Number(index) + 1;
+          return breakfastDates.includes(stayDate) && guestNumber <= room.adults + room.children ? [{ stayDate, guestNumber, status: b.status, ...(b.status === "included" ? { mealId: b.meal, beverageId: b.drink } : {}) }] : [];
+        }) } : {};
         const saved = initialReservation
-          ? await commands.patch(initialReservation, { charges: room.charges, adjustments, guestId: guest.id, roomNumber: room.roomNumber, durationId, start: reservationCheckIn, note, adults: room.adults, children: room.children })
-          : await commands.create({ guestId: guest.id, bookingSourceId: bookingSource, roomNumber: room.roomNumber,
+          ? await commands.patch(initialReservation, { ...breakfastInput, ...inclusionInput, discounts, charges: room.charges, adjustments, guestId: guest.id, roomNumber: room.roomNumber, durationId, start: reservationCheckIn, note, adults: room.adults, children: room.children })
+          : await commands.create({ ...breakfastInput, ...inclusionInput, charges: room.charges, discounts, guestId: guest.id, bookingSourceId: bookingSource, roomNumber: room.roomNumber,
               durationId, start: reservationCheckIn, adults: room.adults, children: room.children, note });
         const savedStays = stays.filter(s => s.reservationId === saved.id);
         if (initialReservation) await onSaved?.(saved, savedStays);
@@ -1430,7 +1441,7 @@ export function ReservationPane({
   function renderChargeSection(room: RoomDraft, purchase: boolean) {
     const options = purchase ? purchasedProducts : reservationExtraCharges;
     return (
-                          <fieldset disabled={persistent && (!purchase || !commands?.canEditPurchases || !initialReservation)}><div className={roomSectionClass}>
+                          <fieldset disabled={persistent && (!(purchase ? commands?.canEditPurchases : commands?.canEditExtraCharges) || (purchase && !initialReservation))}><div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               {purchase ? "Purchased Items" : "Extra charges"}
                             </h4>
@@ -1580,7 +1591,7 @@ export function ReservationPane({
         </header>
 
         <div ref={reservationScrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-100/70 px-4 py-5 sm:px-5">
-          {persistent && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">Persistent direct single-room booking. Saved edits support primary guest, notes, guest counts, purchased items and billing adjustments. Before check-in, room assignment, arrival and duration can also change. Assignment/duration changes capture the current server rate; earlier pricing revisions remain preserved. Save a new reservation before adding purchases or adjustments. Custom room stays, inclusions, extra-charge categories, breakfast and discounts are not yet available.</p>}
+          {persistent && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">Persistent direct single-room booking. Saved edits support primary guest, notes, guest counts, purchased items and billing adjustments. Before check-in, room assignment, arrival and duration can also change. Assignment/duration changes capture the current server rate; earlier pricing revisions remain preserved. Save a new reservation before adding purchases or adjustments. Manual discounts, fixed/percentage presets, room-type inclusions and nightly breakfast selections are supported; final-price overrides and custom room stays are not yet available.</p>}
 
 
           <fieldset disabled={persistent && Boolean(initialReservation) && !commands?.canEditGuest}><section className={sectionClass}>
@@ -1845,7 +1856,10 @@ export function ReservationPane({
                   const inclusionOptions = reservationInclusions.filter(
                     (item) =>
                       item.enabled || (room.inclusions[item.id] ?? 0) > 0,
-                  );
+                  ).map((item) => persistent ? {
+                    ...item,
+                    label: initialReservation?.rooms.find(savedRoom => savedRoom.roomNumber === room.roomNumber)?.inclusions.find(captured => captured.catalogId === item.id)?.label ?? item.label,
+                  } : item);
                   const breakfastDates = configuration.durations.find((item) => item.id === (room.useReservationStay ? durationId : room.durationId))?.bookingType === "overnight" ? getBreakfastDates(roomStay.start, roomStay.end) : [];
 
                   return (
@@ -2028,7 +2042,7 @@ export function ReservationPane({
                                 {reservationRooms.filter((item) => item.number === room.roomNumber || !roomDrafts.some((draft) => draft.roomNumber === item.number)).map((item) => <option key={item.number} value={item.number}>Room {item.number} - {item.type}</option>)}
                               </select>
                             </label>}
-                            <fieldset disabled={persistent}><h4 className="text-sm font-semibold text-slate-900">Inclusions</h4>
+                            <fieldset disabled={persistent && !commands?.canEditInclusions}><h4 className="text-sm font-semibold text-slate-900">Inclusions</h4>
                             <div className="mt-2 space-y-2">
                               {inclusionOptions.map((item) => (
                                 <label
@@ -2059,7 +2073,7 @@ export function ReservationPane({
                           </div>
 
                           {renderChargeSection(room, false)}
-                          <fieldset disabled={persistent}><div className={roomSectionClass}>
+                          <fieldset disabled={persistent && !commands?.canEditBreakfast}><div className={roomSectionClass}>
                             <h4 className="text-sm font-semibold text-slate-900">
                               Breakfast
                             </h4>
@@ -2149,6 +2163,7 @@ export function ReservationPane({
                                               </p>
                                               <select
                                                 className={inputClass}
+                                                aria-label={`Breakfast Room ${room.roomNumber} ${hotelDateKey(date)} Guest ${index + 1} status`}
                                                 onChange={(event) => {
                                                   const value =
                                                     event.target.value;
@@ -2162,11 +2177,11 @@ export function ReservationPane({
                                                       status:
                                                         value as BreakfastDraft["status"],
                                                       meal:
-                                                        breakfast?.meal ??
-                                                        breakfastMeals.find((item) => item.enabled)?.id ?? "",
+                                                        breakfast?.meal ||
+                                                        breakfastMeals.find((item) => item.enabled)?.id || "",
                                                       drink:
-                                                        breakfast?.drink ??
-                                                        breakfastDrinks.find((item) => item.enabled)?.id ?? "",
+                                                        breakfast?.drink ||
+                                                        breakfastDrinks.find((item) => item.enabled)?.id || "",
                                                     };
                                                   }
                                                   updateRoom(room.roomNumber, {
@@ -2193,6 +2208,7 @@ export function ReservationPane({
                                                 <div className="grid grid-cols-2 gap-2">
                                                   <select
                                                     className={inputClass}
+                                                    aria-label={`Breakfast Room ${room.roomNumber} ${hotelDateKey(date)} Guest ${index + 1} meal`}
                                                     onChange={(event) =>
                                                       updateRoom(
                                                         room.roomNumber,
@@ -2228,6 +2244,7 @@ export function ReservationPane({
                                                   </select>
                                                   <select
                                                     className={inputClass}
+                                                    aria-label={`Breakfast Room ${room.roomNumber} ${hotelDateKey(date)} Guest ${index + 1} beverage`}
                                                     onChange={(event) =>
                                                       updateRoom(
                                                         room.roomNumber,
@@ -2430,13 +2447,13 @@ export function ReservationPane({
             </label></details>
           </section>
 
-          <fieldset disabled={persistent}><details className={sectionClass} open={discounts.length > 0 || undefined}>
+          <fieldset disabled={persistent && !commands?.canEditDiscounts}><details className={sectionClass} open={discounts.length > 0 || undefined}>
             <summary className="cursor-pointer text-sm font-semibold text-slate-700">Discounts <span className="font-normal text-slate-500">/ optional{discounts.length ? ` / ${discounts.length} applied` : ""}</span> <InfoTip label="Discounts">Use a preset or a manual reduction when the guest qualifies. Final-price offers apply first, followed by room/item and reservation reductions. A manual room discount includes its extras. A channel accommodation total replaces the discounted accommodation amount.</InfoTip></summary>
             <div className="space-y-4 pt-2">
             <div className="space-y-2 rounded-lg bg-slate-50 p-3">
               <h4 className="font-semibold">Reservation Discounts</h4>
               <label><span className={labelClass}>Reservation preset</span>
-                <select className={inputClass} value={discountDefinitionId} onChange={(event) => setDiscountDefinitionId(event.target.value)}>
+                <select disabled={persistent && !commands?.canEditPresets} className={inputClass} value={discountDefinitionId} onChange={(event) => setDiscountDefinitionId(event.target.value)}>
                   <option value="">Select preset</option>
                   {getApplicablePresets(configuration, "reservation").filter((item) => item.currency === (priceLines[0]?.currency ?? reservationCurrency)).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                 </select>

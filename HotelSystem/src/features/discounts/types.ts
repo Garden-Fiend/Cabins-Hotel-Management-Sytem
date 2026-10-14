@@ -1,4 +1,6 @@
 export interface DiscountDefinitionConfiguration {
+  serverVersion?: number;
+  serverValue?: string;
   id: string;
   label: string;
   method: "fixed" | "percentage" | "final_price";

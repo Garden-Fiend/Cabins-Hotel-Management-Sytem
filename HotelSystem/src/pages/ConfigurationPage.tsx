@@ -167,7 +167,7 @@ function fieldsFor(
           kind: "select",
           options: data.inventoryCategories
             .filter((category) => category.enabled && category.type !== "breakfast")
-            .map((category) => ({ value: category.id, label: category.label })),
+            .map((category) => ({ value: category.id, label: category.label + (!category.systemDefined && data.inventoryCategories.some(c => c.systemDefined && c.label.toLowerCase() === category.label.toLowerCase()) ? " (ordinary category)" : "") })),
         },
         { key: "availableForSale", label: "Available for sale", kind: "toggle" },
         { key: "price", label: "Unit price", kind: "number" },
@@ -284,7 +284,7 @@ export function ConfigurationPage() {
   const { stays, reservations, mode, commands } = useReservationDemo();
   const [editingVersion, setEditingVersion] = useState<number | undefined>();
   const [activeSection, setActiveSection] = useState<SectionKey>("roomTypes");
-  const supportedSection = ["roomTypes", "rooms", "durations", "roomTypePrices"].includes(activeSection);
+  const supportedSection = ["roomTypes", "rooms", "durations", "roomTypePrices", "catalogItems"].includes(activeSection);
   const definitionUnavailable = mode === "api" && (!supportedSection || !commands?.saveDefinition);
   const [defaultInclusions, setDefaultInclusions] = useState<NonNullable<RoomTypeConfiguration["defaultInclusions"]>>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -622,7 +622,7 @@ export function ConfigurationPage() {
     if (mode === "api") {
       if (definitionUnavailable || !commands?.saveDefinition) { setNotice("This definition is not yet supported by the API."); return; }
       try {
-        await commands.saveDefinition(activeSection as DefinitionSection, editingId ?? undefined, { ...fields, enabled: fields.enabled ?? true }, editingVersion);
+        await commands.saveDefinition(activeSection as DefinitionSection, editingId ?? undefined, { ...fields, enabled: fields.enabled ?? true }, editingVersion, activeSection === "roomTypes" ? defaultInclusions : undefined);
       } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save. Your draft is retained."); return; }
     } else persist(id, { ...fields, enabled: fields.enabled ?? true }, activeSection === "roomTypes" ? defaultInclusions : undefined);
     setDefaultInclusions([]);
@@ -738,7 +738,7 @@ export function ConfigurationPage() {
       <div className="grid gap-5 xl:grid-cols-[minmax(14rem,0.65fr)_minmax(0,2fr)]">
         <nav aria-label="Configuration categories" className={`${panelClass} h-fit`}>
           <div className="space-y-5">
-          {activeSection === "catalogItems" && <fieldset disabled={mode === "api"}><BreakfastEligibilityEditor /></fieldset>}
+          {activeSection === "catalogItems" && <fieldset disabled={mode === "api" && !commands?.canEditBreakfast}><BreakfastEligibilityEditor /></fieldset>}
             {(["Rooms & Inventory", "Booking", "Catalog", "Pricing", "Operations"] as const).map(
               (group) => (
                 <section key={group}>
@@ -771,7 +771,7 @@ export function ConfigurationPage() {
 
         <fieldset disabled={definitionUnavailable || (mode === "api" && commands?.busy)} className="min-w-0"><div className="space-y-5">
           {activeSection === "bookingSources" ? <BookingChannelsEditor /> : <>
-          {activeSection === "catalogItems" && <fieldset disabled={mode === "api"}><BreakfastEligibilityEditor /></fieldset>}
+          {activeSection === "catalogItems" && <fieldset disabled={mode === "api" && !commands?.canEditBreakfast}><BreakfastEligibilityEditor /></fieldset>}
           <section className={panelClass}>
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-slate-900">
@@ -914,7 +914,7 @@ export function ConfigurationPage() {
                   Reservation blocking behavior is application-defined.
                 </p>
               )}
-              {activeSection === "roomTypes" && <div className="sm:col-span-2"><fieldset disabled={mode === "api"}><RoomTypeInclusionsEditor configuration={configuration} value={defaultInclusions} onChange={setDefaultInclusions} /></fieldset></div>}
+              {activeSection === "roomTypes" && <div className="sm:col-span-2"><fieldset disabled={mode === "api" && !commands?.canEditInclusions}><RoomTypeInclusionsEditor configuration={configuration} value={defaultInclusions} onChange={setDefaultInclusions} /></fieldset></div>}
               <div className="flex items-center gap-2 sm:col-span-2">
                 <button
                   type="submit"

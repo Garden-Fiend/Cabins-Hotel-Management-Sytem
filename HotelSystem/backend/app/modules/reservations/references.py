@@ -9,18 +9,28 @@ from app.models import (
     booking_sources,
     categories,
     companies,
+    discount_presets,
     durations,
     products,
     rates,
     room_types,
     rooms,
 )
-from app.modules.configuration.schemas import CategoryRead, ProductRead
-from app.modules.reservations.schemas import DTO, Minor, Positive
+from app.modules.configuration.breakfast import read_eligibility
+from app.modules.configuration.schemas import CategoryRead, DiscountPresetRead, ProductRead
+from app.modules.reservations.inclusions import read_defaults
+from app.modules.reservations.schemas import (
+    DTO,
+    BreakfastEligibility,
+    DefaultInclusion,
+    Minor,
+    Positive,
+)
 from app.modules.reservations.services import ReservationService
 
 
 class CompanyRead(DTO):
+    breakfast_version: Positive = 1
     id: UUID
     name: str
     currency: Literal["PHP"]
@@ -30,6 +40,7 @@ class CompanyRead(DTO):
 
 
 class RoomTypeRead(DTO):
+    default_inclusions: tuple[DefaultInclusion, ...] = ()
     id: UUID
     version: Positive
     archived: bool
@@ -100,6 +111,8 @@ class SourceRead(DTO):
 
 
 class ReferenceRead(DTO):
+    discount_presets: list[DiscountPresetRead] = Field(default_factory=list)
+    breakfast_eligible_items: list[BreakfastEligibility] = Field(default_factory=list)
     capabilities: tuple[str, ...] = (
         "reservation.lifecycle.v1",
         "room.readiness.v1",
@@ -107,8 +120,13 @@ class ReferenceRead(DTO):
         "reservation.guest-edit.v1",
         "reservation.stay-edit.v1",
         "reservation.adjustments.v1",
+        "reservation.manual-discounts.v1",
+        "reservation.discount-presets.v1",
         "configuration.catalog.v1",
         "reservation.purchases.v1",
+        "reservation.extra-charges.v1",
+        "reservation.inclusions.v1",
+        "reservation.breakfast.v1",
         "room.status.v1",
     )
     company: CompanyRead
@@ -127,6 +145,7 @@ def read_references(service: ReservationService) -> ReferenceRead:
         session.execute(sa.text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
         company = service.owned(session, companies, service.context.company_id)
         result = {"company": dict(company)}
+        result["breakfast_eligible_items"] = read_eligibility(session, service.context.company_id)
         for table, model in (
             (room_types, RoomTypeRead),
             (rooms, RoomRead),
@@ -135,6 +154,7 @@ def read_references(service: ReservationService) -> ReferenceRead:
             (booking_sources, SourceRead),
             (categories, CategoryRead),
             (products, ProductRead),
+            (discount_presets, DiscountPresetRead),
         ):
             rows = session.execute(
                 sa.select(table)
@@ -144,6 +164,14 @@ def read_references(service: ReservationService) -> ReferenceRead:
                 .order_by(table.c.id)
             ).mappings()
             result["rates" if table is rates else table.name] = [
-                model(**{field: row[field] for field in model.model_fields}) for row in rows
+                model(
+                    **{
+                        field: read_defaults(session, service.context.company_id, row["id"])
+                        if field == "default_inclusions"
+                        else row[field]
+                        for field in model.model_fields
+                    }
+                )
+                for row in rows
             ]
         return ReferenceRead(**result)

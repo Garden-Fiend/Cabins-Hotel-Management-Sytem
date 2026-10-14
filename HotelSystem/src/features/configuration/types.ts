@@ -111,6 +111,7 @@ export interface HotelConfigurationData {
   bookingSources: BookingSourceConfiguration[];
   channelAgreements?: ChannelAgreement[];
   breakfastEligibleItems?: { inventoryItemId: string; kind: BreakfastProductType; enabled: boolean }[];
+  breakfastVersion?: number;
   catalogItems: CatalogConfiguration[];
   inventoryCategories: InventoryCategoryConfiguration[];
   roomTypePrices: RoomTypePriceConfiguration[];

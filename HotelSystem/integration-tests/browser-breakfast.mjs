@@ -1,0 +1,228 @@
+import { chromium, expect } from '@playwright/test';
+import { spawn } from 'node:child_process';
+import { createWriteStream } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
+
+const api = process.env.HMS_INTEGRATION_API, report = process.env.HMS_INTEGRATION_REPORT;
+if (!api || !report) throw new Error('Use run-inclusions.py and its synthetic hms_test company.');
+const processes = [], logs = [], checks = [];
+let browser, context, demo, page;
+async function server(port, mode) {
+  const log = createWriteStream(resolve(report, `vite-${mode}.log`)); logs.push(log);
+  const child = spawn(process.execPath, [resolve('node_modules/vite/bin/vite.js'), '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { env: { ...process.env, VITE_HMS_DATA_MODE: mode, VITE_HMS_API_URL: api }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  processes.push(child); child.stdout.pipe(log); child.stderr.pipe(log);
+  for (let i=0;i<100;i++) {
+    if (child.exitCode !== null) throw new Error('Owned Vite exited');
+    try { if ((await fetch(`http://127.0.0.1:${port}`)).ok) return; } catch { /* starting */ }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  throw new Error('Vite readiness timeout');
+}
+try {
+  await Promise.all([server(5183, 'api'), server(5184, 'demo')]);
+  browser = await chromium.launch({ headless: true });
+  context = await browser.newContext({ timezoneId: 'Asia/Manila', viewport: { width: 1600, height: 1050 }, recordVideo: { dir: resolve(report,'video') } });
+  await context.tracing.start({ screenshots: true, snapshots: true });
+  page = await context.newPage();
+  const fail=route=>route.abort('failed');
+  const refs=async()=>(await context.request.get(`${api}/api/v1/reference-data`)).json();
+  const records=async()=>(await context.request.get(`${api}/api/v1/reservations`)).json();
+  const write=async(path,data)=>{const r=await context.request.post(`${api}/api/v1/${path}`,{data,headers:{'Idempotency-Key':randomUUID()}});expect(r.ok()).toBe(true);return r.json();};
+  const original=await refs();
+  const category=await write('configuration/categories',{label:'PW Breakfast products',type:'ordinary'});
+  const meal=await write('configuration/products',{label:'PW Breakfast Meal',category_id:category.id,unit_amount_minor:15000});
+  const beverage=await write('configuration/products',{label:'PW Coffee',category_id:category.id,unit_amount_minor:5000});
+  const night=await write('configuration/durations',{label:'PW Two nights',kind:'overnight',nights:2});
+  await write('configuration/rates',{room_type_id:original.room_types[0].id,booking_kind:'overnight',unit_amount_minor:225075});
+  await page.goto('http://127.0.0.1:5183/inventory');
+  await page.getByRole('button',{name:/^Breakfast Items/}).click();
+  await page.getByRole('button',{name:'Configure breakfast',exact:true}).click();
+  let dialog=page.getByRole('dialog',{name:'Breakfast Configuration',exact:true});
+  await dialog.getByLabel('Breakfast eligible: PW Breakfast Meal',{exact:true}).check();
+  await dialog.getByLabel('Breakfast eligible: PW Coffee',{exact:true}).check();
+  await dialog.getByLabel('Breakfast kind: PW Coffee',{exact:true}).selectOption('beverage');
+  await context.route(`${api}/api/v1/configuration/breakfast`,fail);
+  await dialog.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(dialog.getByRole('status')).toContainText('not confirmed');
+  await expect(dialog.getByLabel('Breakfast eligible: PW Coffee',{exact:true})).toBeChecked();
+  await context.unroute(`${api}/api/v1/configuration/breakfast`,fail);
+  await dialog.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(dialog.getByRole('status')).toContainText('committed to PostgreSQL');
+  await dialog.getByRole('button',{name:'Close popup',exact:true}).click();
+  await page.reload();
+  await page.getByRole('button',{name:/^Breakfast Items/}).click();
+  await expect(page.getByRole('button',{name:/PW Breakfast Meal/})).toBeVisible();
+  await expect(page.getByRole('button',{name:/PW Coffee/})).toBeVisible();
+  await page.getByRole('button',{name:'Configure breakfast',exact:true}).click();
+  dialog=page.getByRole('dialog',{name:'Breakfast Configuration',exact:true});
+  await expect(dialog.getByLabel('Breakfast kind: PW Coffee',{exact:true})).toHaveValue('beverage');
+  await dialog.getByRole('button',{name:'Close popup',exact:true}).click();
+  checks.push('Original Inventory virtual breakfast view and eligibility dialog persist meal/beverage kinds; failed configuration save retains draft and retries');
+
+  await page.goto('http://127.0.0.1:5183/configuration');
+  await page.getByRole('button',{name:'Inclusions & Extras',exact:true}).click();
+  let editor=page.getByRole('heading',{name:'Breakfast Configuration: Eligible Items',exact:true}).first().locator('..');
+  await editor.getByLabel('Breakfast eligible: PW Breakfast Meal',{exact:true}).uncheck();
+  await editor.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(editor.getByRole('status')).toContainText('committed to PostgreSQL');
+  expect((await refs()).breakfast_eligible_items.find(i=>i.product_id===meal.id).enabled).toBe(false);
+  await editor.getByLabel('Breakfast eligible: PW Breakfast Meal',{exact:true}).check();
+  await editor.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(editor.getByRole('status')).toContainText('committed to PostgreSQL');
+  await page.reload();
+  await page.getByRole('button',{name:'Inclusions & Extras',exact:true}).click();
+  editor=page.getByRole('heading',{name:'Breakfast Configuration: Eligible Items',exact:true}).first().locator('..');
+  await expect(editor.getByLabel('Breakfast eligible: PW Breakfast Meal',{exact:true})).toBeChecked();
+  const secondEditor=page.getByRole('heading',{name:'Breakfast Configuration: Eligible Items',exact:true}).nth(1).locator('..');
+  await secondEditor.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(secondEditor.getByRole('status')).toContainText('committed to PostgreSQL');
+  await editor.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(editor.getByRole('status')).toContainText('not confirmed');
+  await expect(editor.getByLabel('Breakfast eligible: PW Coffee',{exact:true})).toBeChecked();
+  await editor.getByRole('button',{name:'Load latest breakfast configuration for review',exact:true}).click();
+  await expect(editor.getByRole('status')).toContainText('loaded for review');
+  await editor.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(editor.getByRole('status')).toContainText('committed to PostgreSQL');
+  checks.push('Both original Configuration breakfast editors persist eligibility; stale saves retain drafts and explicit review retries against the current version');
+
+  const date=new Date(Date.now()+72*3600000);
+  const day=new Date(date.getTime()+8*3600000).toISOString().slice(0,10);
+  const serviceDate=offset=>new Date(Date.parse(`${day}T00:00:00+08:00`)+(offset*24+8)*3600000).toISOString().slice(0,10);
+  const d1=serviceDate(1), d2=serviceDate(2);
+  const status=(p,d,g)=>p.getByLabel(`Breakfast Room 101 ${d} Guest ${g} status`,{exact:true});
+  await page.goto('http://127.0.0.1:5183/');
+  await page.getByRole('button',{name:'+ Create Reservation',exact:true}).click();
+  let pane=page.getByRole('dialog',{name:'Create reservation',exact:true});
+  await pane.getByRole('button',{name:'+ Create new guest',exact:true}).click();
+  await pane.getByLabel('Full name',{exact:false}).fill('PW Breakfast Guest');
+  await pane.getByRole('button',{name:'Use guest',exact:true}).click();
+  await pane.getByLabel('Check-in',{exact:false}).fill(`${day}T14:00`);
+  await pane.getByLabel(/^Duration/).selectOption(night.id);
+  await pane.getByLabel('Choose available room',{exact:true}).selectOption('101');
+  await pane.getByRole('button',{name:'+ Add room',exact:true}).click();
+  if(await pane.getByRole('button',{name:'Configure',exact:true}).count()) await pane.getByRole('button',{name:'Configure',exact:true}).click();
+  await pane.getByLabel('Adults',{exact:true}).fill('1');
+  await pane.getByLabel('Children',{exact:true}).fill('1');
+  await expect(status(pane,d1,1)).toHaveValue('unrecorded');
+  await status(pane,d1,1).selectOption('included');
+  await status(pane,d1,2).selectOption('skipped');
+  await status(pane,d2,1).selectOption('included');
+  await pane.locator('summary').filter({hasText:'Reservation note'}).click({position:{x:10,y:10}});
+  await pane.getByLabel('Reservation note',{exact:true}).fill('PW Breakfast booking');
+  await context.route(`${api}/api/v1/reservations`,fail);
+  await pane.getByRole('button',{name:'Create Reservation',exact:true}).click();
+  await expect(pane.getByRole('alert')).toContainText('not confirmed');
+  await expect(status(pane,d1,1)).toHaveValue('included');
+  await context.unroute(`${api}/api/v1/reservations`,fail);
+  expect(await records()).toHaveLength(0);
+  await pane.getByRole('button',{name:'Create Reservation',exact:true}).click();
+  await expect(pane).toHaveCount(0); await page.reload();
+  let saved=(await records())[0];
+  expect(saved.pricing.snapshot.total_minor).toBe(450150);
+  expect(saved.allocation.breakfast).toHaveLength(3);
+  expect(saved.allocation.breakfast.every(i=>i.unit_amount_minor===0&&i.amount_minor===0)).toBe(true);
+  checks.push('Dashboard nightly create records optional per-guest/service-date included/skipped choices with zero charges; failed save retains draft and retry survives refresh');
+
+  async function edit(){
+    await page.goto(`http://127.0.0.1:5183/reservations/${saved.id}`);
+    await page.getByRole('button',{name:'Edit details',exact:true}).click();
+    const p=page.getByRole('dialog',{name:'Edit reservation',exact:true});
+    await p.getByRole('button',{name:'Configure',exact:true}).click();return p;
+  }
+  pane=await edit();
+  await expect(status(pane,d1,2)).toHaveValue('skipped');
+  await pane.getByLabel('Add purchased item',{exact:true}).selectOption(meal.id);
+  await pane.getByRole('button',{name:'Save Changes',exact:true}).click();
+  await expect(pane).toHaveCount(0);saved=(await records())[0];
+  expect(saved.pricing.snapshot.total_minor).toBe(465150);
+  expect(saved.pricing.snapshot.charges[0]).toMatchObject({usage:'purchase',unit_amount_minor:15000,quantity:1});
+  expect(saved.allocation.breakfast.every(i=>i.amount_minor===0)).toBe(true);
+  await page.goto('http://127.0.0.1:5183/inventory');
+  await page.getByRole('button',{name:/PW Breakfast Meal/}).click();
+  dialog=page.getByRole('dialog',{name:'Item details: PW Breakfast Meal',exact:true});
+  await dialog.getByLabel('Product name',{exact:true}).fill('PW Renamed Breakfast Meal');
+  await dialog.getByLabel('Unit price',{exact:false}).fill('999.99');
+  await dialog.getByRole('button',{name:'Save product',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  pane=await edit();
+  await status(pane,d1,2).selectOption('included');
+  await context.route(`${api}/api/v1/reservations/${saved.id}/edit-breakfast`,fail);
+  await pane.getByRole('button',{name:'Save Changes',exact:true}).click();
+  await expect(pane.getByRole('alert')).toContainText('not confirmed');
+  await expect(status(pane,d1,2)).toHaveValue('included');
+  await context.unroute(`${api}/api/v1/reservations/${saved.id}/edit-breakfast`,fail);
+  const beforePrice=saved.pricing;
+  await pane.getByRole('button',{name:'Save Changes',exact:true}).click();
+  await expect(pane).toHaveCount(0);await page.reload(); saved=(await records())[0];
+  expect(saved.pricing).toEqual(beforePrice);
+  expect(saved.allocation.breakfast.find(i=>i.service_date===d1&&i.guest_number===1).meal_label).toBe('PW Breakfast Meal');
+  expect(saved.allocation.breakfast.find(i=>i.service_date===d1&&i.guest_number===2).meal_label).toBe('PW Renamed Breakfast Meal');
+  await page.goto(`http://127.0.0.1:5183/reservations/${saved.id}/print`);
+  await expect(page.locator('[data-reservation-print-document]')).toContainText('PW Breakfast Meal');
+  await expect(page.locator('[data-reservation-print-document]')).toContainText('4,651.50');
+  await page.screenshot({path:resolve(report,'breakfast-print.png'),fullPage:true});
+  checks.push('Expanded-detail breakfast edits retain failed drafts, preserve per-slot historical labels and pricing; ordinary meal purchases remain separately billed at captured prices');
+
+  pane=await edit();
+  await status(pane,d2,1).selectOption('skipped');
+  const remote=await context.request.post(`${api}/api/v1/reservations/${saved.id}/edit-breakfast`,{headers:{'Idempotency-Key':randomUUID()},data:{expected_version:saved.version,guest_id:saved.guest.id,breakfast:[...saved.allocation.breakfast.map(i=>({service_date:i.service_date,guest_number:i.guest_number,status:i.status,...(i.status==='included'?{meal_id:i.meal_id,beverage_id:i.beverage_id}:{})})),{service_date:d2,guest_number:2,status:'skipped'}]}});
+  expect(remote.status()).toBe(200);
+  await pane.getByRole('button',{name:'Save Changes',exact:true}).click();
+  await expect(pane.getByRole('button',{name:/Load latest version for review/})).toBeVisible();
+  await pane.getByRole('button',{name:/Load latest version for review/}).click();
+  await expect(status(pane,d2,1)).toHaveValue('skipped');
+  await pane.getByRole('button',{name:'Save Changes',exact:true}).click();
+  await expect(pane).toHaveCount(0);saved=(await records())[0];
+  expect(saved.allocation.breakfast.find(i=>i.service_date===d2&&i.guest_number===2).status).toBe('skipped');
+  expect(saved.pricing).toEqual(beforePrice);
+  checks.push('Reservation 409 review retains a local breakfast edit and untouched remotely added service-date/guest choice');
+
+  await page.goto('http://127.0.0.1:5183/');
+  await page.getByRole('button',{name:'month',exact:true}).click();
+  await page.getByRole('button',{name:/PW Breakfast Guest, Room 101, confirmed/}).press('Enter');
+  await page.getByRole('button',{name:'Edit',exact:true}).click();
+  pane=page.getByRole('dialog',{name:'Edit reservation',exact:true});
+  await pane.getByRole('button',{name:'Configure',exact:true}).click();
+  await status(pane,d2,1).selectOption('unrecorded');
+  await status(pane,d2,2).selectOption('unrecorded');
+  await pane.getByRole('button',{name:'Save Changes',exact:true}).click();
+  await expect(pane).toHaveCount(0);await page.reload();saved=(await records())[0];
+  expect(saved.allocation.breakfast).toHaveLength(2);expect(saved.pricing).toEqual(beforePrice);
+  await page.getByRole('button',{name:'month',exact:true}).click();
+  const later=new Date(date.getTime()+5*24*3600000), laterDay=new Date(later.getTime()+8*3600000).toISOString().slice(0,10);
+  const laterLabel=new Intl.DateTimeFormat('en-PH',{dateStyle:'medium',timeZone:'Asia/Manila'}).format(later);
+  await page.getByRole('button',{name:`Select Room 101 on ${laterLabel}`,exact:true}).click();
+  pane=page.getByRole('dialog',{name:'Create reservation',exact:true});
+  await pane.getByRole('button',{name:/PW Breakfast Guest/}).click();
+  await pane.getByLabel(/^Duration/).selectOption(night.id);
+  if(await pane.getByRole('button',{name:'Configure',exact:true}).count()) await pane.getByRole('button',{name:'Configure',exact:true}).click();
+  const laterService=new Date(Date.parse(`${laterDay}T00:00:00+08:00`)+32*3600000).toISOString().slice(0,10);
+  await status(pane,laterService,1).selectOption('included');
+  await pane.getByRole('button',{name:'Create Reservation',exact:true}).click();
+  await expect(pane).toHaveCount(0);await page.reload();
+  expect(await records()).toHaveLength(2);
+  checks.push('Calendar summary Edit clears a service-date choice without repricing; empty-cell nightly create persists complimentary selections');
+
+  demo=await browser.newContext({timezoneId:'Asia/Manila'});const dp=await demo.newPage();let calls=0;
+  dp.on('request',r=>{if(r.url().startsWith(api))calls++;});
+  await dp.goto('http://127.0.0.1:5184/inventory');
+  await dp.getByRole('button',{name:/^Breakfast Items/}).click();
+  await dp.getByRole('button',{name:'Configure breakfast',exact:true}).click();
+  const dd=dp.getByRole('dialog',{name:'Breakfast Configuration',exact:true});
+  await dd.getByRole('button',{name:'Save breakfast configuration',exact:true}).click();
+  await expect(dd.getByRole('status')).toContainText('saved for this session');
+  expect(calls).toBe(0);
+  checks.push('Demo breakfast eligibility remains independent and functional with zero API calls');
+  await writeFile(resolve(report,'results.json'),JSON.stringify({status:'PASS',checks,reservation_id:saved.id},null,2));
+  console.log(`PASS: ${checks.length} breakfast browser checks`);
+} catch(error) {
+  if(page) { await page.screenshot({path:resolve(report,'failure.png'),fullPage:true}); await writeFile(resolve(report,'failure.html'),await page.content()); }
+  await writeFile(resolve(report,'results.json'),JSON.stringify({status:'FAIL',checks,error:String(error)},null,2)); throw error;
+} finally {
+  if(context) { await context.tracing.stop({path:resolve(report,'trace.zip')}); await context.close(); }
+  if(demo) await demo.close(); if(browser) await browser.close();
+  for(const child of processes) { child.kill(); await new Promise(r=>child.exitCode!==null?r():child.once('exit',r)); }
+  for(const log of logs) log.end();
+}

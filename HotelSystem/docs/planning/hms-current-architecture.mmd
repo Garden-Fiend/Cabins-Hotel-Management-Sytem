@@ -1,4 +1,4 @@
-%% Current implemented HMS architecture, 2026-10-13.
+%% Current implemented HMS architecture, 2026-10-14.
 %% Solid arrows represent existing code paths, not a claim that each process is running.
 %% Explicit API mode is connected; demo remains independent. Original PATCH remains notes/counts only.
 flowchart TB
@@ -35,13 +35,13 @@ flowchart TB
         subgraph MODEL["SQLAlchemy table definitions - schema only"]
             CORE["Core<br/>Companies and hotel time defaults<br/>Operational audit, mutation receipts"]
             RES["Reservations boundary<br/>Guests, rooms, room types, durations, rates,<br/>booking sources, reservations, allocations"]
-            BILL["Billing boundary<br/>Append-only operational pricing revisions<br/>Server-captured purchases and signed adjustments<br/>No accounting journal or posting"]
+            BILL["Billing boundary<br/>Append-only operational pricing revisions<br/>Captured purchases and distinct extra charges<br/>Signed adjustments, manual discounts and captured fixed/percentage presets<br/>Final-price overrides unavailable<br/>No accounting journal or posting"]
         end
-        CATALOG["Configuration boundary<br/>Owned versioned category/product definitions<br/>No stock movement ledger"]
+        CATALOG["Configuration boundary<br/>Owned category/product and fixed/percentage preset definitions<br/>Protected extras, inclusions and virtual breakfast view<br/>Owned defaults and meal/beverage eligibility<br/>Captured allocation entitlements/selections - zero breakfast charge<br/>No stock movement ledger"]
         CATALOG --> ALEMBIC
         ROUTES --> CATALOG
         CATALOG --> ENGINE
-        ALEMBIC["Alembic<br/>Seven frozen schema migrations<br/>Current head: 54e8c2a17d90<br/>Ownership, overlap, versions, reference metadata, room status and catalog"]
+        ALEMBIC["Alembic<br/>Thirteen frozen schema migrations<br/>Current head: 2cd0458fa054<br/>Ownership, overlap, versions, protected catalog, inclusions, breakfast and presets"]
         SEED["Explicit development seed command<br/>Transactional, repeatable reference inserts<br/>Does not overwrite existing values"]
         TESTS["Opt-in PostgreSQL and HTTP tests<br/>Concurrency, rollback, server pricing and durable replay<br/>Real API restart verification in hms_test"]
         API --> LIVE
@@ -63,7 +63,7 @@ flowchart TB
 
     subgraph DOCKER["Own Docker Compose project: hms-local-foundation"]
         PG["PostgreSQL 17.6<br/>Host 127.0.0.1:55432 → container 5432"]
-        DEV[("hms_dev<br/>14 tables in hms schema<br/>Minimal explicit references + existing local records<br/>User business data preserved")]
+        DEV[("hms_dev<br/>17 tables in hms schema<br/>Minimal explicit references + existing local records<br/>User business data preserved")]
         TESTDB[("hms_test<br/>Separate integration-test database<br/>Same migration history")]
         VOLUME[("Own persistent Docker volume<br/>hms-local-foundation_hms_pgdata")]
         PG --> DEV
@@ -74,6 +74,9 @@ flowchart TB
     ENGINE --> PG
     API_CLIENT --> API
     ALEMBIC --> PG
+
+    REHEARSAL["Explicit recovery rehearsal<br/>New isolated PostgreSQL cluster on loopback 55433<br/>hms_rehearsal to fresh hms_restore<br/>Migrations, seed replay, dump/restore and canonical/hash comparisons verified<br/>Owned containers/volumes retained stopped"]
+    REHEARSAL --> ALEMBIC
 
     EXCLUDED["Outside this architecture<br/>ZKBioTime: no shared Python, database or storage<br/>Supabase, native accounting and Odoo: not implemented"]
 

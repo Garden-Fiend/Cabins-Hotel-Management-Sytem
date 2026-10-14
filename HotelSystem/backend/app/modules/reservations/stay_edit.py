@@ -19,6 +19,8 @@ from app.models import (
 )
 from app.modules.billing.adjustments import adjusted_snapshot
 from app.modules.billing.charges import capture_charges
+from app.modules.reservations.breakfast import capture_breakfast
+from app.modules.reservations.inclusions import capture_inclusions
 from app.modules.reservations.pricing import HOTEL_ZONE, capture_price, stay_end
 from app.modules.reservations.schemas import (
     AdjustmentCapture,
@@ -177,6 +179,7 @@ def edit_stay(service, id: UUID, request: ReservationStayEdit, key: UUID):
         )
         if (
             purchases
+            or "discounts" in request.model_fields_set
             or "adjustments" in request.model_fields_set
             or (snapshot is not None and before["pricing"]["snapshot"]["schema_version"] >= 2)
         ):
@@ -185,6 +188,8 @@ def edit_stay(service, id: UUID, request: ReservationStayEdit, key: UUID):
                 if snapshot is not None
                 else before["pricing"]["snapshot"]
             )
+            if "discounts" in before["pricing"]["snapshot"]:
+                captured = {**captured, "discounts": before["pricing"]["snapshot"]["discounts"]}
             if "charges" in before["pricing"]["snapshot"]:
                 captured = {**captured, "charges": before["pricing"]["snapshot"]["charges"]}
             if purchases:
@@ -204,6 +209,9 @@ def edit_stay(service, id: UUID, request: ReservationStayEdit, key: UUID):
             snapshot = adjusted_snapshot(
                 captured,
                 adjustments,
+                request.discounts if "discounts" in request.model_fields_set else None,
+                service=service,
+                session=session,
             )
         counts = request.model_dump(exclude_unset=True, include={"adults", "children"})
         session.execute(
@@ -214,6 +222,30 @@ def edit_stay(service, id: UUID, request: ReservationStayEdit, key: UUID):
                 duration_id=request.duration_id,
                 scheduled_start=request.scheduled_start,
                 scheduled_end=end,
+                breakfast=capture_breakfast(
+                    service,
+                    session,
+                    request.scheduled_start,
+                    end,
+                    (
+                        snapshot.lines[0].booking_kind
+                        if snapshot
+                        else before["pricing"]["snapshot"]["lines"][0]["booking_kind"]
+                    ),
+                    counts.get("adults", allocation["adults"])
+                    + counts.get("children", allocation["children"]),
+                    allocation["breakfast"],
+                    request.breakfast if "breakfast" in request.model_fields_set else None,
+                ),
+                inclusions=capture_inclusions(
+                    service,
+                    session,
+                    room_type["id"],
+                    allocation["inclusions"],
+                    request.inclusions if "inclusions" in request.model_fields_set else None,
+                    switch=str(room_type["id"])
+                    != before["pricing"]["snapshot"]["lines"][0]["room_type_id"],
+                ),
                 **counts,
             )
         )

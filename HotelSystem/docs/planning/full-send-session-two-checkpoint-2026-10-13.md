@@ -154,3 +154,10 @@ tracking; operational purchases/adjustments are not accounting invoices or payme
 sequential scope/eligible-balance/capping rules, retaining captured purchase/accommodation prices and
 historical revisions; then connect the original discount controls and verify failure/concurrency/refresh.
 Keep preset configuration, entitlements, payments and multi-room expansion separately bounded.
+
+
+## Wednesday continuation
+
+Manual discounts were subsequently implemented in the original API-backed controls.
+See [October 14 checkpoint](manual-discounts-checkpoint-2026-10-14.md) for current verification,
+limits and the next bounded slice. The October 13 results above remain historical evidence.

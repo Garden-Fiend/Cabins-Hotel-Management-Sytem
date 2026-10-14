@@ -18,6 +18,8 @@ companies = sa.Table(
     "companies",
     Base.metadata,
     identity(),
+    sa.Column("breakfast_version", sa.Integer, nullable=False, server_default="1"),
+    sa.CheckConstraint("breakfast_version > 0", name="breakfast_version_positive"),
     sa.Column("name", sa.Text, nullable=False),
     sa.Column("currency", sa.String(3), nullable=False),
     sa.Column("hotel_timezone", sa.Text, nullable=False),

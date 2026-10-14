@@ -169,6 +169,10 @@ reservations = sa.Table(
 allocations = sa.Table(
     "room_allocations",
     Base.metadata,
+    sa.Column("breakfast", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
+    sa.CheckConstraint("jsonb_typeof(breakfast) = 'array'", name="breakfast_array"),
+    sa.Column("inclusions", JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")),
+    sa.CheckConstraint("jsonb_typeof(inclusions) = 'array'", name="inclusions_array"),
     identity(),
     ownership(),
     sa.Column(

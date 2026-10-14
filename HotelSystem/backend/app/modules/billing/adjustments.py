@@ -1,23 +1,81 @@
 """Saved operational adjustment command. No invoice, payment or ledger posting."""
 
-from uuid import uuid4
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 
 from app.errors import DomainError
 from app.models import allocations, audit_events, guests, pricing_revisions, reservations
 from app.modules.billing.charges import capture_charges
+from app.modules.reservations.breakfast import capture_breakfast
+from app.modules.reservations.inclusions import capture_inclusions
 from app.modules.reservations.schemas import (
     MAX_MINOR,
     AdjustedPricingSnapshot,
     AdjustmentCapture,
     ChargedPricingSnapshot,
+    DiscountedPricingSnapshot,
+    ManualDiscountIntent,
     ReservationRead,
 )
 from app.mutations import replay_or_lock, request_hash, save_receipt
 
 
-def adjusted_snapshot(captured, adjustments):
+def adjusted_snapshot(captured, adjustments, discounts=None, *, service=None, session=None):
+    if discounts is not None or "discounts" in captured:
+        from app.modules.billing.discounts import calculate_discounts
+
+        old = {item["id"]: item for item in captured.get("discounts", [])}
+        selected = (
+            discounts
+            if discounts is not None
+            else tuple(
+                ManualDiscountIntent.model_validate(
+                    {name: item[name] for name in ManualDiscountIntent.model_fields if name in item}
+                )
+                for item in old.values()
+            )
+        )
+        now = datetime.now(UTC).isoformat()
+        from app.modules.billing.presets import capture_preset_intent
+
+        intents = [
+            capture_preset_intent(service, session, captured, item, old.get(str(item.id)), now)
+            for item in selected
+        ]
+        preset_targets = [
+            (d["scope"], d["preset_id"] if d["scope"] == "reservation" else d["target_id"])
+            for d in intents
+            if d["provenance"] == "preset"
+        ]
+        if len(set(preset_targets)) != len(preset_targets):
+            raise DomainError(
+                "duplicate_preset",
+                "Select one preset per room/item and apply a reservation preset only once",
+                422,
+            )
+        raw = {
+            **captured,
+            "adjustments": [item.model_dump(mode="json") for item in adjustments],
+            "charges": captured.get("charges", []),
+        }
+        try:
+            result, reduction, total = calculate_discounts(raw, intents)
+        except ValueError as error:
+            raise DomainError("invalid_discount", str(error), 422) from None
+        return DiscountedPricingSnapshot(
+            **{
+                **raw,
+                "schema_version": 4,
+                "calculation_version": "direct-manual-discounts-v1",
+                "pipeline_version": 2,
+                "discounts": result,
+                "discount_total_minor": reduction,
+                "total_minor": total,
+            }
+        )
+
     subtotal = sum(line["amount_minor"] for line in captured["lines"]) + sum(
         item["amount_minor"] for item in captured.get("charges", [])
     )
@@ -44,8 +102,28 @@ def adjusted_snapshot(captured, adjustments):
     )
 
 
-def save_adjustments(service, id, request, key, *, purchases=False):
-    operation = "reservation.charges_edit" if purchases else "reservation.billing_edit"
+def save_adjustments(
+    service,
+    id,
+    request,
+    key,
+    *,
+    purchases=False,
+    discounts=False,
+    inclusions=False,
+    breakfast=False,
+):
+    operation = (
+        "reservation.breakfast_edit"
+        if breakfast
+        else "reservation.inclusions_edit"
+        if inclusions
+        else "reservation.discounts_edit"
+        if discounts
+        else "reservation.charges_edit"
+        if purchases
+        else "reservation.billing_edit"
+    )
     digest = request_hash(request, resource_id=id)
     with service.transaction() as session:
         replay = replay_or_lock(session, service.context, operation, key, digest)
@@ -78,7 +156,9 @@ def save_adjustments(service, id, request, key, *, purchases=False):
             raise DomainError("incomplete_reservation", "Reservation requires integrity review")
         previous = service.read_in_transaction(session, reservation).model_dump(mode="json")
         captured = previous["pricing"]["snapshot"]
-        if purchases:
+        if purchases or (
+            (discounts or inclusions or breakfast) and "charges" in request.model_fields_set
+        ):
             captured = {
                 **captured,
                 "charges": [
@@ -93,8 +173,34 @@ def save_adjustments(service, id, request, key, *, purchases=False):
             if "adjustments" in request.model_fields_set
             else tuple(AdjustmentCapture(**item) for item in captured.get("adjustments", []))
         )
-        snapshot = adjusted_snapshot(captured, adjustments)
+        snapshot = adjusted_snapshot(
+            captured,
+            adjustments,
+            request.discounts if "discounts" in request.model_fields_set else None,
+            service=service,
+            session=session,
+        )
         counts = request.model_dump(exclude_unset=True, include={"adults", "children"})
+        if (inclusions or breakfast) and "inclusions" in request.model_fields_set:
+            counts["inclusions"] = capture_inclusions(
+                service,
+                session,
+                UUID(previous["pricing"]["snapshot"]["lines"][0]["room_type_id"]),
+                allocation["inclusions"],
+                request.inclusions,
+            )
+        if breakfast or allocation["breakfast"]:
+            counts["breakfast"] = capture_breakfast(
+                service,
+                session,
+                allocation["scheduled_start"],
+                allocation["scheduled_end"],
+                previous["pricing"]["snapshot"]["lines"][0]["booking_kind"],
+                counts.get("adults", allocation["adults"])
+                + counts.get("children", allocation["children"]),
+                allocation["breakfast"],
+                request.breakfast if "breakfast" in request.model_fields_set else None,
+            )
         if counts:
             session.execute(
                 allocations.update().where(allocations.c.id == allocation["id"]).values(**counts)
@@ -122,29 +228,37 @@ def save_adjustments(service, id, request, key, *, purchases=False):
         )
         if updated is None:
             raise DomainError("version_conflict", "Reservation changed; reload before editing")
-        if previous["pricing"]["revision"] >= 2**31 - 1:
-            raise DomainError("pricing_version_exhausted", "Pricing revision cannot be advanced")
-        session.execute(
-            pricing_revisions.insert().values(
-                id=uuid4(),
-                company_id=service.context.company_id,
-                reservation_id=id,
-                revision=previous["pricing"]["revision"] + 1,
-                reservation_version=updated["version"],
-                currency=snapshot.currency,
-                total_minor=snapshot.total_minor,
-                calculation_version=snapshot.calculation_version,
-                snapshot=snapshot.model_dump(mode="json"),
-                created_at=sa.func.clock_timestamp(),
-            )
+        financial = not (inclusions or breakfast) or bool(
+            request.model_fields_set & {"charges", "discounts", "adjustments"}
         )
+        if financial and previous["pricing"]["revision"] >= 2**31 - 1:
+            raise DomainError("pricing_version_exhausted", "Pricing revision cannot be advanced")
+        if financial:
+            session.execute(
+                pricing_revisions.insert().values(
+                    id=uuid4(),
+                    company_id=service.context.company_id,
+                    reservation_id=id,
+                    revision=previous["pricing"]["revision"] + 1,
+                    reservation_version=updated["version"],
+                    currency=snapshot.currency,
+                    total_minor=snapshot.total_minor,
+                    calculation_version=snapshot.calculation_version,
+                    snapshot=snapshot.model_dump(mode="json"),
+                    created_at=sa.func.clock_timestamp(),
+                )
+            )
         current = service.read_in_transaction(session, updated).model_dump(mode="json")
         session.execute(
             audit_events.insert().values(
                 id=uuid4(),
                 company_id=service.context.company_id,
                 reservation_id=id,
-                event_type="reservation.billing_updated",
+                event_type="reservation.breakfast_updated"
+                if breakfast
+                else "reservation.inclusions_updated"
+                if inclusions
+                else "reservation.billing_updated",
                 reservation_version=updated["version"],
                 actor=service.context.actor,
                 attribution=service.context.attribution,

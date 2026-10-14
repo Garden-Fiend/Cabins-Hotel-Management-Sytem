@@ -1,0 +1,14 @@
+{
+  "status": "FAIL",
+  "container": "hms-recovery-20261014t062852z-ac53730e",
+  "migration_head": "9d54e702b816",
+  "empty_migration_completed": true,
+  "explicit_seed_replay_verified": true,
+  "synthetic_configuration_and_booking_created": true,
+  "dump_and_restore_commands_completed": true,
+  "raw_restore_verified": false,
+  "canonical_restore_verified": false,
+  "failure_stage": "restored_connection_target_validation",
+  "cause": "The runner replaced a substring in both the username and database path. The target guard rejected the resulting username before restored-record verification.",
+  "preservation": "Container and volume retained, stopped. No existing HMS database was targeted. Later successful evidence is separate."
+}

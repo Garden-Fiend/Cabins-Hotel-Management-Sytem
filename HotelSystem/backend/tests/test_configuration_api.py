@@ -157,7 +157,17 @@ def test_catalog_definitions_owned_versioned_replayable_and_exact(config_api):
     assert write(client, "products", dict(body, expected_version=1), saved["id"]).status_code == 409
     refs = client.get("/api/v1/reference-data").json()
     assert refs["catalog_products"] == [updated.json()]
-    assert refs["inventory_categories"] == [category]
+    assert [c for c in refs["inventory_categories"] if not c["system_defined"]] == [category]
+    assert (
+        len(
+            [
+                c
+                for c in refs["inventory_categories"]
+                if c["type"] == "extra" and c["system_defined"]
+            ]
+        )
+        == 1
+    )
     assert write(client, "products", dict(body, label="MINERAL WATER")).status_code == 409
     assert write(client, "products", dict(body, category_id=str(uuid4()))).status_code == 404
     assert (

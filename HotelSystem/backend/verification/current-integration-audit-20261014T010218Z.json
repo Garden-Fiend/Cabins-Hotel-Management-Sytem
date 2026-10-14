@@ -1,0 +1,46 @@
+{
+  "python": "C:\\Users\\Malala\\Documents\\HotelBookingSystem\\HotelSystem\\backend\\.venv\\Scripts\\python.exe",
+  "prefix": "C:\\Users\\Malala\\Documents\\HotelBookingSystem\\HotelSystem\\backend\\.venv",
+  "databases": {
+    "hms_dev": {
+      "migration": "54e8c2a17d90",
+      "timezone": "UTC",
+      "tables": {
+        "inventory_categories": 1,
+        "companies": 1,
+        "catalog_products": 1,
+        "booking_sources": 1,
+        "reservations": 2,
+        "guests": 1,
+        "room_types": 2,
+        "reference_rates": 2,
+        "durations": 2,
+        "mutation_receipts": 13,
+        "operational_audit": 13,
+        "pricing_revisions": 3,
+        "rooms": 4,
+        "room_allocations": 2
+      }
+    },
+    "hms_test": {
+      "migration": "54e8c2a17d90",
+      "timezone": "UTC",
+      "tables": {
+        "room_types": 1,
+        "companies": 1,
+        "durations": 2,
+        "booking_sources": 1,
+        "guests": 0,
+        "reservations": 0,
+        "reference_rates": 2,
+        "mutation_receipts": 0,
+        "catalog_products": 0,
+        "inventory_categories": 0,
+        "operational_audit": 0,
+        "pricing_revisions": 0,
+        "room_allocations": 0,
+        "rooms": 1
+      }
+    }
+  }
+}

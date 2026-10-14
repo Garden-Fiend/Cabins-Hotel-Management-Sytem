@@ -257,7 +257,7 @@ export function RoomsPage() {
     if (mode === "api") {
       if (!commands?.saveDefinition) return;
       try { await commands.saveDefinition("roomTypes", editingRoomTypeId ?? undefined, { label, defaultCapacity,
-        amenities: roomTypeForm.amenities, enabled: next.enabled, archived: next.archived ?? false }, editingTypeVersion); }
+        amenities: roomTypeForm.amenities, enabled: next.enabled, archived: next.archived ?? false }, editingTypeVersion, roomTypeForm.defaultInclusions); }
       catch (error) { setNotice(error instanceof Error ? error.message : "Room type save failed; draft retained."); return; }
     } else setConfiguration((current) => ({
       ...current,
@@ -302,7 +302,7 @@ export function RoomsPage() {
 
   return (
     <div className="space-y-6">
-      {mode === "api" && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">API mode: supported readiness, room status and room/type edits persist. Archive and deletion controls and catalog inclusions are not yet supported.</p>}
+      {mode === "api" && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">API mode: supported readiness, room status, room/type edits and inclusion defaults persist. Room/type archive and deletion controls are not yet supported.</p>}
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
           Inventory
@@ -874,7 +874,7 @@ export function RoomsPage() {
                   )}
                 </div>
               </fieldset>
-              <fieldset disabled={mode === "api"}><RoomTypeInclusionsEditor configuration={configuration} value={roomTypeForm.defaultInclusions} onChange={(defaultInclusions) => setRoomTypeForm((current) => ({ ...current, defaultInclusions }))} /></fieldset>
+              <fieldset disabled={mode === "api" && !commands?.canEditInclusions}><RoomTypeInclusionsEditor configuration={configuration} value={roomTypeForm.defaultInclusions} onChange={(defaultInclusions) => setRoomTypeForm((current) => ({ ...current, defaultInclusions }))} /></fieldset>
               <button disabled={mode === "api" && (!commands?.saveDefinition || commands.busy)} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
                 {editingRoomTypeId ? "Save room type" : "Add room type"}
               </button>

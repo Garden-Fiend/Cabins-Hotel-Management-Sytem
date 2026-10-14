@@ -6,6 +6,8 @@ import { presentReservation } from "./presentation";
 import { useMutation } from "./useMutation";
 import type { CreateInput, GuestInput, LifecycleAction, LifecycleInput } from "./contracts";
 import { reservationEditInput, type ReservationEditInput } from "./reservationEditInput";
+import { manualDiscountInputs } from "./discountInputs";
+import { breakfastInputs } from "./breakfastInputs";
 import { definitionIntent, type DefinitionIntent } from "./definitionInputs";
 
 export function RichApiBridge({ children }: { children: React.ReactNode }) {
@@ -39,12 +41,35 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
       canEditGuest: references.capabilities?.includes("reservation.guest-edit.v1"),
       canEditStay: references.capabilities?.includes("reservation.stay-edit.v1"),
       canEditAdjustments: references.capabilities?.includes("reservation.adjustments.v1"),
+      canEditDiscounts: references.capabilities?.includes("reservation.manual-discounts.v1"),
+      canEditPresets: references.capabilities?.includes("reservation.discount-presets.v1"),
+      loadPresets: async () => richConfiguration(await api.client.references()).discounts,
+      savePreset: references.capabilities?.includes("reservation.discount-presets.v1") ? async (preset, isNew) => {
+        if (preset.method === "final_price") throw new Error("Final-price overrides are not supported yet; your draft is retained.");
+        const result = await definition.submit({ kind: "discount-presets", id: isNew ? undefined : preset.id, body: {
+          label:preset.label,scope:preset.scope,method:preset.method,value:preset.serverValue ?? String(preset.value),currency:"PHP",enabled:preset.enabled,
+          target_room_type_id:preset.scope === "room" ? preset.targetRoomTypeId ?? null : null,target_product_id:preset.scope === "item" ? preset.targetItemId ?? null : null,
+          ...(!isNew ? {expected_version:preset.serverVersion} : {}),
+        }});
+        if (!result) throw new Error("Preset save was not confirmed. Your draft is retained. " + (definition.error || "Review the API error before retrying."));
+      } : undefined,
+      canEditExtraCharges: references.capabilities?.includes("reservation.extra-charges.v1"),
+      canEditInclusions: references.capabilities?.includes("reservation.inclusions.v1"),
+      canEditBreakfast: references.capabilities?.includes("reservation.breakfast.v1"),
+      loadBreakfast: async () => {
+        const latest = await api.client.references();
+        return { version: latest.company.breakfast_version!, items: (latest.breakfast_eligible_items ?? []).map(i => ({ inventoryItemId: i.product_id, kind: i.kind, enabled: i.enabled })) };
+      },
+      saveBreakfast: references.capabilities?.includes("reservation.breakfast.v1") ? async (items, version) => {
+        const result = await definition.submit({ kind: "breakfast", body: { expected_version: version, items: items.map(i => ({ product_id: i.inventoryItemId, kind: i.kind, enabled: i.enabled })) } });
+        if (!result) throw new Error("Breakfast configuration save was not confirmed. Your draft is retained. " + (definition.error || "Review the API error before retrying."));
+      } : undefined,
       canEditPurchases: references.capabilities?.includes("reservation.purchases.v1"),
       canEditRoomStatus: references.capabilities?.includes("room.status.v1"),
       error: create.error || patch.error || guest.error || lifecycle.error || readiness.error || definition.error,
       busy: lifecycle.pending || readiness.pending || definition.pending || create.pending || patch.pending || guest.pending || api.refreshing,
-      saveDefinition: references.capabilities?.includes("configuration.definitions.v1") ? async (section, id, values, version) => {
-        const result = await definition.submit(definitionIntent(section, id, values, configuration, version));
+      saveDefinition: references.capabilities?.includes("configuration.definitions.v1") ? async (section, id, values, version, defaultInclusions) => {
+        const result = await definition.submit(definitionIntent(section, id, values, configuration, version, defaultInclusions));
         if (!result) throw new Error("Configuration save was not confirmed. Your draft is retained. " + (definition.error || "Resolve the API error before retrying."));
       } : undefined,
       readiness: references.capabilities?.includes("room.readiness.v1") ? async (room, state) => {
@@ -65,7 +90,7 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
         try {
           const latest = await api.loadReservation(lastEdit.current);
           reviewed.current = { id: latest.id, version: latest.version };
-          setReviewMessage(`Latest server version ${latest.version}: guest ${latest.guest.name}; room ${latest.pricing.snapshot.lines[0].room_number}; arrival ${latest.allocation.scheduled_start}; duration ${latest.allocation.duration_id}; note “${latest.note}”; adults ${latest.allocation.adults}, children ${latest.allocation.children}. Your draft is unchanged. Review it before saving again.`);
+          setReviewMessage(`Latest server version ${latest.version}: guest ${latest.guest.name}; room ${latest.pricing.snapshot.lines[0].room_number}; arrival ${latest.allocation.scheduled_start}; duration ${latest.allocation.duration_id}; note “${latest.note}”; adults ${latest.allocation.adults}, children ${latest.allocation.children}. discounts ${latest.pricing.snapshot.discounts?.map(d => `${d.label}: ${d.method} ${d.value}`).join(", ") || "none"}; total PHP ${(latest.pricing.snapshot.total_minor / 100).toFixed(2)}. Your draft is unchanged. Review it before saving again.`);
           patch.reviewedLatest();
         } catch (error) { setReviewMessage(error instanceof Error ? error.message : "Unable to load latest version. No retry authorized."); }
       },
@@ -73,7 +98,9 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
         const room = references.rooms.find(r => r.number === input.roomNumber);
         if (!room) throw new Error("Select a server-owned room.");
         const body: CreateInput = { guest_id: input.guestId, booking_source_id: input.bookingSourceId, room_id: room.id,
-          duration_id: input.durationId, scheduled_start: input.start.toISOString(), adults: input.adults, children: input.children, note: input.note };
+          ...(input.breakfast ? { breakfast: breakfastInputs(input.breakfast) } : {}),
+          ...(input.inclusions ? { inclusions: input.inclusions.map(i => ({ product_id: i.catalogId, quantity: i.quantity, ...(i.overridden ? { overridden: true } : {}) })) } : {}),
+          duration_id: input.durationId, scheduled_start: input.start.toISOString(), adults: input.adults, children: input.children, note: input.note, ...(input.discounts?.length ? { discounts: manualDiscountInputs(input.discounts, room.id) } : {}), ...(input.charges?.length ? { charges: input.charges.map(c => ({ id: c.id, product_id: c.catalogId, quantity: c.quantity, usage: c.usage ?? "extra_charge" })) } : {}) };
         const result = await create.submit(body);
         if (!result) throw new Error("Reservation was not confirmed. Resolve the API error below and retry the same draft.");
         return richReservation(result, references);

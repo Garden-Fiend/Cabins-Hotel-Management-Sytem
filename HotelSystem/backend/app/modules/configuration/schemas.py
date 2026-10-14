@@ -1,12 +1,61 @@
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 from uuid import UUID
 
 from pydantic import Field, StrictBool, StrictStr, field_validator, model_validator
 
-from app.modules.reservations.schemas import DTO, Minor, Positive
+from app.modules.reservations.schemas import (
+    DTO,
+    DefaultInclusion,
+    ManualDiscountIntent,
+    Minor,
+    Positive,
+    distinct_inclusions,
+)
+
+
+class DiscountPresetWrite(DTO):
+    label: str = Field(min_length=1, max_length=200)
+    scope: Literal["reservation", "room", "item"]
+    method: Literal["fixed", "percentage"]
+    value: StrictStr = Field(min_length=1, max_length=40)
+    currency: Literal["PHP"] = "PHP"
+    target_room_type_id: UUID | None = None
+    target_product_id: UUID | None = None
+    enabled: StrictBool = True
+
+    @model_validator(mode="after")
+    def valid_definition(self):
+        ManualDiscountIntent(
+            id=UUID(int=1), label=self.label, scope=self.scope, method=self.method, value=self.value
+        )
+        if self.method == "fixed":
+            if Decimal(self.value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) <= 0:
+                raise ValueError("Fixed preset must round to a positive PHP amount")
+        if (self.target_room_type_id is not None) != (self.scope == "room") or (
+            self.target_product_id is not None
+        ) != (self.scope == "item"):
+            raise ValueError("Preset target must match its scope")
+        return self
+
+
+class DiscountPresetEdit(DiscountPresetWrite):
+    expected_version: Positive
+
+
+class DiscountPresetRead(DiscountPresetWrite):
+    id: UUID
+    version: Positive
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def decimal_transport(cls, value):
+        return format(value, "f") if isinstance(value, Decimal) else str(value)
 
 
 class RoomTypeWrite(DTO):
+    default_inclusions: tuple[DefaultInclusion, ...] = Field(default=(), max_length=100)
+    _inclusions_valid = field_validator("default_inclusions")(distinct_inclusions)
     label: str = Field(min_length=1, max_length=200)
     enabled: StrictBool = True
     archived: StrictBool = False
@@ -110,13 +159,15 @@ class CategoryWrite(DTO):
 
 
 class CategoryEdit(CategoryWrite):
+    type: Literal["ordinary", "amenities", "extra", "inclusion", "breakfast"] = "ordinary"
     expected_version: Positive
 
 
 class CategoryRead(CategoryWrite):
+    type: Literal["ordinary", "amenities", "extra", "inclusion", "breakfast"]
     id: UUID
     version: Positive
-    system_defined: Literal[False]
+    system_defined: bool
 
 
 class ProductWrite(DTO):

@@ -84,7 +84,10 @@ export class ApiClient {
   createReservation(body: CreateInput, key: string) { return this.request<ReservationDto>("/reservations", "POST", body, key); }
   patchReservation(id: string, body: PatchInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}`, "PATCH", body, key); }
   editDetails(id: string, body: PatchInput & { guest_id: string }, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-details`, "POST", body, key); }
+  editInclusions(id: string, body: import("./contracts").InclusionsEditInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-inclusions`, "POST", body, key); }
+  editBreakfast(id: string, body: import("./contracts").BreakfastEditInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-breakfast`, "POST", body, key); }
   editStay(id: string, body: import("./contracts").StayEditInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-stay`, "POST", body, key); }
+  editDiscounts(id: string, body: import("./contracts").DiscountsEditInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-discounts`, "POST", body, key); }
   editBilling(id: string, body: import("./contracts").BillingEditInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-billing`, "POST", body, key); }
   editCharges(id: string, body: import("./contracts").ChargesEditInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-charges`, "POST", body, key); }
   editStayCharges(id: string, body: import("./contracts").StayChargesEditInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-stay-charges`, "POST", body, key); }

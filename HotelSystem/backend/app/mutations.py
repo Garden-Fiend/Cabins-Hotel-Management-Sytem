@@ -12,7 +12,19 @@ from app.models import mutation_receipts
 
 
 def request_hash(body, *, resource_id: UUID | None = None, exclude_fields=frozenset()) -> str:
+    # New optional discount input must not alter previously committed command hashes.
+    if "discounts" in type(body).model_fields and "discounts" not in body.model_fields_set:
+        exclude_fields = set(exclude_fields) | {"discounts"}
+    if type(body).__name__ == "ReservationCreate" and "charges" not in body.model_fields_set:
+        exclude_fields = set(exclude_fields) | {"charges"}
+    for optional in ("inclusions", "default_inclusions", "breakfast"):
+        if optional in type(body).model_fields and optional not in body.model_fields_set:
+            exclude_fields = set(exclude_fields) | {optional}
     payload = body.model_dump(mode="json", exclude=exclude_fields)
+    # Adding preset support must preserve hashes of existing manual-discount requests.
+    for discount in payload.get("discounts", []):
+        if discount.get("preset_id") is None:
+            discount.pop("preset_id", None)
     if resource_id is not None:
         payload = {"resource_id": str(resource_id), "body": payload}
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))

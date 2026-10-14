@@ -12,13 +12,17 @@ from uuid import uuid4, uuid5
 
 import httpx
 import sqlalchemy as sa
+from dotenv import dotenv_values
+
 from app.db import make_engine
 from app.models import (
     allocations,
     audit_events,
     booking_sources,
+    breakfast_eligibility,
     categories,
     companies,
+    discount_presets,
     durations,
     guests,
     mutation_receipts,
@@ -26,20 +30,18 @@ from app.models import (
     products,
     rates,
     reservations,
+    room_type_inclusions,
     room_types,
     rooms,
 )
 from app.settings import require_isolated_local_database
-from dotenv import dotenv_values
 
 root = Path(__file__).resolve().parents[1]
 url = dotenv_values(root / "backend" / ".env")["HMS_TEST_DATABASE_URL"]
 require_isolated_local_database(url, test=True)
 for frontend_port in (5183, 5184):
     with socket.socket() as probe:
-        probe.bind(
-            ("127.0.0.1", frontend_port)
-        )  # Fail rather than stop/reuse an existing server.
+        probe.bind(("127.0.0.1", frontend_port))  # Fail rather than stop/reuse an existing server.
 with socket.socket() as probe:
     probe.bind(("127.0.0.1", 0))
     port = probe.getsockname()[1]
@@ -146,6 +148,7 @@ try:
         node_environment.pop(key, None)
     result = subprocess.run(
         ["node", "integration-tests/browser-rich.mjs"],
+        check=False,
         cwd=root,
         env=node_environment,
         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
@@ -177,28 +180,35 @@ try:
             persisted = httpx.get(base + "/api/v1/reservations", timeout=1)
             if persisted.status_code == 200:
                 records = persisted.json()
-                assert len(records) == 2
+                assert len(records) == 4
                 assert any(
                     r["note"] == "My retained draft" and r["allocation"]["adults"] == 5
                     for r in records
                 )
-                refs_after_restart = httpx.get(
-                    base + "/api/v1/reference-data", timeout=1
-                ).json()
-                ready = next(
-                    r for r in refs_after_restart["rooms"] if r["number"] == "101"
+                discount_record = next(r for r in records if r["note"] == "PW Discount booking")
+                assert discount_record["pricing"]["snapshot"]["total_minor"] == 88000
+                assert discount_record["pricing"]["snapshot"]["discounts"][0]["value"] == "20"
+                assert discount_record["pricing"]["snapshot"]["lines"][0]["amount_minor"] == 110000
+                capped_record = next(r for r in records if r["note"] == "PW Calendar Discount")
+                assert capped_record["pricing"]["snapshot"]["total_minor"] == 0
+                assert capped_record["pricing"]["snapshot"]["discount_total_minor"] == 160025
+                refs_after_restart = httpx.get(base + "/api/v1/reference-data", timeout=1).json()
+                assert any(
+                    p["label"] == "PW Extra bed" and p["unit_amount_minor"] == 99999
+                    for p in refs_after_restart["catalog_products"]
                 )
+                ready = next(r for r in refs_after_restart["rooms"] if r["number"] == "101")
                 assert ready["housekeeping"] == "clean" and ready["version"] == 5
                 assert any(
-                    t["label"] == "PW Deluxe Updated"
-                    for t in refs_after_restart["room_types"]
+                    t["label"] == "PW Deluxe Updated" for t in refs_after_restart["room_types"]
                 )
-                assert any(
-                    r["unit_amount_minor"] == 125075
-                    for r in refs_after_restart["rates"]
-                )
+                assert any(r["unit_amount_minor"] == 125075 for r in refs_after_restart["rates"])
                 assert (
-                    refs_after_restart["catalog_products"][0]["unit_amount_minor"]
+                    next(
+                        p
+                        for p in refs_after_restart["catalog_products"]
+                        if p["label"] == "PW Mineral water"
+                    )["unit_amount_minor"]
                     == 25075
                 )
                 assert any(
@@ -220,27 +230,46 @@ try:
             .where(reservations.c.company_id == owner)
         )
         revisions = c.execute(
-            sa.select(
-                pricing_revisions.c.revision, pricing_revisions.c.total_minor
-            ).where(pricing_revisions.c.company_id == owner)
+            sa.select(pricing_revisions.c.revision, pricing_revisions.c.total_minor).where(
+                pricing_revisions.c.company_id == owner
+            )
         ).all()
-        assert count == 2 and sorted(revisions) == [
-            (1, 110000),
-            (1, 110000),
-            (2, 115025),
-            (2, 150050),
-            (3, 105000),
-            (3, 195150),
-            (4, 135075),
-            (5, 150150),
-        ]
-        evidence = dict(
-            company=str(owner),
-            database="hms_test",
-            reservations=count,
-            pricing_revisions=[list(row) for row in revisions],
-            verified_readiness_and_configuration=True,
+        assert count == 4 and sorted(revisions) == sorted(
+            [
+                (1, 110000),
+                (1, 110000),
+                (2, 115025),
+                (2, 150050),
+                (3, 105000),
+                (3, 195150),
+                (4, 135075),
+                (5, 150150),
+                (1, 0),
+                (1, 90000),
+                (2, 85500),
+                (3, 76000),
+                (4, 72000),
+                (5, 88000),
+                (6, 104060),
+                (7, 124120),
+                (8, 88000),
+                (9, 82500),
+                (10, 88000),
+                (11, 168040),
+                (12, 164040),
+                (13, 204060),
+                (14, 88000),
+            ]
         )
+        evidence = {
+            "company": str(owner),
+            "database": "hms_test",
+            "reservations": count,
+            "pricing_revisions": [list(row) for row in revisions],
+            "verified_readiness_and_configuration": True,
+            "verified_manual_discounts_after_restart": True,
+            "verified_extra_charges_after_restart": True,
+        }
         (report / "postgres-verification.json").write_text(
             json.dumps(evidence, indent=2), encoding="utf-8"
         )
@@ -255,7 +284,15 @@ finally:
             process.wait(timeout=5)
     log.close()
     with engine.begin() as c:
+        c.execute(
+            rooms.update()
+            .where(rooms.c.company_id == owner)
+            .values(current_occupancy_allocation_id=None)
+        )
         for table in (
+            breakfast_eligibility,
+            discount_presets,
+            room_type_inclusions,
             products,
             categories,
             mutation_receipts,
@@ -273,6 +310,4 @@ finally:
             c.execute(table.delete().where(table.c.company_id == owner))
         c.execute(companies.delete().where(companies.c.id == owner))
     engine.dispose()
-    print(
-        "Synthetic hms_test company cleaned; development business records were not written."
-    )
+    print("Synthetic hms_test company cleaned; development business records were not written.")

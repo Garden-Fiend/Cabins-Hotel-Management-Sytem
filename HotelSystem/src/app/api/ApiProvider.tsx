@@ -66,7 +66,7 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
       return guest;
     },
     createReservation: async (body, key) => installReservation(await client.createReservation(body, key)),
-    patchReservation: async (id, body, key) => installReservation(await ("scheduled_start" in body ? "charges" in body ? client.editStayCharges(id, body, key) : client.editStay(id, body, key) : "charges" in body ? client.editCharges(id, body, key) : "adjustments" in body ? client.editBilling(id, body, key) : "guest_id" in body ? client.editDetails(id, body, key) : client.patchReservation(id, body, key))),
+    patchReservation: async (id, body, key) => installReservation(await ("scheduled_start" in body ? "charges" in body ? client.editStayCharges(id, body, key) : client.editStay(id, body, key) : "breakfast" in body ? client.editBreakfast(id, body, key) : "inclusions" in body ? client.editInclusions(id, body, key) : "discounts" in body ? client.editDiscounts(id, { ...body, discounts: body.discounts! }, key) : "charges" in body ? client.editCharges(id, body, key) : "adjustments" in body ? client.editBilling(id, body, key) : "guest_id" in body ? client.editDetails(id, body, key) : client.patchReservation(id, body, key))),
     lifecycleReservation: async (id, action, body, key) => {
       const saved = installReservation(await client.lifecycleReservation(id, action, body, key));
       await refresh(); // Refresh canonical room occupancy/readiness with the accepted aggregate.

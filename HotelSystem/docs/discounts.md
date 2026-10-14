@@ -1,7 +1,8 @@
 # Unified discount mechanics
 
-This frontend-only demo stores configuration and reservations in memory. Nothing
-is persisted to a server. Presets never apply automatically; staff verify guest
+Demo mode stores configuration and reservations in memory. API mode now persists manual
+fixed/percentage manual discounts and presets through the existing controls. Final-price overrides
+remain demo-only. See [preset checkpoint](planning/presets-recovery-checkpoint-2026-10-14.md). Presets never apply automatically; staff verify guest
 eligibility and explicitly select them. This is not statutory tax/VAT logic.
 
 ## Configuration presets
@@ -113,7 +114,9 @@ from current definitions. Unchanged saves return the existing snapshot directly.
 ## Limits
 
 There are no coupon codes, automatic personal eligibility checks, date schedules,
-rate overrides by physical room, payments, tax compliance rules or backend.
+rate overrides by physical room, payments or tax compliance rules. API-backed manual
+discounts use the same staged behavior with server-owned captures; presets remain unsupported
+in API mode.
 Only extras and ordinary products are chargeable item targets; included breakfast,
 amenities and inclusions remain outside item preset selection. There is no
 apply-to-all-items action or discount priority editor. Multiple preset definitions

@@ -7,8 +7,8 @@ Health, reference reads, independent guest creation/reads and direct single-room
 creation/reads and version-checked note/count PATCH are implemented. Creates and patches are
 transactional, audited and idempotent; creates are server-priced and patches preserve pricing.
 The original rich React pages now support lifecycle/readiness, essential versioned configuration,
-guest and pre-arrival stay changes, catalog products and captured purchases/manual adjustments.
-See the [current checkpoint](../docs/planning/full-send-session-two-checkpoint-2026-10-13.md).
+guest and pre-arrival stay changes, catalog products and captured purchases/manual adjustments and server-authoritative manual discounts.
+See [Wednesday manual discounts](../docs/planning/manual-discounts-checkpoint-2026-10-14.md) and the [earlier integration checkpoint](../docs/planning/full-send-session-two-checkpoint-2026-10-13.md).
 This is loopback development infrastructure; authentication, native accounting and Odoo remain absent.
 
 Current migration head is `54e8c2a17d90` in both owned databases (14 HMS tables).
@@ -168,3 +168,44 @@ Runtime/dev versions tested are pinned in `requirements.lock`; the editable loca
 installed separately. Python and PostgreSQL patch updates, driver/pooler behavior and TLS must
 be reviewed before any hosted/shared deployment. This loopback-only developer scaffold has no
 authenticated API actor and is not production-ready.
+
+Special extra charges now use protected category identity and shared catalog product storage.
+The original Inventory rename/definition controls and reservation create/edit charge controls
+are connected; definition changes preserve captured prices and historical revisions. Existing
+discount eligibility applies. See [extra-charge checkpoint](../docs/planning/extra-charges-checkpoint-2026-10-14.md)
+and the [contracts](contracts.md) for verified boundaries. Inclusions and breakfast were deferred there.
+The extra-charge checkpoint head was `7b90f132ae64` (nine revisions, 14 HMS tables). The two additive
+extra-category migrations preserve existing ordinary names/rows and initialize only protected
+category metadata. Downgrade requires a reviewed data plan and fails explicitly; no destructive
+downgrade, fixture import or automatic ordinary-category conversion was performed.
+
+The inclusion checkpoint head was `8c21a6f4d903` (ten revisions, 15 HMS tables). Room-type inclusion defaults have
+owned relational references; reservations capture nonfinancial quantities/provenance separately
+from pricing. Original Inventory, both room-type editors and reservation inclusion controls are
+connected. See [focused inclusion checkpoint](../docs/planning/inclusions-checkpoint-2026-10-14.md)
+for executed checks and Session 2 verification gaps.
+
+The breakfast checkpoint head was `9d54e702b816` (eleven revisions, 16 HMS tables). Protected breakfast identity is a
+virtual view over shared products, with owned meal/beverage eligibility and nonfinancial nightly
+service-date selections. Pure breakfast edits preserve pricing; separately purchased meals remain
+billable. Original Inventory/Configuration/pane controls are connected. See the
+[Wednesday Session 2 checkpoint](../docs/planning/session-two-checkpoint-2026-10-14.md).
+Restart old backend/frontend launchers together after updating code; no reset or reseeding is required.
+
+## Fixed/percentage presets and recovery rehearsal
+
+Current head: `2cd0458fa054`, thirteen revisions and seventeen HMS tables. Original Discounts
+controls persist fixed/percentage presets; reservation selectors capture server-owned terms.
+Final-price overrides and preset deletion remain unavailable. Disable retains identity/history.
+See the [checkpoint](../docs/planning/presets-recovery-checkpoint-2026-10-14.md).
+
+The explicit recovery command below creates a new private PostgreSQL container/volume on loopback
+port 55433. It refuses occupied ports and never connects to `hms_dev`/`hms_test`. Only this process
+opts into guarded `hms_rehearsal`/`hms_restore` targets. It migrates, seeds twice, creates synthetic
+records, dumps/restores and verifies every table plus canonical booking data. On success its own
+container is stopped and retained for review; no volume/database is removed. Docker access and
+the already installed PostgreSQL 17.6 image are required. No hosted backup guarantee is implied.
+
+```powershell
+& .\scripts\python.ps1 scripts/rehearse-recovery.py
+```

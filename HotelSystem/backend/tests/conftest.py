@@ -10,8 +10,10 @@ from app.models import (
     allocations,
     audit_events,
     booking_sources,
+    breakfast_eligibility,
     categories,
     companies,
+    discount_presets,
     durations,
     guests,
     mutation_receipts,
@@ -19,6 +21,7 @@ from app.models import (
     products,
     rates,
     reservations,
+    room_type_inclusions,
     room_types,
     rooms,
 )
@@ -155,6 +158,9 @@ def isolated_company(pg_engine):
                 .values(current_occupancy_allocation_id=None)
             )
             for table in (
+                breakfast_eligibility,
+                discount_presets,
+                room_type_inclusions,
                 products,
                 categories,
                 mutation_receipts,

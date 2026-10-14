@@ -2,10 +2,14 @@ from uuid import UUID
 
 from fastapi import APIRouter
 
+from app.modules.configuration.breakfast import save_breakfast
 from app.modules.configuration.schemas import (
     CategoryEdit,
     CategoryRead,
     CategoryWrite,
+    DiscountPresetEdit,
+    DiscountPresetRead,
+    DiscountPresetWrite,
     DurationEdit,
     DurationWrite,
     ProductEdit,
@@ -21,8 +25,24 @@ from app.modules.configuration.schemas import (
 from app.modules.configuration.services import save_definition
 from app.modules.reservations.references import DurationRead, RateRead, RoomRead, RoomTypeRead
 from app.modules.reservations.router import Key, Service
+from app.modules.reservations.schemas import BreakfastConfiguration, BreakfastConfigurationRead
 
 router = APIRouter(prefix="/api/v1/configuration", tags=["local-development configuration"])
+
+
+@router.post("/discount-presets", response_model=DiscountPresetRead, status_code=201)
+def create_discount_preset(body: DiscountPresetWrite, key: Key, service: Service):
+    return save_definition(service, "discount-presets", body, key)
+
+
+@router.patch("/discount-presets/{id}", response_model=DiscountPresetRead)
+def edit_discount_preset(id: UUID, body: DiscountPresetEdit, key: Key, service: Service):
+    return save_definition(service, "discount-presets", body, key, id)
+
+
+@router.post("/breakfast", response_model=BreakfastConfigurationRead)
+def edit_breakfast_configuration(request: BreakfastConfiguration, key: Key, service: Service):
+    return save_breakfast(service, request, key)
 
 
 @router.post("/categories", response_model=CategoryRead, status_code=201)

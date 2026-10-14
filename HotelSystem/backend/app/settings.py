@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -38,6 +39,18 @@ def require_isolated_local_database(url_value: str, *, test: bool = False) -> No
     """Destructive/admin tooling fails closed; no third-party or hosted database targets."""
     url = make_url(url_value)
     expected = "hms_test" if test else "hms_dev"
+    # Explicit recovery tooling only, on a separate disposable PostgreSQL cluster.
+    # This does not broaden the normal development/test target authority.
+    if (
+        os.environ.get("HMS_ALLOW_RECOVERY_REHEARSAL") == "1"
+        and url.drivername == "postgresql+psycopg"
+        and url.host == "127.0.0.1"
+        and url.port == 55433
+        and url.username == "hms_rehearsal"
+        and url.database in {"hms_rehearsal", "hms_restore"}
+        and not url.query
+    ):
+        return
     if (
         url.drivername != "postgresql+psycopg"
         or url.host not in {"127.0.0.1", "localhost"}

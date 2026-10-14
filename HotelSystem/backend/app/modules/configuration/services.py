@@ -1,5 +1,6 @@
 """Allowlisted, versioned definition commands; never reprice saved reservations."""
 
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import uuid4
 
 import sqlalchemy as sa
@@ -10,17 +11,21 @@ from app.models import (
     allocations,
     audit_events,
     categories,
+    discount_presets,
     durations,
     products,
     rates,
+    room_type_inclusions,
     room_types,
     rooms,
 )
-from app.modules.configuration.schemas import CategoryRead, ProductRead
+from app.modules.configuration.schemas import CategoryRead, DiscountPresetRead, ProductRead
+from app.modules.reservations.inclusions import read_defaults, save_defaults
 from app.modules.reservations.references import DurationRead, RateRead, RoomRead, RoomTypeRead
 from app.mutations import replay_or_lock, request_hash, save_receipt
 
 DEFINITIONS = {
+    "discount-presets": (discount_presets, DiscountPresetRead),
     "room-types": (room_types, RoomTypeRead),
     "rooms": (rooms, RoomRead),
     "durations": (durations, DurationRead),
@@ -80,9 +85,66 @@ def save_definition(service, kind, request, key, id=None):
                     )
                 if previous["version"] >= 2**31 - 1:
                     raise DomainError("version_exhausted", "Definition version cannot be advanced")
-            values = request.model_dump(exclude={"expected_version"})
+            values = request.model_dump(exclude={"expected_version", "default_inclusions"})
+            if kind == "discount-presets":
+                if request.method == "fixed":
+                    # Hash the original validated intent; normalize stored PHP values separately.
+                    values["value"] = Decimal(request.value).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                if request.target_room_type_id:
+                    target = service.owned(
+                        session, room_types, request.target_room_type_id, lock=True
+                    )
+                    if (
+                        request.enabled
+                        or previous is None
+                        or previous["target_room_type_id"] != request.target_room_type_id
+                    ) and (not target["enabled"] or target["archived"]):
+                        raise DomainError("inactive_reference", "Select an active room type", 422)
+                if request.target_product_id:
+                    target = service.owned(session, products, request.target_product_id, lock=True)
+                    category = service.owned(session, categories, target["category_id"], lock=True)
+                    if (
+                        request.enabled
+                        or previous is None
+                        or previous["target_product_id"] != request.target_product_id
+                    ) and (
+                        category["type"] in ("breakfast", "inclusion", "amenities")
+                        or not category["enabled"]
+                        or not target["enabled"]
+                        or target["archived"]
+                    ):
+                        raise DomainError(
+                            "invalid_preset_target", "Select an active chargeable product", 422
+                        )
+            old_defaults = (
+                read_defaults(session, service.context.company_id, id)
+                if kind == "room-types" and id
+                else []
+            )
             if kind == "products":
                 category = service.owned(session, categories, values["category_id"], lock=True)
+                if category["type"] == "breakfast":
+                    raise DomainError(
+                        "virtual_category",
+                        "Breakfast eligibility uses existing products",
+                        422,
+                    )
+                if (
+                    previous
+                    and previous["category_id"] != values["category_id"]
+                    and session.scalar(
+                        sa.select(room_type_inclusions.c.product_id)
+                        .where(room_type_inclusions.c.product_id == id)
+                        .limit(1)
+                    )
+                    is not None
+                ):
+                    raise DomainError(
+                        "inclusion_in_use",
+                        "Remove room-type defaults before reclassifying this inclusion",
+                    )
                 if not category["enabled"] and (
                     previous is None or previous["category_id"] != category["id"]
                 ):
@@ -97,9 +159,24 @@ def save_definition(service, kind, request, key, id=None):
                         "Amenities must be zero-priced and not available for sale",
                         422,
                     )
+                if category["type"] in ("extra", "inclusion") and values["available_for_sale"]:
+                    raise DomainError(
+                        "invalid_product",
+                        "Special charges and inclusions are not ordinary sale items",
+                        422,
+                    )
                 if values["archived"]:
                     values["enabled"] = False
             elif kind == "categories":
+                if (
+                    previous
+                    and previous["system_defined"]
+                    and (values["type"] != previous["type"] or not values["enabled"])
+                ):
+                    raise DomainError(
+                        "protected_category",
+                        "System-defined categories cannot be archived or reclassified",
+                    )
                 if (
                     previous
                     and previous["type"] != values["type"]
@@ -233,10 +310,26 @@ def save_definition(service, kind, request, key, id=None):
                 raise DomainError(
                     "version_conflict", "Definition changed; reload and review before retrying"
                 )
-            result = read(**{name: saved[name] for name in read.model_fields})
+            if kind == "room-types" and "default_inclusions" in request.model_fields_set:
+                save_defaults(
+                    service, session, saved["id"], request.default_inclusions, old_defaults
+                )
+            result_values = {
+                name: saved[name] for name in read.model_fields if name != "default_inclusions"
+            }
+            if kind == "room-types":
+                result_values["default_inclusions"] = read_defaults(
+                    session, service.context.company_id, saved["id"]
+                )
+            result = read(**result_values)
             # DTO captures supported public fields; generated identities/versions are server-owned.
             before = (
-                read(**{name: previous[name] for name in read.model_fields}).model_dump(mode="json")
+                read(
+                    **{
+                        name: old_defaults if name == "default_inclusions" else previous[name]
+                        for name in read.model_fields
+                    }
+                ).model_dump(mode="json")
                 if previous
                 else None
             )

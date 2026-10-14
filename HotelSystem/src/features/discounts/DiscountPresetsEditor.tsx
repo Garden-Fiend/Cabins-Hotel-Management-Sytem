@@ -3,6 +3,7 @@ import type { DiscountDefinitionConfiguration } from "./types";
 import { useHotelConfiguration } from "../configuration/useHotelConfiguration";
 import { isChargeableItem, validateDiscountPreset } from "../../lib/discountPresets";
 import { roundMoney } from "../../lib/money";
+import { useReservationDemo } from "../../app/useReservationDemo";
 
 const inputClass = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 const buttonClass = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold";
@@ -10,6 +11,9 @@ const panelClass = "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
 
 export function DiscountPresetsEditor() {
   const { configuration, setConfiguration } = useHotelConfiguration();
+  const {mode, commands} = useReservationDemo();
+  const persistent = mode === "api";
+  const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState<DiscountDefinitionConfiguration | null>(null);
   const [value, setValue] = useState("");
@@ -22,16 +26,16 @@ export function DiscountPresetsEditor() {
 
   function open(preset?: DiscountDefinitionConfiguration) {
     setDraft(preset ? { ...preset } : {
-      id: crypto.randomUUID(), label: "", scope: "room", method: "final_price", value: 0,
+      id: crypto.randomUUID(), label: "", scope: "room", method: persistent ? "fixed" : "final_price", value: 0,
       enabled: true, currency: configuration.currency,
       targetRoomTypeId: roomTypes[0]?.id, targetItemId: items[0]?.id,
     });
-    setValue(preset ? String(preset.method === "final_price" ? preset.discountedUnitPrice ?? "" : preset.value) : "");
+    setValue(preset ? String(preset.method === "final_price" ? preset.discountedUnitPrice ?? "" : preset.serverValue ?? preset.value) : "");
     setPrices(Object.fromEntries((preset?.rates ?? []).map((rate) => [rate.rateId, String(rate.discountedUnitPrice)])));
     setNotice("");
   }
 
-  function save(event: React.FormEvent) {
+  async function save(event: React.FormEvent) {
     event.preventDefault();
     if (!draft) return;
     const next: DiscountDefinitionConfiguration = {
@@ -46,19 +50,27 @@ export function DiscountPresetsEditor() {
     const errors = validateDiscountPreset(next, configuration);
     if (errors.length) { setNotice(errors.join(" ")); return; }
     next.value = next.method === "fixed" ? roundMoney(next.value, configuration.currency) : next.value;
+    if (persistent) next.serverValue = value;
     next.rates = next.rates?.map((rate) => ({ ...rate, discountedUnitPrice: roundMoney(rate.discountedUnitPrice, configuration.currency) }));
     if (next.discountedUnitPrice !== undefined) next.discountedUnitPrice = roundMoney(next.discountedUnitPrice, configuration.currency);
-    setConfiguration((current) => ({ ...current, discounts: current.discounts.some((item) => item.id === next.id) ? current.discounts.map((item) => item.id === next.id ? next : item) : [...current.discounts, next] }));
-    setDraft(null); setNotice("Discount preset saved for this session.");
+    if (persistent) {
+      if (!commands?.savePreset) {setNotice("This API does not support preset configuration.");return;}
+      setSaving(true);
+      try {await commands.savePreset(next, !configuration.discounts.some(item=>item.id === next.id));}
+      catch(error){setNotice(error instanceof Error ? error.message : "Preset save failed; your draft is retained.");return;}
+      finally{setSaving(false);}
+    } else setConfiguration((current) => ({ ...current, discounts: current.discounts.some((item) => item.id === next.id) ? current.discounts.map((item) => item.id === next.id ? next : item) : [...current.discounts, next] }));
+    setDraft(null); setNotice(persistent ? "Discount preset committed to PostgreSQL." : "Discount preset saved for this session.");
   }
 
-  return <div className="space-y-5">
+  return <fieldset disabled={saving || (persistent && !commands?.canEditPresets)} className="min-w-0 space-y-5">
     <section className={panelClass}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Discount Presets</h2>
         <button type="button" className={buttonClass} onClick={() => open()}>Create Discount</button>
       </div>
       <p className="mt-2 text-sm text-slate-600">Presets are selected by staff. They never apply automatically.</p>
+      {persistent && <p className="mt-2 text-sm text-slate-600">Fixed and percentage presets persist. Final-price overrides and deletion are unavailable; disable a preset to retire it.</p>}
       {notice && <p role="status" className="mt-3 text-sm text-slate-700">{notice}</p>}
       <label className="mt-4 block text-sm">Search discounts
         <input className={inputClass} value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -71,15 +83,16 @@ export function DiscountPresetsEditor() {
           <td className="px-2">{preset.enabled ? "Enabled" : "Disabled"}</td>
           <td className="flex gap-2 px-2 py-3">
             <button type="button" className="underline" onClick={() => open(preset)}>Edit</button>
-            <button type="button" className="underline" onClick={() => {
+            <button type="button" className="underline" onClick={async () => {
               if (!preset.enabled) {
                 const errors = validateDiscountPreset(preset, configuration);
                 if (errors.length) { setNotice(errors.join(" ")); return; }
               }
-              setConfiguration((current) => ({ ...current, discounts: current.discounts.map((item) => item.id === preset.id ? { ...item, enabled: !item.enabled } : item) }));
+              if(persistent){setSaving(true);try{await commands!.savePreset!({...preset,enabled:!preset.enabled});}catch(error){setNotice(error instanceof Error ? error.message : "Preset save failed.");return;}finally{setSaving(false);}}
+              else setConfiguration((current) => ({ ...current, discounts: current.discounts.map((item) => item.id === preset.id ? { ...item, enabled: !item.enabled } : item) }));
               setNotice(`${preset.label} ${preset.enabled ? "disabled" : "enabled"}. Saved reservations are unchanged.`);
             }}>{preset.enabled ? "Disable" : "Enable"}</button>
-            <button type="button" className="text-rose-700 underline" onClick={() => {
+            <button type="button" disabled={persistent} title={persistent ? "Disable a persistent preset to preserve its identity and history" : undefined} className="text-rose-700 underline disabled:opacity-40" onClick={() => {
               setConfiguration((current) => ({ ...current, discounts: current.discounts.filter((item) => item.id !== preset.id) }));
               if (draft?.id === preset.id) setDraft(null);
               setNotice(`${preset.label} deleted. Saved reservations retain their snapshots.`);
@@ -104,7 +117,7 @@ export function DiscountPresetsEditor() {
           <option value="">Select chargeable item</option>{items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select></label>}
         <label className="block text-sm">Discount Method<select className={inputClass} value={draft.method} onChange={(event) => { setDraft({ ...draft, method: event.target.value as DiscountDefinitionConfiguration["method"] }); setValue(""); }}>
-          {draft.scope !== "reservation" && <option value="final_price">Set Discounted Price</option>}<option value="fixed">Fixed Amount</option><option value="percentage">Percentage</option>
+          {draft.scope !== "reservation" && <option value="final_price" disabled={persistent}>Set Discounted Price</option>}<option value="fixed">Fixed Amount</option><option value="percentage">Percentage</option>
         </select></label>
         {draft.method === "final_price" && draft.scope === "room" ? <div className="space-y-3">
           <p className="text-sm text-slate-600">Leave rates blank to exclude them. Nightly prices apply per night.</p>
@@ -122,7 +135,10 @@ export function DiscountPresetsEditor() {
         </label>}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />Enabled</label>
         <div className="flex gap-2"><button className={`${buttonClass} bg-slate-900 text-white`} type="submit">Save Discount</button><button className={buttonClass} type="button" onClick={() => setDraft(null)}>Cancel</button></div>
+        {persistent && draft.serverVersion && commands?.loadPresets && <button type="button" className={buttonClass} onClick={async()=>{
+          setSaving(true);try{const latest=(await commands.loadPresets!()).find(item=>item.id===draft.id);if(!latest)throw new Error("Preset was not found; draft retained.");setDraft({...draft,serverVersion:latest.serverVersion});setNotice(`Latest preset version ${latest.serverVersion}: ${latest.label}, ${latest.method} ${latest.value}, ${latest.scope}, ${latest.enabled ? "enabled" : "disabled"}. Your draft is unchanged; review before saving.`);}catch(error){setNotice(error instanceof Error ? error.message : "Review failed; draft retained.");}finally{setSaving(false);}
+        }}>Load latest preset version for review</button>}
       </form>
     </section>}
-  </div>;
+  </fieldset>;
 }

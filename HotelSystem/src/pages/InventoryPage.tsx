@@ -52,7 +52,7 @@ export function InventoryPage() {
   const filteredProducts = configuration.catalogItems.filter((product) => {
     const category = configuration.inventoryCategories.find((item) => item.id === product.categoryId);
     return (showArchived || (product.enabled && !product.archived && category?.enabled)) &&
-      (selectedCategoryId === "all" || product.categoryId === selectedCategoryId || (selectedCategoryId === "special-breakfast" && configuration.breakfastEligibleItems?.some((item) => item.inventoryItemId === product.id && item.enabled))) &&
+      (selectedCategoryId === "all" || product.categoryId === selectedCategoryId || (configuration.inventoryCategories.some(c => c.id === selectedCategoryId && c.type === "breakfast") && configuration.breakfastEligibleItems?.some((item) => item.inventoryItemId === product.id && item.enabled))) &&
       `${product.label} ${category?.label ?? ""} ${product.breakfastType ?? ""}`.toLowerCase().includes(query.trim().toLowerCase());
   });
 
@@ -109,10 +109,10 @@ export function InventoryPage() {
     }
     const duplicate = configuration.inventoryCategories.some(
       (category) =>
-        category.label.toLowerCase() === label.toLowerCase() &&
+        ( !persistent || !category.systemDefined) && category.label.toLowerCase() === label.toLowerCase() &&
         category.id !== editingCategoryId,
     );
-    if (duplicate) {
+    if (duplicate && !(persistent && configuration.inventoryCategories.find(c => c.id === editingCategoryId)?.systemDefined)) {
       setNotice("A category with that name already exists.");
       return;
     }
@@ -260,17 +260,17 @@ export function InventoryPage() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Categories</p>
           <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by category">
             {[{ id: "all", label: "All items", enabled: true }, ...visibleCategories].map((category) => {
-              const count = configuration.catalogItems.filter((product) => (category.id === "all" || product.categoryId === category.id || (category.id === "special-breakfast" && configuration.breakfastEligibleItems?.some((item) => item.inventoryItemId === product.id && item.enabled))) && (showArchived || (product.enabled && !product.archived && configuration.inventoryCategories.some((item) => item.id === product.categoryId && item.enabled)))).length;
+              const count = configuration.catalogItems.filter((product) => (category.id === "all" || product.categoryId === category.id || (("type" in category && category.type === "breakfast") && configuration.breakfastEligibleItems?.some((item) => item.inventoryItemId === product.id && item.enabled))) && (showArchived || (product.enabled && !product.archived && configuration.inventoryCategories.some((item) => item.id === product.categoryId && item.enabled)))).length;
               return <button key={category.id} type="button" aria-pressed={selectedCategoryId === category.id} onClick={() => setSelectedCategoryId(category.id)}
                 className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2 ${selectedCategoryId === category.id ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-slate-100"}`}>
-                {category.label}{!category.enabled ? " (archived)" : ""}
+                {category.label}{persistent && !("systemDefined" in category && category.systemDefined) && configuration.inventoryCategories.some(c => c.systemDefined && c.label.toLowerCase() === category.label.toLowerCase()) ? " (ordinary category)" : ""}{!category.enabled ? " (archived)" : ""}
                 <span aria-hidden="true" className={`rounded-full px-2 py-0.5 text-xs ${selectedCategoryId === category.id ? "bg-white/15" : "bg-white text-slate-500"}`}>{count}</span>
               </button>;
             })}
           </div>
         </div>
 
-        {selectedCategoryId === "special-breakfast" && <button type="button" disabled={persistent} title={persistent ? "Breakfast persistence is not supported yet" : undefined} onClick={() => setBreakfastDialogOpen(true)} className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Configure breakfast</button>}
+        {configuration.inventoryCategories.some(c => c.id === selectedCategoryId && c.type === "breakfast") && <button type="button" disabled={persistent && !commands?.canEditBreakfast} onClick={() => setBreakfastDialogOpen(true)} className="mt-4 rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Configure breakfast</button>}
 
         <div className="my-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-700">{filteredProducts.length} item{filteredProducts.length === 1 ? "" : "s"}{selectedCategoryId !== "all" ? ` in ${configuration.inventoryCategories.find((item) => item.id === selectedCategoryId)?.label ?? "category"}` : " in catalog"}</h2>
@@ -382,7 +382,7 @@ export function InventoryPage() {
         </div>
       </fieldset></InventoryDialog>}
 
-      {breakfastDialogOpen && !persistent && <InventoryDialog title="Breakfast Configuration" onClose={() => setBreakfastDialogOpen(false)}><BreakfastEligibilityEditor /></InventoryDialog>}
+      {breakfastDialogOpen && <InventoryDialog title="Breakfast Configuration" onClose={() => setBreakfastDialogOpen(false)}><BreakfastEligibilityEditor /></InventoryDialog>}
 
       {categoryDialogOpen && <InventoryDialog title="Manage categories" onClose={() => !saving && setCategoryDialogOpen(false)}><fieldset disabled={saving}>
         <form onSubmit={saveCategory} className="mt-5 flex flex-wrap gap-2">
@@ -397,7 +397,7 @@ export function InventoryPage() {
             return <article key={category.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-4">
               <div><h3 className="font-semibold text-slate-900">{category.label}</h3><p className="mt-1 text-xs text-slate-500">{category.systemDefined ? `Special category · ${category.type}` : `${products.length} linked products`}{!category.enabled ? " · Archived" : ""}</p></div>
               <div className="flex gap-3 text-sm">
-                {category.type === "breakfast" && <button type="button" disabled={persistent} onClick={() => { setCategoryDialogOpen(false); setBreakfastDialogOpen(true); }} className="font-semibold text-slate-700 underline">Configure breakfast</button>}
+                {category.type === "breakfast" && <button type="button" disabled={persistent && !commands?.canEditBreakfast} onClick={() => { setCategoryDialogOpen(false); setBreakfastDialogOpen(true); }} className="font-semibold text-slate-700 underline">Configure breakfast</button>}
                 <button type="button" onClick={() => { setEditingCategoryId(category.id); setEditingCategoryVersion(category.serverVersion); setCategoryName(category.label); }} className="font-semibold text-slate-700 underline">Rename</button>
                 {!category.systemDefined && <>
                   {category.enabled && <button type="button" disabled={persistent || products.length > 0} title={persistent ? "Persistent categories can be archived; deletion is unavailable" : products.length ? "Archive categories containing products" : undefined} onClick={() => {

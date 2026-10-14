@@ -1,7 +1,7 @@
 """Transport contracts for the deliberately small direct, single-room API."""
 
 import re
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -12,6 +12,7 @@ from pydantic import (
     Field,
     StrictBool,
     StrictInt,
+    StrictStr,
     field_validator,
     model_validator,
 )
@@ -32,12 +33,152 @@ class GuestCreate(DTO):
     email: str = Field(default="", max_length=254)
 
 
+class DefaultInclusion(DTO):
+    product_id: UUID
+    quantity: Positive
+
+
+class InclusionIntent(DTO):
+    product_id: UUID
+    quantity: Count
+    overridden: StrictBool = False
+
+
+class InclusionCapture(InclusionIntent):
+    label: str = Field(min_length=1, max_length=200)
+    source: Literal["default", "manual"]
+
+
+def distinct_inclusions(value):
+    if value is None:
+        raise ValueError("Inclusions cannot be null")
+    if len({item.product_id for item in value}) != len(value):
+        raise ValueError("Each inclusion can appear only once")
+    return value
+
+
+class BreakfastEligibility(DTO):
+    product_id: UUID
+    kind: Literal["meal", "beverage"]
+    enabled: StrictBool = True
+
+
+class BreakfastConfiguration(DTO):
+    expected_version: Positive
+    items: tuple[BreakfastEligibility, ...] = Field(max_length=500)
+    _distinct = field_validator("items")(distinct_inclusions)
+
+
+class BreakfastConfigurationRead(DTO):
+    id: UUID
+    version: Positive
+    items: tuple[BreakfastEligibility, ...]
+
+
+class BreakfastIntent(DTO):
+    service_date: date
+    guest_number: Positive
+    status: Literal["included", "skipped"]
+    meal_id: UUID | None = None
+    beverage_id: UUID | None = None
+
+    @field_validator("service_date", mode="before")
+    @classmethod
+    def date_only(cls, value):
+        if not isinstance(value, date) and (
+            not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+        ):
+            raise ValueError("Use a hotel service date YYYY-MM-DD")
+        if isinstance(value, datetime):
+            raise ValueError("Use a date, not an instant")
+        return value
+
+    @model_validator(mode="after")
+    def selection(self):
+        if self.status == "included" and (self.meal_id is None or self.beverage_id is None):
+            raise ValueError("An included breakfast requires a meal and beverage")
+        if self.status == "skipped" and (self.meal_id is not None or self.beverage_id is not None):
+            raise ValueError("Skipped breakfast has no meal or beverage")
+        return self
+
+
+class BreakfastCapture(BreakfastIntent):
+    meal_label: str | None = None
+    beverage_label: str | None = None
+    quantity: Literal[1] = 1
+    unit_amount_minor: Literal[0] = 0
+    amount_minor: Literal[0] = 0
+
+
+def distinct_breakfast(value):
+    if value is None or len({(item.service_date, item.guest_number) for item in value}) != len(
+        value
+    ):
+        raise ValueError("Breakfast selections must be non-null and unique per date/guest")
+    return value
+
+
 class GuestRead(GuestCreate):
     id: UUID
     company_id: UUID
 
 
+class ManualDiscountIntent(DTO):
+    preset_id: UUID | None = None
+    id: UUID
+    label: str = Field(min_length=1, max_length=200)
+    scope: Literal["reservation", "room", "item"]
+    method: Literal["fixed", "percentage"]
+    value: StrictStr = Field(min_length=1, max_length=40)
+    target_id: StrictStr = ""
+    currency: Literal["PHP"] = "PHP"
+
+    @field_validator("value")
+    @classmethod
+    def decimal_value(cls, value):
+        from decimal import Decimal
+
+        if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", value):
+            raise ValueError("Use a positive decimal string")
+        if Decimal(value) <= 0 or Decimal(value) > Decimal(MAX_MINOR) / 100:
+            raise ValueError("Discount exceeds supported positive monetary range")
+        return value
+
+    @model_validator(mode="after")
+    def valid_percentage(self):
+        from decimal import Decimal
+
+        if self.method == "percentage" and Decimal(self.value) > 100:
+            raise ValueError("Percentage must be at most 100")
+        return self
+
+
+def validate_manual_discounts(value):
+    if value is None:
+        raise ValueError("Discounts cannot be null")
+    if len({item.id for item in value}) != len(value):
+        raise ValueError("Discount identities must be unique")
+    return value
+
+
 class ReservationCreate(DTO):
+    breakfast: tuple[BreakfastIntent, ...] = Field(default=(), max_length=500)
+    _breakfast_valid = field_validator("breakfast")(distinct_breakfast)
+    inclusions: tuple[InclusionIntent, ...] = Field(default=(), max_length=100)
+    _inclusions_valid = field_validator("inclusions")(distinct_inclusions)
+    charges: tuple["ChargeIntent", ...] = Field(default=(), max_length=100)
+
+    @field_validator("charges")
+    @classmethod
+    def initial_extras(cls, value):
+        unique_charges(value)
+        if any(item.usage != "extra_charge" for item in value):
+            raise ValueError("Initial bill lines currently support special extra charges only")
+        return value
+
+    discounts: tuple[ManualDiscountIntent, ...] = Field(default=(), max_length=100)
+
+    _discounts_valid = field_validator("discounts")(validate_manual_discounts)
     guest_id: UUID
     booking_source_id: UUID
     room_id: UUID
@@ -116,6 +257,9 @@ def unique_adjustments(items):
 
 
 class ReservationBillingEdit(ReservationDetailsEdit):
+    discounts: tuple[ManualDiscountIntent, ...] | None = Field(default=None, max_length=100)
+    _discounts_valid = field_validator("discounts")(validate_manual_discounts)
+
     adjustments: tuple[AdjustmentCapture, ...] = Field(max_length=100)
 
     @field_validator("adjustments")
@@ -128,7 +272,7 @@ class ChargeIntent(DTO):
     id: UUID
     product_id: UUID
     quantity: Positive
-    usage: Literal["purchase"] = "purchase"
+    usage: Literal["purchase", "extra_charge"] = "purchase"
 
 
 class ChargeCapture(ChargeIntent):
@@ -152,6 +296,9 @@ def unique_charges(items):
 
 
 class ReservationChargesEdit(ReservationDetailsEdit):
+    discounts: tuple[ManualDiscountIntent, ...] | None = Field(default=None, max_length=100)
+    _discounts_valid = field_validator("discounts")(validate_manual_discounts)
+
     charges: tuple[ChargeIntent, ...] = Field(max_length=100)
     adjustments: tuple[AdjustmentCapture, ...] | None = Field(default=None, max_length=100)
 
@@ -166,7 +313,54 @@ class ReservationChargesEdit(ReservationDetailsEdit):
         return unique_adjustments(value) if value is not None else value
 
 
+class ReservationDiscountsEdit(ReservationDetailsEdit):
+    discounts: tuple[ManualDiscountIntent, ...] = Field(max_length=100)
+    adjustments: tuple[AdjustmentCapture, ...] | None = Field(default=None, max_length=100)
+    charges: tuple[ChargeIntent, ...] | None = Field(default=None, max_length=100)
+    _discounts_valid = field_validator("discounts")(validate_manual_discounts)
+
+    @field_validator("charges")
+    @classmethod
+    def valid_charges(cls, value):
+        if value is None:
+            raise ValueError("Charges cannot be null")
+        return unique_charges(value)
+
+    @field_validator("adjustments")
+    @classmethod
+    def valid_adjustments(cls, value):
+        if value is None:
+            raise ValueError("Adjustments cannot be null")
+        return unique_adjustments(value)
+
+
+class ReservationInclusionsEdit(ReservationDiscountsEdit):
+    discounts: tuple[ManualDiscountIntent, ...] | None = Field(default=None, max_length=100)
+    inclusions: tuple[InclusionIntent, ...] = Field(max_length=100)
+    _inclusions_valid = field_validator("inclusions")(distinct_inclusions)
+
+
+class ReservationBreakfastEdit(ReservationInclusionsEdit):
+    inclusions: tuple[InclusionIntent, ...] | None = Field(default=None, max_length=100)
+    breakfast: tuple[BreakfastIntent, ...] = Field(max_length=500)
+    _breakfast_valid = field_validator("breakfast")(distinct_breakfast)
+
+
 class ReservationStayEdit(ReservationDetailsEdit):
+    breakfast: tuple[BreakfastIntent, ...] | None = Field(default=None, max_length=500)
+    _breakfast_valid = field_validator("breakfast")(distinct_breakfast)
+    inclusions: tuple[InclusionIntent, ...] | None = Field(default=None, max_length=100)
+
+    @field_validator("inclusions")
+    @classmethod
+    def valid_inclusions(cls, value):
+        if value is None:
+            raise ValueError("Inclusions cannot be null")
+        return distinct_inclusions(value)
+
+    discounts: tuple[ManualDiscountIntent, ...] | None = Field(default=None, max_length=100)
+    _discounts_valid = field_validator("discounts")(validate_manual_discounts)
+
     """Single-room pre-arrival assignment/stay change; no arbitrary end or client price."""
 
     room_id: UUID
@@ -292,15 +486,68 @@ class ChargedPricingSnapshot(AdjustedPricingSnapshot):
         return self
 
 
+class DiscountAllocation(DTO):
+    line_id: str
+    amount_minor: Minor
+
+
+class ManualDiscountCapture(ManualDiscountIntent):
+    provenance: Literal["manual", "preset"] = "manual"
+    preset_version: Positive | None = None
+    preset_target_id: str | None = None
+    preset_rate_id: str | None = None
+    applied_at: AwareDatetime
+    amount_minor: Minor
+    order: Count
+    allocations: tuple[DiscountAllocation, ...]
+
+
+class DiscountedPricingSnapshot(ChargedPricingSnapshot):
+    schema_version: Literal[4] = 4
+    calculation_version: Literal["direct-manual-discounts-v1"] = "direct-manual-discounts-v1"
+    charges: tuple[ChargeCapture, ...] = ()
+    adjustments: tuple[AdjustmentCapture, ...] = ()
+    discounts: tuple[ManualDiscountCapture, ...] = Field(max_length=100)
+    discount_total_minor: Minor
+    pipeline_version: Literal[2] = 2
+
+    @model_validator(mode="after")
+    def exact_total(self):
+        from app.modules.billing.discounts import calculate_discounts
+
+        unique_adjustments(self.adjustments)
+        unique_charges(self.charges)
+        raw = self.model_dump(mode="json")
+        intents = [
+            {k: v for k, v in d.items() if k not in ("amount_minor", "order", "allocations")}
+            for d in raw["discounts"]
+        ]
+        calculated, reduction, total = calculate_discounts(raw, intents)
+        if (
+            calculated != raw["discounts"]
+            or reduction != self.discount_total_minor
+            or total != self.total_minor
+        ):
+            raise ValueError("Discount capture must match the deterministic server calculation")
+        return self
+
+
 class PricingRead(DTO):
     id: UUID
     revision: Positive
     reservation_version: Positive
     captured_at: AwareDatetime
-    snapshot: PricingSnapshot | AdjustedPricingSnapshot | ChargedPricingSnapshot
+    snapshot: (
+        PricingSnapshot
+        | AdjustedPricingSnapshot
+        | ChargedPricingSnapshot
+        | DiscountedPricingSnapshot
+    )
 
 
 class AllocationRead(DTO):
+    breakfast: tuple[BreakfastCapture, ...] = ()
+    inclusions: tuple[InclusionCapture, ...] = ()
     id: UUID
     room_id: UUID
     duration_id: UUID
@@ -337,3 +584,6 @@ class ReservationRead(DTO):
     allocation: AllocationRead
     pricing: PricingRead
     audit: list[AuditRead]
+
+
+ReservationCreate.model_rebuild()

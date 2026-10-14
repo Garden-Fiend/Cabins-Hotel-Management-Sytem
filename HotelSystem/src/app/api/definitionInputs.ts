@@ -5,23 +5,25 @@ import type { DefinitionKind, DefinitionMap } from "./contracts";
 export type DefinitionSection = "roomTypes" | "rooms" | "durations" | "roomTypePrices" | "catalogItems" | "inventoryCategories";
 export interface DefinitionIntent { kind: DefinitionKind; id?: string; body: DefinitionMap[DefinitionKind] & { expected_version?: number } }
 
-export function definitionIntent(section: DefinitionSection, id: string | undefined, values: Record<string, ConfigurationValue>, configuration: HotelConfigurationData, version?: number): DefinitionIntent {
+export function definitionIntent(section: DefinitionSection, id: string | undefined, values: Record<string, ConfigurationValue>, configuration: HotelConfigurationData, version?: number, defaultInclusions?: { catalogId: string; quantity: number }[]): DefinitionIntent {
   if (id && (!version || !Number.isInteger(version))) throw new Error("Reload this definition and reopen it before saving.");
   const text = (key: string) => String(values[key] ?? "").trim();
   const list = (key: string): string[] => Array.isArray(values[key]) ? values[key] as string[] : [];
   const enabled = values.enabled === undefined ? true : values.enabled === true;
   let kind: DefinitionKind, body: DefinitionMap[DefinitionKind];
   if (section === "inventoryCategories") {
-    if (!["ordinary", "amenities"].includes(text("type"))) throw new Error("This category type is not supported by the server.");
-    kind = "categories"; body = { label: text("label"), type: text("type") as "ordinary" | "amenities", enabled };
+    if (!["ordinary", "amenities"].includes(text("type")) && !(["extra", "inclusion", "breakfast"].includes(text("type")) && configuration.inventoryCategories.some(c => c.id === id && c.systemDefined && c.type === text("type")))) throw new Error("This category type is not supported by the server.");
+    kind = "categories"; body = { label: text("label"), type: text("type") as "ordinary" | "amenities" | "extra" | "inclusion" | "breakfast", enabled };
   } else if (section === "catalogItems") {
+    const previous = configuration.catalogItems.find(item => item.id === id);
     kind = "products"; body = { label: text("label"), category_id: text("categoryId"), enabled,
-      archived: values.archived === true, available_for_sale: values.availableForSale === true,
+      archived: values.archived === undefined ? previous?.archived ?? false : values.archived === true, available_for_sale: values.availableForSale === true && configuration.inventoryCategories.find(c => c.id === text("categoryId"))?.type === "ordinary",
       unit_amount_minor: parseMinor(text("price"), "PHP"), currency: "PHP" };
   } else if (section === "roomTypes") {
     const previous = configuration.roomTypes.find(r => r.id === id);
     kind = "room-types";
     body = { label: text("label"), default_capacity: Number(values.defaultCapacity), amenities: list("amenities"), enabled,
+      ...(defaultInclusions !== undefined ? { default_inclusions: defaultInclusions.map(i => ({ product_id: i.catalogId, quantity: i.quantity })) } : {}),
       archived: values.archived === undefined ? previous?.archived ?? false : values.archived === true };
   } else if (section === "rooms") {
     const previous = configuration.rooms.find(r => r.id === id);

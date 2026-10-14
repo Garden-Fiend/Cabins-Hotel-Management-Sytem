@@ -43,13 +43,12 @@ def capture_charges(service, session, captured, intents, *, reservation_id):
         if (
             not product["enabled"]
             or product["archived"]
-            or not product["available_for_sale"]
             or not category["enabled"]
-            or category["type"] != "ordinary"
+            or category["type"] not in ("ordinary", "extra")
         ):
             raise DomainError(
                 "product_unavailable",
-                "New purchases require an active sellable ordinary product",
+                "New bill lines require an active supported product",
                 422,
             )
         new_products[product_id] = product
@@ -69,6 +68,23 @@ def capture_charges(service, session, captured, intents, *, reservation_id):
             label, unit = previous["label"], previous["unit_amount_minor"]
         else:
             product = new_products[intent.product_id]
+            category = service.owned(session, categories, product["category_id"], lock=True)
+            valid = (
+                intent.usage == "purchase"
+                and category["type"] == "ordinary"
+                and product["available_for_sale"]
+            ) or (
+                intent.usage == "extra_charge"
+                and category["type"] == "extra"
+                and category["system_defined"]
+                and category["source_id"] == "special-extras"
+            )
+            if not valid:
+                raise DomainError(
+                    "invalid_charge_usage",
+                    "Select a product matching the charge classification",
+                    422,
+                )
             label, unit = product["label"], product["unit_amount_minor"]
         amount = unit * intent.quantity
         if amount > MAX_MINOR:

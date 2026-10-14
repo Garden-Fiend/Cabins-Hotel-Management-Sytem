@@ -21,6 +21,8 @@ from app.models import (
     room_types,
     rooms,
 )
+from app.modules.reservations.breakfast import capture_breakfast
+from app.modules.reservations.inclusions import capture_inclusions
 from app.modules.reservations.pricing import capture_price, stay_end
 from app.modules.reservations.schemas import (
     AllocationRead,
@@ -172,6 +174,25 @@ class ReservationService:
                 raise DomainError("room_conflict", "Room is already reserved for this interval")
             snapshot = capture_price(room, room_type, duration, rate)
             reservation_id = uuid4()
+            if request.charges or request.discounts:
+                from app.modules.billing.adjustments import adjusted_snapshot
+                from app.modules.billing.charges import capture_charges
+
+                raw = snapshot.model_dump(mode="json")
+                if request.charges:
+                    raw["charges"] = [
+                        item.model_dump(mode="json")
+                        for item in capture_charges(
+                            self, session, raw, request.charges, reservation_id=reservation_id
+                        )
+                    ]
+                snapshot = adjusted_snapshot(
+                    raw,
+                    (),
+                    request.discounts if request.discounts else None,
+                    service=self,
+                    session=session,
+                )
             reservation = (
                 session.execute(
                     reservations.insert()
@@ -198,6 +219,25 @@ class ReservationService:
                     scheduled_end=end,
                     adults=request.adults,
                     children=request.children,
+                    breakfast=capture_breakfast(
+                        self,
+                        session,
+                        request.scheduled_start,
+                        end,
+                        duration["kind"],
+                        request.adults + request.children,
+                        intents=request.breakfast,
+                    ),
+                    inclusions=capture_inclusions(
+                        self,
+                        session,
+                        room_type["id"],
+                        intents=request.inclusions
+                        if "inclusions" in request.model_fields_set
+                        else None,
+                        switch=True,
+                        merge=True,
+                    ),
                 )
             )
             session.execute(
@@ -233,6 +273,9 @@ class ReservationService:
                         children=request.children,
                         note=request.note,
                         pricing=snapshot.model_dump(mode="json"),
+                        inclusions=self.read_in_transaction(
+                            session, reservation
+                        ).allocation.model_dump(mode="json")["inclusions"],
                     ),
                 )
             )
@@ -292,6 +335,19 @@ class ReservationService:
             # Only these count columns can change; IDs, interval, occupancy and prices stay intact.
             counts = {field: changes[field] for field in ("adults", "children") if field in changes}
             if counts:
+                if allocation["breakfast"]:
+                    old_pricing = self.read_in_transaction(session, reservation).pricing.snapshot
+                    before["breakfast"] = allocation["breakfast"]
+                    counts["breakfast"] = capture_breakfast(
+                        self,
+                        session,
+                        allocation["scheduled_start"],
+                        allocation["scheduled_end"],
+                        old_pricing.lines[0].booking_kind,
+                        counts.get("adults", allocation["adults"])
+                        + counts.get("children", allocation["children"]),
+                        allocation["breakfast"],
+                    )
                 session.execute(
                     allocations.update()
                     .where(
@@ -323,6 +379,8 @@ class ReservationService:
             if updated is None:
                 raise DomainError("version_conflict", "Reservation changed; reload before editing")
             after = dict(before, **changes, version=updated["version"])
+            if "breakfast" in counts:
+                after["breakfast"] = counts["breakfast"]
             if details:
                 after["guest_id"] = str(updated["guest_id"])
             session.execute(

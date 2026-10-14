@@ -51,7 +51,7 @@ const apiRouter = createBrowserRouter([{ element: <ApiGate />, children: [{ elem
   { path: "/guests", element: <GuestView /> },
   { path: "/rooms", element: <RoomsPage /> },
   { path: "/configuration", element: <ConfigurationPage /> },
-  { path: "/discounts", element: <ReadOnly><DiscountsPage /></ReadOnly> },
+  { path: "/discounts", element: <DiscountsPage /> },
   { path: "/inventory", element: <InventoryView /> },
   { path: "*", element: <ApiUnsupported /> },
 ] }] }]);
