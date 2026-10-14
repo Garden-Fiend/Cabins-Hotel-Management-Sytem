@@ -99,6 +99,23 @@ try{
  await dp.goto('http://127.0.0.1:5184/discounts');await dp.getByRole('button',{name:'Create Discount',exact:true}).click();await expect(dp.getByLabel(/^Discount Method/)).toHaveValue('final_price');
  await dp.getByLabel('Discount Name',{exact:true}).fill('Demo preserved preset');await dp.getByLabel(/^Discount Method/).selectOption('percentage');await dp.getByLabel('Value',{exact:true}).fill('10');await dp.getByRole('button',{name:'Save Discount',exact:true}).click();await expect(dp.locator('p[role=status]')).toContainText('saved for this session');expect(calls).toBe(0);
  checks.push('Demo preset builder retains its original final-price default and saves independently with zero API calls');
+ await dp.goto('http://127.0.0.1:5184/');await dp.getByRole('button',{name:'+ Create Reservation',exact:true}).click();
+ const demoPane=dp.getByRole('dialog',{name:'Create reservation',exact:true});await demoPane.getByRole('button',{name:'+ Create new guest',exact:true}).click();
+ let guestPopup=dp.getByRole('dialog',{name:'Create new guest',exact:true});await guestPopup.getByLabel(/^Full name/).fill('Popup demo guest');await guestPopup.getByRole('button',{name:'Use guest',exact:true}).click();
+ await expect(guestPopup).toHaveCount(0);await expect(demoPane.getByText('Popup demo guest',{exact:true})).toBeVisible();expect(calls).toBe(0);
+ checks.push('Demo reservation guest creation uses the same popup and returns the selected guest to the reservation without API calls');
+ await page.goto('http://127.0.0.1:5183/guests');await page.getByRole('button',{name:'Create guest',exact:true}).click();
+ guestPopup=page.getByRole('dialog',{name:'Create guest',exact:true});await guestPopup.getByLabel('Guest name',{exact:true}).fill('Cancelled popup guest');await page.keyboard.press('Escape');await expect(guestPopup).toHaveCount(0);
+ await page.getByRole('button',{name:'Create guest',exact:true}).click();await expect(guestPopup.getByLabel('Guest name',{exact:true})).toHaveValue('');await guestPopup.getByLabel('Guest name',{exact:true}).fill('API popup guest');
+ const failGuest=route=>route.request().method()==='POST'?route.abort('failed'):route.continue();await context.route(`${api}/api/v1/guests`,failGuest);
+ await guestPopup.getByRole('button',{name:'Save guest',exact:true}).click();await expect(guestPopup.getByRole('alert')).toContainText('not be confirmed');await expect(guestPopup.getByLabel('Guest name',{exact:true})).toHaveValue('API popup guest');
+ await context.unroute(`${api}/api/v1/guests`,failGuest);await guestPopup.getByRole('button',{name:'Retry original guest request',exact:true}).click();await expect(guestPopup).toHaveCount(0);await page.reload();await expect(page.getByText('API popup guest',{exact:true})).toBeVisible();
+ checks.push('API Guests popup cancels/resets, retains failed drafts and persists an identical-key retry before closing and refreshing');
+ await page.goto('http://127.0.0.1:5183/');await page.getByRole('button',{name:'+ Create Reservation',exact:true}).click();
+ const apiPane=page.getByRole('dialog',{name:'Create reservation',exact:true});await apiPane.getByRole('button',{name:'+ Create new guest',exact:true}).click();
+ guestPopup=page.getByRole('dialog',{name:'Create new guest',exact:true});await guestPopup.getByLabel(/^Full name/).fill('API reservation popup guest');await guestPopup.getByRole('button',{name:'Use guest',exact:true}).click();await expect(guestPopup).toHaveCount(0);await expect(apiPane.getByText('API reservation popup guest',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Close reservation pane',exact:true}).click();
+ checks.push('API reservation guest popup confirms persistence before closing and selects the canonical saved guest');
  await writeFile(resolve(report,'results.json'),JSON.stringify({status:'PASS',checks,reservation_id:saved.id},null,2));console.log(`PASS: ${checks.length} preset browser checks`);
 }catch(error){if(page){await page.screenshot({path:resolve(report,'failure.png'),fullPage:true});await writeFile(resolve(report,'failure.html'),await page.content());}await writeFile(resolve(report,'results.json'),JSON.stringify({status:'FAIL',checks,error:String(error)},null,2));throw error;
 }finally{if(context){await context.tracing.stop({path:resolve(report,'trace.zip')});await context.close();}if(demo)await demo.close();if(browser)await browser.close();for(const owned of [child,demoChild])if(owned){owned.kill();await new Promise(r=>owned.exitCode!==null?r():owned.once('exit',r));}log.end();}

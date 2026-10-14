@@ -8,6 +8,7 @@ import { channelTermsAudit, validateTermsPermissions, requireCapability, switchC
 import { ReservationChannelTermsEditor } from "../channels/ReservationChannelTermsEditor";
 import { ChannelGuestSummary } from "../channels/ChannelGuestSummary";
 import { switchInclusionDefaults, setInclusionQuantity } from "../../lib/roomTypeInclusions";
+import { InventoryDialog } from "../../features/inventory/InventoryDialog";
 import { getBreakfastProducts, getSellableProducts } from "../../lib/inventoryProducts";
 import { useCallback, useState } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
@@ -1043,6 +1044,7 @@ export function ReservationPane({
       return;
     }
     onGuestCreated(savedGuest);
+    setErrorMessage("");
     setGuestId(savedGuest.id);
     setGuestQuery("");
     setShowCreateGuest(false);
@@ -1675,7 +1677,8 @@ export function ReservationPane({
                     + Create new guest
                   </button>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+                  <InventoryDialog title="Create new guest" onClose={() => { if (!commands?.busy) setShowCreateGuest(false); }}><fieldset disabled={commands?.busy} className="space-y-3">
+                    {errorMessage && <p role="alert" className="text-sm text-rose-700">{errorMessage}</p>}
                     <label className="block">
                       <span className={labelClass}>Full name *</span>
                       <input
@@ -1723,7 +1726,7 @@ export function ReservationPane({
                         Cancel
                       </button>
                     </div>
-                  </div>
+                  </fieldset></InventoryDialog>
                 )}
               </>
             )}
@@ -2734,7 +2737,7 @@ export function ReservationPane({
               {formatReservationMoney(priceSummary.channel ? fromMinorUnits(priceSummary.channel.guestBalanceMinor,priceSummary.channel.currency) : priceSummary.amountOwed)}
             </span>
           </div>
-          {errorMessage && (
+          {errorMessage && !showCreateGuest && (
             <div
               role="alert"
               id="reservation-save-error"

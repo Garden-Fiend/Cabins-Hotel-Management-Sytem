@@ -6,11 +6,13 @@ import type { CreateInput, GuestDto, GuestInput, PatchInput, ReservationDto } fr
 import { formatPhp } from "../../app/api/presentation";
 import { useApi } from "../../app/api/useApi";
 import { useMutation } from "../../app/api/useMutation";
+import { InventoryDialog } from "../../features/inventory/InventoryDialog";
 
 const input = "mt-1 block w-full rounded border border-slate-300 p-2";
 const button = "rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-50";
 
 export function ApiGuestForm({ onSaved }: { onSaved?: (guest: GuestDto) => void }) {
+  const [open, setOpen] = useState(false);
   const api = useApi();
   const [name, setName] = useState(""), [phone, setPhone] = useState(""), [email, setEmail] = useState("");
   const [notice, setNotice] = useState("");
@@ -18,10 +20,17 @@ export function ApiGuestForm({ onSaved }: { onSaved?: (guest: GuestDto) => void 
   async function submit(event: FormEvent) {
     event.preventDefault(); setNotice("");
     const guest = await (mutation.uncertain ? mutation.retryOriginal() : mutation.submit({ name, phone, email }));
-    if (guest) { setNotice(`Guest ${guest.name} saved.`); onSaved?.(guest); setName(""); setPhone(""); setEmail(""); }
+    if (guest) { setNotice(`Guest ${guest.name} saved.`); onSaved?.(guest); setName(""); setPhone(""); setEmail(""); setOpen(false); }
   }
-  return <form onSubmit={submit} aria-label="Create guest" className="space-y-3 rounded-xl border p-4">
-    <h2 className="font-semibold">Create guest</h2>
+  function close() {
+    if (mutation.pending || mutation.uncertain || api.refreshing) return;
+    mutation.reviewedLatest();
+    setOpen(false); setName(""); setPhone(""); setEmail(""); setNotice("");
+  }
+  return <>
+    <button type="button" className={button} onClick={() => { setNotice(""); setOpen(true); }}>Create guest</button>
+    {notice && !open && <p role="status">{notice}</p>}
+    {open && <InventoryDialog title="Create guest" onClose={close}><form onSubmit={submit} aria-label="Create guest" className="space-y-3">
     <fieldset disabled={mutation.pending || mutation.uncertain || api.refreshing} className="space-y-3">
       <label className="block">Guest name<input className={input} value={name} onChange={e => setName(e.target.value)} required maxLength={200} /></label>
       <label className="block">Phone<input className={input} value={phone} onChange={e => setPhone(e.target.value)} maxLength={100} /></label>
@@ -32,8 +41,10 @@ export function ApiGuestForm({ onSaved }: { onSaved?: (guest: GuestDto) => void 
     <button className={button} disabled={mutation.pending || api.refreshing}>
       {mutation.pending ? "Saving guest…" : mutation.uncertain ? "Retry original guest request" : "Save guest"}
     </button>
+    <button type="button" className="ml-3 rounded border border-slate-300 px-4 py-2 disabled:opacity-50" disabled={mutation.pending || mutation.uncertain || api.refreshing} onClick={close}>Cancel</button>
     <p className="text-sm text-slate-600">Guest creation is saved independently of a reservation.</p>
-  </form>;
+  </form></InventoryDialog>}
+  </>;
 }
 
 export function ApiReservationForm({ record, initialRoom, initialStart, onSaved, onClose }: {

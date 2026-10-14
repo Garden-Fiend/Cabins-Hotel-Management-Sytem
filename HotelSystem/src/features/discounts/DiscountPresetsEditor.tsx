@@ -4,6 +4,7 @@ import { useHotelConfiguration } from "../configuration/useHotelConfiguration";
 import { isChargeableItem, validateDiscountPreset } from "../../lib/discountPresets";
 import { roundMoney } from "../../lib/money";
 import { useReservationDemo } from "../../app/useReservationDemo";
+import { InventoryDialog } from "../inventory/InventoryDialog";
 
 const inputClass = "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm";
 const buttonClass = "rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold";
@@ -71,7 +72,7 @@ export function DiscountPresetsEditor() {
       </div>
       <p className="mt-2 text-sm text-slate-600">Presets are selected by staff. They never apply automatically.</p>
       {persistent && <p className="mt-2 text-sm text-slate-600">Fixed and percentage presets persist. Final-price overrides and deletion are unavailable; disable a preset to retire it.</p>}
-      {notice && <p role="status" className="mt-3 text-sm text-slate-700">{notice}</p>}
+      {notice && !draft && <p role="status" className="mt-3 text-sm text-slate-700">{notice}</p>}
       <label className="mt-4 block text-sm">Search discounts
         <input className={inputClass} value={query} onChange={(event) => setQuery(event.target.value)} />
       </label>
@@ -101,8 +102,8 @@ export function DiscountPresetsEditor() {
         </tr>)}</tbody>
       </table></div>
     </section>
-    {draft && <section className={panelClass}>
-      <h3 className="font-semibold">{configuration.discounts.some((item) => item.id === draft.id) ? "Edit Discount" : "Create Discount"}</h3>
+    {draft && <InventoryDialog title={configuration.discounts.some((item) => item.id === draft.id) ? "Edit Discount" : "Create Discount"} onClose={() => { if (!saving) setDraft(null); }}>
+      {notice && <p role="status" className="text-sm text-slate-700">{notice}</p>}
       <form className="mt-4 space-y-4" onSubmit={save} noValidate>
         <label className="block text-sm">Discount Name<input className={inputClass} value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} /></label>
         <label className="block text-sm">Apply To<select className={inputClass} value={draft.scope} onChange={(event) => {
@@ -139,6 +140,6 @@ export function DiscountPresetsEditor() {
           setSaving(true);try{const latest=(await commands.loadPresets!()).find(item=>item.id===draft.id);if(!latest)throw new Error("Preset was not found; draft retained.");setDraft({...draft,serverVersion:latest.serverVersion});setNotice(`Latest preset version ${latest.serverVersion}: ${latest.label}, ${latest.method} ${latest.value}, ${latest.scope}, ${latest.enabled ? "enabled" : "disabled"}. Your draft is unchanged; review before saving.`);}catch(error){setNotice(error instanceof Error ? error.message : "Review failed; draft retained.");}finally{setSaving(false);}
         }}>Load latest preset version for review</button>}
       </form>
-    </section>}
+    </InventoryDialog>}
   </fieldset>;
 }

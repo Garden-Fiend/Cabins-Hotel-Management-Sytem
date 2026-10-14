@@ -43,4 +43,18 @@ describe("discounts page routing", () => {
     fireEvent.click(screen.getByRole("link", { name: "Discounts" }));
     await waitFor(() => expect(screen.getByRole("row", { name: /Page courtesy/ })).toBeTruthy());
   });
+
+  it("uses the inventory-style popup, restores focus and resets a cancelled draft", () => {
+    renderRoute("/discounts");
+    const create = screen.getByRole("button", { name: "Create Discount" });
+    create.focus();
+    fireEvent.click(create);
+    expect(screen.getByRole("dialog", { name: "Create Discount" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Discount Name"), { target: { value: "Discarded" } });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(create);
+    fireEvent.click(create);
+    expect((screen.getByLabelText("Discount Name") as HTMLInputElement).value).toBe("");
+  });
 });
