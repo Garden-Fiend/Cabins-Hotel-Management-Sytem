@@ -1,0 +1,80 @@
+import {chromium,expect} from '@playwright/test';
+import {spawn} from 'node:child_process';
+import {createWriteStream} from 'node:fs';
+import {writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {randomUUID} from 'node:crypto';
+
+const api=process.env.HMS_INTEGRATION_API,report=process.env.HMS_INTEGRATION_REPORT;
+if(!api||!report)throw new Error('Use run-retirement.py');
+const children=[],checks=[],log=createWriteStream(resolve(report,'vite.log'));
+let browser,context,page,demo;
+async function vite(mode,port){
+ const child=spawn(process.execPath,[resolve('node_modules/vite/bin/vite.js'),'--host','127.0.0.1','--port',String(port),'--strictPort'],{env:{...process.env,VITE_HMS_DATA_MODE:mode,VITE_HMS_API_URL:api},windowsHide:true,stdio:['ignore','pipe','pipe']});children.push(child);child.stdout.pipe(log);child.stderr.pipe(log);
+ for(let i=0;i<100;i++){if(child.exitCode!==null)throw new Error('Vite exited');try{if((await fetch(`http://127.0.0.1:${port}`)).ok)return;}catch{/* startup */}await new Promise(r=>setTimeout(r,100));}throw new Error('Vite readiness timeout');
+}
+try{
+ await Promise.all([vite('api',5183),vite('demo',5184)]);
+ browser=await chromium.launch();context=await browser.newContext({timezoneId:'Asia/Manila',viewport:{width:1500,height:1000},recordVideo:{dir:resolve(report,'video')}});await context.tracing.start({screenshots:true,snapshots:true});page=await context.newPage();
+ const read=async path=>{const r=await context.request.get(`${api}/api/v1/${path}`);expect(r.ok(),await r.text()).toBe(true);return r.json();};
+ const mutate=async(path,data)=>{const r=await context.request.post(`${api}/api/v1/${path}`,{headers:{'Idempotency-Key':randomUUID()},data});expect(r.ok(),await r.text()).toBe(true);return r.json();};
+ const refs=await read('reference-data'),type=refs.room_types[0],room=refs.rooms[0];
+ const card=number=>page.locator('article').filter({has:page.getByRole('heading',{name:`Room ${number}`,exact:true})});
+ const typeCard=label=>page.locator('article').filter({has:page.getByRole('heading',{name:label,exact:true})});
+ page.on('dialog',dialog=>dialog.accept());
+ await page.goto('http://127.0.0.1:5183/rooms');
+ await page.getByRole('button',{name:'Add room',exact:true}).click();
+ const form=page.getByRole('dialog',{name:'Add room',exact:true});
+ await form.getByLabel('Room number',{exact:true}).fill('B4-201');await form.getByRole('combobox',{name:/^Room type/}).selectOption(type.id);
+ await form.getByRole('button',{name:'Add room',exact:true}).click();await expect(form).toHaveCount(0);
+ const created=(await read('reference-data')).rooms.find(r=>r.number==='B4-201');expect(created.operational_status).toBe('operational');
+ await page.route('**/configuration/rooms/*/retirement',route=>route.abort());
+ await card('B4-201').getByRole('button',{name:'Archive',exact:true}).click();await expect(page.getByRole('alert')).toContainText('response could not be confirmed');
+ expect((await read('reference-data')).rooms.find(r=>r.id===created.id).archived).toBe(false);
+ await page.unroute('**/configuration/rooms/*/retirement');await page.getByRole('button',{name:'Confirm original retirement request'}).click();await expect(card('B4-201').getByRole('button',{name:'Restore',exact:true})).toBeVisible();
+ await page.getByLabel('Show records',{exact:true}).selectOption('active');await expect(card('B4-201')).toHaveCount(0);
+ await page.getByLabel('Show records',{exact:true}).selectOption('archived');await expect(card('B4-201')).toBeVisible();
+ checks.push('Original Rooms Add room defaults to Operational; failed archive retains record, original-key retry persists; active/archived filtering works');
+ async function availableNumbers(){
+   await page.goto('http://127.0.0.1:5183/');await page.getByRole('button',{name:'+ Create Reservation',exact:true}).click();
+   return page.getByRole('dialog',{name:'Create reservation',exact:true}).getByRole('combobox',{name:'Choose available room',exact:true}).locator('option').allTextContents();
+ }
+ expect((await availableNumbers()).join(' ')).not.toContain('B4-201');
+ await page.goto('http://127.0.0.1:5183/rooms');await card('B4-201').getByRole('button',{name:'Restore',exact:true}).click();await expect(card('B4-201').getByRole('button',{name:'Archive',exact:true})).toBeVisible();
+ expect((await availableNumbers()).join(' ')).toContain('B4-201');checks.push('Archived room excluded from original reservation chooser; restore returns eligibility');
+ await page.goto('http://127.0.0.1:5183/rooms');await card('B4-201').getByRole('button',{name:'Delete permanently',exact:true}).click();await expect(card('B4-201')).toHaveCount(0);checks.push('Original unused-room permanent deletion confirms then removes only after server success');
+ const guest=await mutate('guests',{name:'B4 historical guest'});
+ const saved=await mutate('reservations',{guest_id:guest.id,booking_source_id:refs.booking_sources[0].id,room_id:room.id,duration_id:refs.durations[0].id,scheduled_start:new Date(Date.now()-1800000).toISOString(),adults:1});
+ const draft=await mutate(`reservations/${saved.id}/billing-documents`,{expected_reservation_version:1});
+ const final=await mutate(`billing-documents/${draft.id}/finalize`,{expected_version:1});
+ await page.goto('http://127.0.0.1:5183/rooms');await page.getByRole('button',{name:'Room types',exact:true}).click();await typeCard(type.label).getByRole('button',{name:'Archive',exact:true}).click();await expect(typeCard(type.label).getByRole('button',{name:'Restore',exact:true})).toBeVisible();
+ expect((await availableNumbers()).join(' ')).not.toContain('101');
+ const rejected=await context.request.post(`${api}/api/v1/reservations`,{headers:{'Idempotency-Key':randomUUID()},data:{guest_id:guest.id,booking_source_id:refs.booking_sources[0].id,room_id:room.id,duration_id:refs.durations[0].id,scheduled_start:new Date(Date.now()+172800000).toISOString(),adults:1}});expect(rejected.status()).toBe(422);
+ await page.goto(`http://127.0.0.1:5183/reservations/${saved.id}`);await expect(page.getByText('B4 historical guest',{exact:true}).first()).toBeVisible();
+ await page.getByRole('button',{name:'Check in',exact:true}).click();await expect(page.getByRole('button',{name:'Check out',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Check out',exact:true}).click();await expect.poll(async()=>(await read(`reservations/${saved.id}`)).status).toBe('checked_out');
+ expect(await read(`billing-documents/${final.id}`)).toEqual(final);checks.push('Original type archive preserves assigned room/history/final bill, excludes selector and rejects direct booking');
+ await page.goto('http://127.0.0.1:5183/rooms');await page.getByRole('button',{name:'Room types',exact:true}).click();await typeCard(type.label).getByRole('button',{name:'Restore',exact:true}).click();await expect(typeCard(type.label).getByRole('button',{name:'Archive',exact:true})).toBeVisible();
+ await page.goto('http://127.0.0.1:5183/rooms');await card('101').getByRole('button',{name:'Archive',exact:true}).click();await expect(card('101').getByRole('button',{name:'Restore',exact:true})).toBeVisible();
+ await card('101').getByRole('button',{name:'Delete permanently',exact:true}).click();await expect(page.getByRole('alert')).toContainText('archive it instead');await expect(card('101')).toBeVisible();
+ await page.goto(`http://127.0.0.1:5183/reservations/${saved.id}/print`);await expect(page.locator('[data-reservation-print-document]')).toContainText('101');checks.push('Terminal historic room archives but cannot be deleted; historical reservation print and finalized capture remain readable');
+ await page.goto('http://127.0.0.1:5183/rooms');await page.getByRole('button',{name:'Room types',exact:true}).click();await page.getByRole('button',{name:'Add room type',exact:true}).click();
+ const tf=page.getByRole('dialog',{name:'Add room type',exact:true});await tf.getByLabel('Name',{exact:true}).fill('B4 Empty Type');await tf.getByRole('button',{name:'Add room type',exact:true}).click();await expect(tf).toHaveCount(0);
+ await typeCard('B4 Empty Type').getByRole('button',{name:'Archive',exact:true}).click();await expect(typeCard('B4 Empty Type').getByRole('button',{name:'Restore',exact:true})).toBeVisible();
+ await typeCard('B4 Empty Type').getByRole('button',{name:'Restore',exact:true}).click();await expect(typeCard('B4 Empty Type').getByRole('button',{name:'Archive',exact:true})).toBeVisible();
+ await typeCard('B4 Empty Type').getByRole('button',{name:'Delete permanently',exact:true}).click();await expect(typeCard('B4 Empty Type')).toHaveCount(0);checks.push('Original room-type create/archive/restore/confirmed unused delete persists');
+ await page.goto('http://127.0.0.1:5183/configuration');const row=page.getByRole('row').filter({has:page.getByRole('cell',{name:type.label,exact:true})});
+ await row.getByRole('button',{name:'Disable',exact:true}).click();await expect(row.getByRole('button',{name:'Enable',exact:true})).toBeVisible();
+ await row.getByRole('button',{name:'Enable',exact:true}).click();await expect(row.getByRole('button',{name:'Disable',exact:true})).toBeVisible();checks.push('Original generic Configuration type Disable/Enable works with assigned rooms and clears archived metadata on restore');
+ await page.getByRole('navigation',{name:'Configuration categories'}).getByRole('button',{name:'Rooms',exact:true}).click();
+ const rr=page.getByRole('row').filter({has:page.getByRole('cell',{name:'101',exact:true})});
+ await rr.getByRole('button',{name:'Enable',exact:true}).click();await expect(rr.getByRole('button',{name:'Disable',exact:true})).toBeVisible();
+ await rr.getByRole('button',{name:'Disable',exact:true}).click();await expect(rr.getByRole('button',{name:'Enable',exact:true})).toBeVisible();
+ await rr.getByRole('button',{name:'Edit',exact:true}).click();await page.getByLabel('Enabled',{exact:true}).check();await page.getByRole('button',{name:'Save changes',exact:true}).click();await expect(rr.getByRole('button',{name:'Disable',exact:true})).toBeVisible();
+ checks.push('Generic Configuration room Disable/Enable and edit-form Enabled restoration clear archive state without changing operational/readiness facts');
+ demo=await browser.newContext();const dp=await demo.newPage();let calls=0;dp.on('request',r=>{if(r.url().includes('/api/v1/'))calls++;});await dp.goto('http://127.0.0.1:5184/rooms');
+ const dc=dp.locator('article').filter({has:dp.getByRole('heading',{name:'Room 103',exact:true})});await dc.getByRole('button',{name:'Archive',exact:true}).click();await expect(dc.getByRole('button',{name:'Restore',exact:true})).toBeVisible();await dc.getByRole('button',{name:'Restore',exact:true}).click();await expect(dc.getByRole('button',{name:'Archive',exact:true})).toBeVisible();expect(calls).toBe(0);checks.push('Independent demo room archive/restore retains original behavior with zero API calls');
+ await writeFile(resolve(report,'expected.json'),JSON.stringify({references:await read('reference-data'),reservations:await read('reservations'),documents:[final]},null,2));
+ await page.screenshot({path:resolve(report,'retirement.png'),fullPage:true});await writeFile(resolve(report,'results.json'),JSON.stringify({status:'PASS',checks},null,2));console.log(`PASS: ${checks.length} retirement browser checks`);
+}catch(error){if(page){await page.screenshot({path:resolve(report,'failure.png'),fullPage:true});await writeFile(resolve(report,'failure.html'),await page.content());}await writeFile(resolve(report,'results.json'),JSON.stringify({status:'FAIL',checks,error:String(error)},null,2));throw error;
+}finally{if(demo)await demo.close();if(context){await context.tracing.stop({path:resolve(report,'trace.zip')});await context.close();}if(browser)await browser.close();for(const child of children){child.kill();await new Promise(r=>child.exitCode!==null?r():child.once('exit',r));}log.end();}

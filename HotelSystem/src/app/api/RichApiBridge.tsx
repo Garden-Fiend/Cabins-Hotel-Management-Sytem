@@ -24,6 +24,11 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
   const lifecycle = useMutation((input: { id: string; action: LifecycleAction; body: LifecycleInput }, key: string) => api.lifecycleReservation(input.id, input.action, input.body, key), `${scope}:lifecycle`);
   const readiness = useMutation((input: { id: string; body: { expected_version: number; housekeeping: "clean" | "cleaning" } }, key: string) => api.roomReadiness(input.id, input.body, key), `${scope}:readiness`);
   const definition = useMutation((input: DefinitionIntent, key: string) => api.saveDefinition(input.kind, input.id, input.body, key), `${scope}:definition`);
+  const retirement = useMutation(async(input:{kind:"rooms"|"room-types";id:string;body:{expected_version:number;action:"archive"|"restore"|"delete"}},key:string)=>{
+    const saved=await api.client.retireDefinition(input.kind,input.id,input.body,key);
+    await api.refresh();
+    return saved;
+  },`${scope}:retirement`);
   const multiCreate=useMutation(api.createMulti,`${scope}:multi-create`);
   const multiEdit=useMutation((input:{id:string;body:MultiEditInput},key:string)=>api.editAllocations(input.id,input.body,key),`${scope}:multi-edit`);
   const multiLife=useMutation((input:{id:string;action:string;body:{expected_version:number;allocation_id?:string;guest_has_vacated?:boolean}},key:string)=>api.roomLifecycle(input.id,input.action,input.body,key),`${scope}:multi-lifecycle`);
@@ -46,6 +51,10 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
     guests, configuration, settlements: [],
     setReservations: unsupported, setStays: unsupported, setGuests: unsupported, setConfiguration: unsupported, setSettlements: unsupported,
     commands: {
+      retireDefinition: async(kind,id,version,action)=>{
+        const result=await retirement.submit({kind,id,body:{expected_version:version,action}});
+        if(!result)throw new Error("Operation not confirmed. Review the API message or confirm the original retirement request.");
+      },
       canEditMultiple:references.capabilities?.includes("reservation.multi-room.v1"),
       canEditCustomStays:references.capabilities?.includes("reservation.independent-stays.v1"),
       allocationLifecycle:async(original,action,allocationId)=>{const result=await multiLife.submit({id:original.id,action,body:{expected_version:original.serverVersion!,...(allocationId?{allocation_id:allocationId}:{})}});if(!result)throw new Error("Room lifecycle was not confirmed. Reload/review or retry the unchanged operation.");},
@@ -77,8 +86,8 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
       } : undefined,
       canEditPurchases: references.capabilities?.includes("reservation.purchases.v1"),
       canEditRoomStatus: references.capabilities?.includes("room.status.v1"),
-      error: create.error || patch.error || guest.error || lifecycle.error || readiness.error || definition.error || multiCreate.error || multiEdit.error || multiLife.error,
-      busy: lifecycle.pending || readiness.pending || definition.pending || create.pending || patch.pending || guest.pending || multiCreate.pending || multiEdit.pending || multiLife.pending || api.refreshing,
+      error: retirement.error || create.error || patch.error || guest.error || lifecycle.error || readiness.error || definition.error || multiCreate.error || multiEdit.error || multiLife.error,
+      busy: retirement.pending || lifecycle.pending || readiness.pending || definition.pending || create.pending || patch.pending || guest.pending || multiCreate.pending || multiEdit.pending || multiLife.pending || api.refreshing,
       saveDefinition: references.capabilities?.includes("configuration.definitions.v1") ? async (section, id, values, version, defaultInclusions) => {
         const result = await definition.submit(definitionIntent(section, id, values, configuration, version, defaultInclusions));
         if (!result) throw new Error("Configuration save was not confirmed. Your draft is retained. " + (definition.error || "Resolve the API error before retrying."));
@@ -148,6 +157,10 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
       },
     },
   }}>
+    {retirement.error && <div role="alert" className="m-4 rounded-xl border border-rose-300 p-4">{retirement.error}
+      {retirement.uncertain && <button onClick={()=>void retirement.retryOriginal()}>Confirm original retirement request</button>}
+      {!retirement.uncertain && <button onClick={()=>void api.refresh()}>Reload configuration</button>}
+    </div>}
     {reviewMessage && <p role="status" className="m-4 rounded-xl border bg-sky-50 p-3">{reviewMessage}</p>}
     {(create.error || patch.error || guest.error || lifecycle.error || readiness.error || definition.error || multiCreate.error || multiEdit.error || multiLife.error) && <div role="alert" className="m-4 rounded-xl border border-rose-300 bg-rose-50 p-4">
       {create.error || patch.error || guest.error || lifecycle.error || readiness.error || definition.error || multiCreate.error || multiEdit.error || multiLife.error}

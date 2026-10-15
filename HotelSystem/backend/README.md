@@ -265,3 +265,16 @@ are the overall range, not every room's availability. See the
 Focused backend: `& .\scripts\python.ps1 -m pytest --postgres -q tests/test_custom_stays.py`.
 From app root, separately: `& .\backend\scripts\python.ps1 integration-tests/run-custom-stays.py`.
 The guarded runner owns only its generated test company and temporary API/frontend processes.
+### B4 room and room-type retirement
+
+Existing archive/enabled fields are reused; head remains `c37d42e8f932`. Original Rooms controls
+archive/restore and confirm unused deletion. Generic Configuration Enable/Disable and edit-form
+Enabled state persist consistently. References/history remain visible, while new booking selectors
+and server commands reject archived configurations. Type retirement preserves physical-room flags
+and existing booked lifecycle; room retirement rejects active assignments. Referenced deletion is
+blocked with an archive recommendation. See [contract](contracts.md#room-and-room-type-retirement-b4)
+and [checkpoint](../docs/planning/b4-room-type-retirement-checkpoint-2026-10-15.md).
+
+Focused backend: `& .\scripts\python.ps1 -m pytest --postgres -q tests/test_retirement.py tests/test_retirement_multi.py tests/test_configuration_api.py tests/test_reservation_lifecycle.py`.
+From app root, separately: `& .\backend\scripts\python.ps1 integration-tests/run-retirement.py`.
+Restart an older launcher normally; no migration/reset/reseed required.

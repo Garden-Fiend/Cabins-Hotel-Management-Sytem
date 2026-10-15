@@ -571,7 +571,7 @@ export function ConfigurationPage() {
       return;
     }
     if (
-      activeSection === "roomTypes" &&
+      mode !== "api" && activeSection === "roomTypes" &&
       !booleanValue(fields, "enabled") &&
       configuration.rooms.some(
         (room) =>
@@ -622,7 +622,7 @@ export function ConfigurationPage() {
     if (mode === "api") {
       if (definitionUnavailable || !commands?.saveDefinition) { setNotice("This definition is not yet supported by the API."); return; }
       try {
-        await commands.saveDefinition(activeSection as DefinitionSection, editingId ?? undefined, { ...fields, enabled: fields.enabled ?? true }, editingVersion, activeSection === "roomTypes" ? defaultInclusions : undefined);
+        await commands.saveDefinition(activeSection as DefinitionSection, editingId ?? undefined, { ...fields, enabled: fields.enabled ?? true, ...(["rooms","roomTypes"].includes(activeSection) ? {archived:fields.enabled === false} : {}) }, editingVersion, activeSection === "roomTypes" ? defaultInclusions : undefined);
       } catch (error) { setNotice(error instanceof Error ? error.message : "Unable to save. Your draft is retained."); return; }
     } else persist(id, { ...fields, enabled: fields.enabled ?? true }, activeSection === "roomTypes" ? defaultInclusions : undefined);
     setDefaultInclusions([]);
@@ -633,7 +633,7 @@ export function ConfigurationPage() {
 
   async function toggleRow(row: ConfigRow) {
     if (
-      activeSection === "roomTypes" &&
+      mode !== "api" && activeSection === "roomTypes" &&
       row.enabled &&
       configuration.rooms.some(
         (room) =>
@@ -647,7 +647,7 @@ export function ConfigurationPage() {
     }
     if (mode === "api") {
       if (definitionUnavailable || !commands?.saveDefinition) return;
-      try { await commands.saveDefinition(activeSection as DefinitionSection, row.id, { ...row, enabled: !row.enabled }, typeof row.serverVersion === "number" ? row.serverVersion : undefined); }
+      try { await commands.saveDefinition(activeSection as DefinitionSection, row.id, { ...row, enabled: !row.enabled, ...(["rooms","roomTypes"].includes(activeSection) ? {archived:row.enabled} : {}) }, typeof row.serverVersion === "number" ? row.serverVersion : undefined); }
       catch (error) { setNotice(error instanceof Error ? error.message : "Unable to update definition."); return; }
     } else persist(row.id, { ...row, enabled: !row.enabled });
     setNotice(`${String(row.label ?? row.number ?? row.id)} updated.`);

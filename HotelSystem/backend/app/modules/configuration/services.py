@@ -264,7 +264,15 @@ def save_definition(service, kind, request, key, id=None):
                 values["operational"] = status == "operational"
                 room_type = service.owned(session, room_types, values["room_type_id"], lock=True)
                 if not room_type["enabled"] or room_type["archived"]:
-                    if previous is None or previous["room_type_id"] != room_type["id"]:
+                    if (
+                        previous is None
+                        or previous["room_type_id"] != room_type["id"]
+                        or (
+                            values["enabled"]
+                            and not values["archived"]
+                            and (not previous["enabled"] or previous["archived"])
+                        )
+                    ):
                         raise DomainError(
                             "inactive_reference", "New assignments require an active room type", 422
                         )
@@ -295,23 +303,6 @@ def save_definition(service, kind, request, key, id=None):
             elif kind == "room-types":
                 if values["archived"]:
                     values["enabled"] = False
-                if (
-                    not values["enabled"]
-                    and session.scalar(
-                        sa.select(rooms.c.id)
-                        .where(
-                            rooms.c.company_id == service.context.company_id,
-                            rooms.c.room_type_id == id,
-                            rooms.c.enabled,
-                            ~rooms.c.archived,
-                        )
-                        .limit(1)
-                    )
-                    is not None
-                ):
-                    raise DomainError(
-                        "active_rooms", "Reassign or archive rooms before disabling their type"
-                    )
                 duplicate = session.scalar(
                     sa.select(room_types.c.id)
                     .where(

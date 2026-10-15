@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter
 
 from app.modules.configuration.breakfast import save_breakfast
+from app.modules.configuration.retirement import RetirementIntent, RetirementRead, retire_definition
 from app.modules.configuration.schemas import (
     CategoryEdit,
     CategoryRead,
@@ -28,6 +29,16 @@ from app.modules.reservations.router import Key, Service
 from app.modules.reservations.schemas import BreakfastConfiguration, BreakfastConfigurationRead
 
 router = APIRouter(prefix="/api/v1/configuration", tags=["local-development configuration"])
+
+
+@router.post("/rooms/{id}/retirement", response_model=RetirementRead)
+def retire_room(id: UUID, body: RetirementIntent, key: Key, service: Service):
+    return retire_definition(service, "rooms", id, body, key)
+
+
+@router.post("/room-types/{id}/retirement", response_model=RetirementRead)
+def retire_room_type(id: UUID, body: RetirementIntent, key: Key, service: Service):
+    return retire_definition(service, "room-types", id, body, key)
 
 
 @router.post("/discount-presets", response_model=DiscountPresetRead, status_code=201)

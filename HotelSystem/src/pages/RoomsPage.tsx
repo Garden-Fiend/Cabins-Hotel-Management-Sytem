@@ -79,6 +79,7 @@ export function RoomsPage() {
   const [roomTypeFormVisible, setRoomTypeFormVisible] = useState(false);
   const [notice, setNotice] = useState("");
   const [tab, setTab] = useState<"rooms" | "room-types">("rooms");
+  const [retirementView,setRetirementView]=useState("all");
   const now = new Date();
   const roomTypes = configuration.roomTypes;
   const amenityItems = configuration.catalogItems.filter(
@@ -296,13 +297,22 @@ export function RoomsPage() {
     );
   }
 
+  async function retire(kind:"rooms"|"room-types",record:{id:string;serverVersion?:number},action:"archive"|"restore"|"delete") {
+    if(action === "delete" && !window.confirm("Permanently delete this unused record? This cannot be undone."))return;
+    try {
+      if(!commands?.retireDefinition || !record.serverVersion)throw new Error("Reload configuration before continuing.");
+      await commands.retireDefinition(kind,record.id,record.serverVersion,action);
+      setNotice(`Record ${action === "delete" ? "deleted" : action === "archive" ? "archived" : "restored"}.`);
+    } catch(error){setNotice(error instanceof Error ? error.message : "Operation failed. Record retained.");}
+  }
+
   const activeRooms = configuration.rooms.filter(
     (room) => room.enabled && !room.archived,
   );
 
   return (
     <div className="space-y-6">
-      {mode === "api" && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">API mode: supported readiness, room status, room/type edits and inclusion defaults persist. Room/type archive and deletion controls are not yet supported.</p>}
+      {mode === "api" && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">Room and type changes persist. Archive preserves history; permanent deletion is restricted to unused records. Restore an archived type before restoring its rooms.</p>}
       <header>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
           Inventory
@@ -338,6 +348,10 @@ export function RoomsPage() {
           </button>
         ))}
       </div>
+
+      {mode === "api" && <label className="block text-sm">Show records <select aria-label="Show records" value={retirementView} onChange={event=>setRetirementView(event.target.value)} className="rounded border p-2">
+        <option value="all">Active and archived</option><option value="active">Active</option><option value="archived">Archived</option>
+      </select></label>}
 
       {tab === "rooms" ? (
         <div className="space-y-4">
@@ -539,7 +553,7 @@ export function RoomsPage() {
           )}
 
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {configuration.rooms.map((room) => {
+            {configuration.rooms.filter(room=>mode !== "api" || retirementView === "all" || (retirementView === "active" ? room.enabled && !room.archived : !room.enabled || room.archived)).map((room) => {
               const currentStay = stays.find(
                 (stay) =>
                   stay.room === room.number &&
@@ -678,7 +692,7 @@ export function RoomsPage() {
                     {room.enabled && !room.archived ? (
                       <button
                         type="button"
-                        disabled={mode === "api" || reservations.some(
+                        disabled={(mode === "api" && commands?.busy) || reservations.some(
                           (reservation) =>
                             (reservation.status === "confirmed" ||
                               reservation.status === "checked_in" ||
@@ -687,7 +701,7 @@ export function RoomsPage() {
                               (assigned) => assigned.roomNumber === room.number,
                             ),
                         )}
-                        onClick={() =>
+                        onClick={() => mode === "api" ? void retire("rooms",room,"archive") :
                           setConfiguration((current) => ({
                             ...current,
                             rooms: current.rooms.map((item) =>
@@ -702,9 +716,9 @@ export function RoomsPage() {
                         Archive
                       </button>
                     ) : (
-                      <button disabled={mode === "api"}
+                      <button disabled={mode === "api" && commands?.busy}
                         type="button"
-                        onClick={() =>
+                        onClick={() => mode === "api" ? void retire("rooms",room,"restore") :
                           setConfiguration((current) => ({
                             ...current,
                             rooms: current.rooms.map((item) =>
@@ -719,10 +733,10 @@ export function RoomsPage() {
                         Restore
                       </button>
                     )}
-                    {!hasHistory && (
-                      <button disabled={mode === "api"}
+                    {(mode === "api" || !hasHistory) && (
+                      <button disabled={mode === "api" && commands?.busy}
                         type="button"
-                        onClick={() =>
+                        onClick={() => mode === "api" ? void retire("rooms",room,"delete") :
                           setConfiguration((current) => ({
                             ...current,
                             rooms: current.rooms.filter(
@@ -902,7 +916,7 @@ export function RoomsPage() {
           </div>
           )}
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {roomTypes.map((roomType) => {
+            {roomTypes.filter(type=>mode !== "api" || retirementView === "all" || (retirementView === "active" ? type.enabled && !type.archived : !type.enabled || type.archived)).map((roomType) => {
               const assignedRooms = configuration.rooms.filter(
                 (room) => room.roomTypeId === roomType.id,
               );
@@ -964,13 +978,13 @@ export function RoomsPage() {
                     {roomType.enabled ? (
                       <button
                         type="button"
-                        disabled={mode === "api" || activeAssignments.length > 0}
+                        disabled={mode === "api" ? commands?.busy : activeAssignments.length > 0}
                         title={
-                          activeAssignments.length > 0
+                          mode !== "api" && activeAssignments.length > 0
                             ? "Reassign rooms before archiving this type."
                             : undefined
                         }
-                        onClick={() =>
+                        onClick={() => mode === "api" ? void retire("room-types",roomType,"archive") :
                           setConfiguration((current) => ({
                             ...current,
                             roomTypes: current.roomTypes.map((item) =>
@@ -985,9 +999,9 @@ export function RoomsPage() {
                         Archive
                       </button>
                     ) : (
-                      <button disabled={mode === "api"}
+                      <button disabled={mode === "api" && commands?.busy}
                         type="button"
-                        onClick={() =>
+                        onClick={() => mode === "api" ? void retire("room-types",roomType,"restore") :
                           setConfiguration((current) => ({
                             ...current,
                             roomTypes: current.roomTypes.map((item) =>
@@ -1002,10 +1016,10 @@ export function RoomsPage() {
                         Restore
                       </button>
                     )}
-                    {assignedRooms.length === 0 && !usedByReservation && (
-                      <button disabled={mode === "api"}
+                    {(mode === "api" || (assignedRooms.length === 0 && !usedByReservation)) && (
+                      <button disabled={mode === "api" && commands?.busy}
                         type="button"
-                        onClick={() =>
+                        onClick={() => mode === "api" ? void retire("room-types",roomType,"delete") :
                           setConfiguration((current) => ({
                             ...current,
                             roomTypes: current.roomTypes.filter(

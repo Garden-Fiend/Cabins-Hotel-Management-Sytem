@@ -28,3 +28,5 @@ describe("room configuration contract", () => {
     expect(roomReadinessError(room, "dirty", [], new Date(0))).toBeUndefined();
   });
 });
+
+

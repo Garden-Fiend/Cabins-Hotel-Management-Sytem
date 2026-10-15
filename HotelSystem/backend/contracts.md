@@ -458,3 +458,33 @@ inherited-template checks. Ownership, exclusion, completeness, stable IDs and to
 Individual/bulk lifecycle operations use allocation instants with the existing strict atomic rules.
 Billing capture schema 3 records each independent schedule/provenance/entitlement and captured pricing;
 schemas 1/2 are unchanged. No arbitrary checkout, payment/accounting, post-arrival stay changes or B4.
+# Room and room-type retirement (B4)
+
+`POST /api/v1/configuration/rooms/{id}/retirement` and
+`POST /api/v1/configuration/room-types/{id}/retirement` accept only
+`{ "expected_version": 1, "action": "archive" | "restore" | "delete" }` with UUID
+`Idempotency-Key`. Success is 200 with `{id, version, action}`; deletion is confirmed explicitly.
+Owned missing/foreign identities return 404, malformed input 422, stale versions or protected
+references 409. Existing versioned configuration PATCH remains available. Reference-data GET
+includes active and archived records for management and historical display.
+
+Archive sets `enabled=false, archived=true`; restore sets the inverse without changing readiness,
+maintenance, associations, rates or default inclusions. Room archive rejects blocking allocations
+and outstanding physical occupancy. Room restore requires an active type. Type archive preserves
+all physical-room flags and existing bookings; it blocks new use, not lifecycle service of captured
+assignments. Restore never reactivates individually archived rooms. Room-number uniqueness includes
+archived rooms. Existing financial captures and finalized documents remain unchanged.
+
+Exclusive definition locks serialize room retirement with reservation room locks, and type retirement
+with the shared type locks held by booking/configuration writers. Delete checks every modeled incoming
+FK (including tombstones, rooms, rates, defaults and presets) and historical pricing/document/business
+audit JSON references. No dependent configuration is automatically deleted. A record's own definition
+audit/receipts survive unused deletion as snapshots; other audit references block deletion. FK
+enforcement remains the final relational guard. Audit and durable receipt commit with each mutation.
+Same-key requests replay their original response even after later changes or deletion. A fresh request
+for an already missing identity returns 404. A fresh archive/restore of the current state, at its current
+version, returns success without incrementing the version or duplicating the action audit.
+
+Original UI actions await confirmation and refresh canonical records. Ambiguous requests retain their
+original key/body in tab session storage; resolve the original request before changing the intent.
+No migration, destructive cleanup, automatic relocation or repricing is involved.

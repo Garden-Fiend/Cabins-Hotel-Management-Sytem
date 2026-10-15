@@ -105,6 +105,9 @@ export class ApiClient {
   roomReadiness(id: string, body: { expected_version: number; housekeeping: "clean" | "cleaning" }, key: string) {
     return this.request<ReferencesDto["rooms"][number]>(`/rooms/${encodeURIComponent(id)}/readiness`, "POST", body, key);
   }
+  retireDefinition(kind: "rooms" | "room-types", id: string, body: {expected_version:number;action:"archive"|"restore"|"delete"}, key: string) {
+    return this.request<{id:string;version:number;action:string}>(`/configuration/${kind}/${encodeURIComponent(id)}/retirement`, "POST", body, key);
+  }
   saveDefinition<K extends DefinitionKind>(kind: K, id: string | undefined, body: DefinitionMap[K] & { expected_version?: number }, key: string) {
     return this.request<{ id: string; version: number }>(`/configuration/${kind}${id ? `/${encodeURIComponent(id)}` : ""}`, id ? "PATCH" : "POST", body, key);
   }

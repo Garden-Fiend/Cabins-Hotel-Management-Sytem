@@ -34,6 +34,7 @@ export interface ReservationDemoContextValue {
     saveBreakfast?: (items: { inventoryItemId: string; kind: "meal" | "beverage"; enabled: boolean }[], version: number) => Promise<void>;
     loadBreakfast?: () => Promise<{ version: number; items: { inventoryItemId: string; kind: "meal" | "beverage"; enabled: boolean }[] }>;
     canEditRoomStatus?: boolean;
+    retireDefinition?: (kind:"rooms"|"room-types",id:string,version:number,action:"archive"|"restore"|"delete")=>Promise<void>;
     lifecycle?: (original: ReservationSnapshot, action: "check-in" | "check-out" | "cancel" | "no-show" | "record-departure", vacated?: boolean) => Promise<void>;
     readiness?: (room: RoomConfiguration, state: "clean" | "cleaning") => Promise<void>;
     saveDefinition?: (section: "roomTypes" | "rooms" | "durations" | "roomTypePrices" | "catalogItems" | "inventoryCategories", id: string | undefined, values: Record<string, ConfigurationValue>, version?: number, defaultInclusions?: { catalogId: string; quantity: number }[]) => Promise<void>;

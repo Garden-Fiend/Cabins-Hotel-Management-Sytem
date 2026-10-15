@@ -98,7 +98,8 @@ def transition(service, id: UUID, action: str, request: LifecycleCommand, key: U
                 raise DomainError(
                     "check_in_window", "Check-in is available only during the scheduled stay"
                 )
-            room_type = service.owned(session, room_types, room["room_type_id"], lock=True)
+            # Type retirement prevents new bookings, not service of captured assignments.
+            service.owned(session, room_types, room["room_type_id"], lock=True)
             pricing = session.execute(
                 sa.select(pricing_revisions.c.snapshot)
                 .where(
@@ -112,13 +113,7 @@ def transition(service, id: UUID, action: str, request: LifecycleCommand, key: U
                 raise DomainError(
                     "room_type_changed", "Room type no longer matches the captured assignment"
                 )
-            if (
-                not room["enabled"]
-                or room["archived"]
-                or not room["operational"]
-                or not room_type["enabled"]
-                or room_type["archived"]
-            ):
+            if not room["enabled"] or room["archived"] or not room["operational"]:
                 raise DomainError(
                     "room_unavailable", "Assigned room must be active and operational"
                 )

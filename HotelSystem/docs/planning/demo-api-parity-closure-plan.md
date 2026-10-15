@@ -101,6 +101,10 @@ by the B3 session specification. Occupied stay extensions and B4 were not starte
 
 ## B4 — Room/type retirement and safe unused deletion (medium)
 
+Completed October 15: original dedicated/generic controls, guarded retirement/delete commands,
+historical-reference and lifecycle protection. See the
+[B4 checkpoint](b4-room-type-retirement-checkpoint-2026-10-15.md) for executed focused/browser evidence.
+
 - Files: RoomsPage, ConfigurationPage, definition adapter; configuration services/router; reservations
   models. Existing archived/enabled metadata means archive/restore should need no new table.
 - API: reuse guarded versioned PATCH for archive/restore; add explicit unused-delete command with
