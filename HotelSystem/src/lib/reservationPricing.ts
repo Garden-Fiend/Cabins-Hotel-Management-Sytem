@@ -4,7 +4,7 @@ import { isAppliedPresetCompatible } from "./discountPresets";
 
 export function calculateReservationPrice(
   lines: ReservationPriceLine[], discounts: ReservationDiscount[], adjustments: number[],
-  options: { currency?: string; staged?: boolean } = {},
+  options: { currency?: string; staged?: boolean; separateUnitReplacements?: boolean } = {},
 ): ReservationPriceSummary {
   const currency = options.currency ?? lines.find((line) => line.currency)?.currency ?? "PHP";
   if (lines.some((line) => line.currency && line.currency !== currency)) throw new Error("Reservation price lines must use one currency.");
@@ -59,14 +59,18 @@ export function calculateReservationPrice(
   const subtotalMinor = lines.reduce((sum, line) => sum + Math.max(0, toMinorUnits(line.amount, currency)), 0);
   const discountMinor = applied.reduce((sum, item) => sum + toMinorUnits(item.amount, currency), 0);
   const adjustmentMinor = adjustments.reduce((sum, amount) => sum + toMinorUnits(amount, currency), 0);
+  const replacements = options.separateUnitReplacements ? applied.filter(d => d.method === "final_price") : [];
+  const replacementMinor = replacements.reduce((sum, d) => sum + toMinorUnits(d.amount, currency), 0);
   return {
     lines: lines.map((line) => ({ ...line, amount: roundMoney(line.amount, currency),
       effectiveAmount: fromMinorUnits(effective.get(line.id) ?? 0, currency),
       effectiveUnitPrice: roundMoney(fromMinorUnits(effective.get(line.id) ?? 0, currency) / (line.pricingQuantity ?? line.quantity ?? 1), currency),
       finalAmount: fromMinorUnits(remaining.get(line.id) ?? 0, currency),
     })),
-    discounts: applied, subtotal: fromMinorUnits(subtotalMinor, currency),
-    discountTotal: fromMinorUnits(discountMinor, currency), adjustmentTotal: fromMinorUnits(adjustmentMinor, currency),
+    discounts: options.separateUnitReplacements ? applied.filter(d => d.method !== "final_price") : applied,
+    ...(options.separateUnitReplacements && replacements.length ? {priceOverrides:replacements,priceOverrideTotal:fromMinorUnits(replacementMinor,currency)} : {}),
+    subtotal: fromMinorUnits(subtotalMinor, currency),
+    discountTotal: fromMinorUnits(discountMinor - replacementMinor, currency), adjustmentTotal: fromMinorUnits(adjustmentMinor, currency),
     amountOwed: fromMinorUnits(Math.max(0, subtotalMinor - discountMinor + adjustmentMinor), currency),
     ...(staged ? { pipelineVersion: 2 as const } : {}),
   };

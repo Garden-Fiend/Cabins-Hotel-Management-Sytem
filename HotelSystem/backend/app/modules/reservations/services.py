@@ -174,7 +174,7 @@ class ReservationService:
                 raise DomainError("room_conflict", "Room is already reserved for this interval")
             snapshot = capture_price(room, room_type, duration, rate)
             reservation_id = uuid4()
-            if request.charges or request.discounts:
+            if request.charges or request.discounts or request.adjustments:
                 from app.modules.billing.adjustments import adjusted_snapshot
                 from app.modules.billing.charges import capture_charges
 
@@ -188,7 +188,7 @@ class ReservationService:
                     ]
                 snapshot = adjusted_snapshot(
                     raw,
-                    (),
+                    request.adjustments,
                     request.discounts if request.discounts else None,
                     service=self,
                     session=session,
@@ -303,6 +303,10 @@ class ReservationService:
             if replay is not None:
                 return ReservationRead.model_validate(replay)
             reservation = self.owned(session, reservations, id, lock=True, exclusive=True)
+            if reservation["multi_room"]:
+                raise DomainError(
+                    "plural_command_required", "Use the multi-room edit contract", 409
+                )
             if reservation["version"] != request.expected_version:
                 raise DomainError("version_conflict", "Reservation changed; reload before editing")
             if reservation["version"] >= 2**31 - 1:
@@ -402,6 +406,10 @@ class ReservationService:
             return result  # Commit must succeed before a canonical response leaves this service.
 
     def read_in_transaction(self, session, reservation):
+        if reservation["multi_room"]:
+            from app.modules.reservations.multi import read_multi
+
+            return read_multi(self, session, reservation)
         id = reservation["id"]
         allocation = (
             session.execute(

@@ -12,7 +12,7 @@ export function LineDiscountSelector({ configuration, line, discounts, summary, 
   const current = discounts.find((item) => item.sourcePresetId && item.targetId === line.id);
   const options = getApplicablePresets(configuration, scope, line);
   const historical = current && !options.some((item) => item.id === current.sourcePresetId);
-  const reduction = summary.discounts.filter((item) => item.sourcePresetId && item.targetId === line.id).reduce((sum, item) => sum + item.amount, 0);
+  const reduction = [...(summary.priceOverrides ?? []),...summary.discounts].filter((item) => item.sourcePresetId && item.targetId === line.id).reduce((sum, item) => sum + item.amount, 0);
   const money = (amount: number) => new Intl.NumberFormat("en-PH", { style: "currency", currency: line.currency ?? configuration.currency }).format(amount);
   return <div className="w-full space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
     <label className="block font-medium">{label}
@@ -24,7 +24,7 @@ export function LineDiscountSelector({ configuration, line, discounts, summary, 
     </label>
     {!options.length && <p className="text-xs text-slate-500">No matching presets for this price.</p>}
     <p>Base {scope === "room" ? "accommodation" : "item total"}: {money(line.amount)}</p>
-    <p>Preset reduction: −{money(reduction)}</p>
+    <p>{current?.method === "final_price" && summary.priceOverrides ? "Unit-price replacement effect" : "Preset reduction"}: −{money(reduction)}</p>
     <p className="font-medium">After preset: {money(Math.max(0, line.amount - reduction))}</p>
     {current && <p className="text-xs text-slate-500">Applied values are captured and read-only. Use a manual discount for exceptions.</p>}
   </div>;

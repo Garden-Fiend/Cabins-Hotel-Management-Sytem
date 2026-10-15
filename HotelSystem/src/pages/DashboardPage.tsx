@@ -514,7 +514,7 @@ export function DashboardPage() {
                     </div>
                     <div>
                       <dt className="text-slate-500">Stage</dt>
-                      <dd className="capitalize">{displayedStay.occupancyLocked ? "cancelled · occupancy locked" : (reservation?.status ?? displayedStay.status).replace("_", " ")}</dd>
+                      <dd className="capitalize">{(displayedStay.occupancyLocked && reservation?.status==="cancelled") ? "cancelled · occupancy locked" : (reservation?.aggregateStatus ? displayedStay.status : reservation?.status ?? displayedStay.status).replace("_", " ")}</dd>
                     </div>
                   </dl>
                   {roomNotReady && (
@@ -529,7 +529,7 @@ export function DashboardPage() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     {reservation && (
                       <>
-                        {(reservation.status === "confirmed" || reservation.status === "reserved") && (
+                        {!reservation.aggregateStatus && (reservation.status === "confirmed" || reservation.status === "reserved") && (
                           <button
                             type="button"
                             disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
@@ -539,7 +539,7 @@ export function DashboardPage() {
                             Check in
                           </button>
                         )}
-                        {reservation.status === "checked_in" && (
+                        {!reservation.aggregateStatus && reservation.status === "checked_in" && (
                           <button
                             type="button"
                             disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}

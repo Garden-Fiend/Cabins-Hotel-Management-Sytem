@@ -16,6 +16,8 @@ discount_presets = sa.Table(
     sa.Column("scope", sa.Text, nullable=False),
     sa.Column("method", sa.Text, nullable=False),
     sa.Column("value", sa.Numeric(), nullable=False),
+    sa.Column("replacement_unit_amount_minor", sa.BigInteger),
+    sa.Column("rate_prices", sa.JSON, nullable=False, server_default="[]"),
     sa.Column("currency", sa.String(3), nullable=False, server_default="PHP"),
     sa.Column("target_room_type_id", UUID(as_uuid=True)),
     sa.Column("target_product_id", UUID(as_uuid=True)),
@@ -33,9 +35,21 @@ discount_presets = sa.Table(
     ),
     sa.CheckConstraint("length(trim(label)) > 0 AND version > 0", name="valid_label_version"),
     sa.CheckConstraint(
-        "method IN ('fixed', 'percentage') AND value > 0 AND value <= 90071992547409.91 "
-        "AND (method <> 'percentage' OR value <= 100) AND currency = 'PHP'",
+        "currency = 'PHP' AND ((method IN ('fixed', 'percentage') AND value > 0 "
+        "AND value <= 90071992547409.91 AND (method <> 'percentage' OR value <= 100) "
+        "AND replacement_unit_amount_minor IS NULL) OR (method = 'final_price' AND value = 0 "
+        "AND scope IN ('room', 'item') AND (scope <> 'item' OR "
+        "(replacement_unit_amount_minor >= 0 "
+        "AND replacement_unit_amount_minor <= 9007199254740991))))",
         name="valid_reduction",
+    ),
+    sa.CheckConstraint(
+        "json_typeof(rate_prices) = 'array' AND CASE WHEN method = 'final_price' THEN "
+        "CASE WHEN scope = 'item' THEN replacement_unit_amount_minor IS NOT NULL "
+        "AND json_array_length(rate_prices) = 0 ELSE replacement_unit_amount_minor IS NULL "
+        "AND json_array_length(rate_prices) > 0 END ELSE "
+        "replacement_unit_amount_minor IS NULL AND json_array_length(rate_prices) = 0 END",
+        name="valid_override_configuration",
     ),
     sa.CheckConstraint(
         "(scope = 'reservation' AND target_room_type_id IS NULL AND target_product_id IS NULL) "

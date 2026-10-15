@@ -3,6 +3,8 @@ import type { DiscountDefinitionConfiguration } from "./types";
 import { useHotelConfiguration } from "../configuration/useHotelConfiguration";
 import { isChargeableItem, validateDiscountPreset } from "../../lib/discountPresets";
 import { roundMoney } from "../../lib/money";
+import { overrideMinor } from "../../app/api/presetInputs";
+import { phpDecimal } from "../../app/api/presentation";
 import { useReservationDemo } from "../../app/useReservationDemo";
 import { InventoryDialog } from "../inventory/InventoryDialog";
 
@@ -31,8 +33,8 @@ export function DiscountPresetsEditor() {
       enabled: true, currency: configuration.currency,
       targetRoomTypeId: roomTypes[0]?.id, targetItemId: items[0]?.id,
     });
-    setValue(preset ? String(preset.method === "final_price" ? preset.discountedUnitPrice ?? "" : preset.serverValue ?? preset.value) : "");
-    setPrices(Object.fromEntries((preset?.rates ?? []).map((rate) => [rate.rateId, String(rate.discountedUnitPrice)])));
+    setValue(preset ? preset.method === "final_price" && preset.serverReplacementMinor !== undefined ? phpDecimal(preset.serverReplacementMinor) : String(preset.method === "final_price" ? preset.discountedUnitPrice ?? "" : preset.serverValue ?? preset.value) : "");
+    setPrices(preset?.serverRatePrices ? Object.fromEntries(preset.serverRatePrices.map(r=>[r.rate_id,phpDecimal(r.unit_amount_minor)])) : Object.fromEntries((preset?.rates ?? []).map((rate) => [rate.rateId, String(rate.discountedUnitPrice)])));
     setNotice("");
   }
 
@@ -51,7 +53,13 @@ export function DiscountPresetsEditor() {
     const errors = validateDiscountPreset(next, configuration);
     if (errors.length) { setNotice(errors.join(" ")); return; }
     next.value = next.method === "fixed" ? roundMoney(next.value, configuration.currency) : next.value;
-    if (persistent) next.serverValue = value;
+    if (persistent) {
+      next.serverValue = next.method === "final_price" ? "0" : value;
+      try {
+        next.serverReplacementMinor = next.method === "final_price" && next.scope === "item" ? overrideMinor(value) : undefined;
+        next.serverRatePrices = next.method === "final_price" && next.scope === "room" ? Object.entries(prices).filter(([,price])=>price.trim()!=="").map(([rate_id,price])=>({rate_id,unit_amount_minor:overrideMinor(price)})) : [];
+      } catch(error) {setNotice(error instanceof Error ? error.message : "Enter exact PHP prices.");return;}
+    }
     next.rates = next.rates?.map((rate) => ({ ...rate, discountedUnitPrice: roundMoney(rate.discountedUnitPrice, configuration.currency) }));
     if (next.discountedUnitPrice !== undefined) next.discountedUnitPrice = roundMoney(next.discountedUnitPrice, configuration.currency);
     if (persistent) {
@@ -71,7 +79,7 @@ export function DiscountPresetsEditor() {
         <button type="button" className={buttonClass} onClick={() => open()}>Create Discount</button>
       </div>
       <p className="mt-2 text-sm text-slate-600">Presets are selected by staff. They never apply automatically.</p>
-      {persistent && <p className="mt-2 text-sm text-slate-600">Fixed and percentage presets persist. Final-price overrides and deletion are unavailable; disable a preset to retire it.</p>}
+      {persistent && <p className="mt-2 text-sm text-slate-600">Presets persist with captured terms. Set Discounted Price replaces a unit price before reductions. Disable a preset to retire it; deletion is unavailable.</p>}
       {notice && !draft && <p role="status" className="mt-3 text-sm text-slate-700">{notice}</p>}
       <label className="mt-4 block text-sm">Search discounts
         <input className={inputClass} value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -118,7 +126,7 @@ export function DiscountPresetsEditor() {
           <option value="">Select chargeable item</option>{items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select></label>}
         <label className="block text-sm">Discount Method<select className={inputClass} value={draft.method} onChange={(event) => { setDraft({ ...draft, method: event.target.value as DiscountDefinitionConfiguration["method"] }); setValue(""); }}>
-          {draft.scope !== "reservation" && <option value="final_price" disabled={persistent}>Set Discounted Price</option>}<option value="fixed">Fixed Amount</option><option value="percentage">Percentage</option>
+          {draft.scope !== "reservation" && <option value="final_price">Set Discounted Price</option>}<option value="fixed">Fixed Amount</option><option value="percentage">Percentage</option>
         </select></label>
         {draft.method === "final_price" && draft.scope === "room" ? <div className="space-y-3">
           <p className="text-sm text-slate-600">Leave rates blank to exclude them. Nightly prices apply per night.</p>

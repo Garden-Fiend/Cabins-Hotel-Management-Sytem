@@ -101,6 +101,7 @@ export function ApiReservationForm({ record, initialRoom, initialStart, onSaved,
     if (!record) return;
     try {
       const latest = await api.loadReservation(record.id);
+      if(latest.allocation===null)throw new Error("Use the integrated multi-room editing pane for this reservation.");
       if (note === baseline.note) setNote(latest.note);
       if (adults === baseline.adults) setAdults(String(latest.allocation.adults));
       if (children === baseline.children) setChildren(String(latest.allocation.children));

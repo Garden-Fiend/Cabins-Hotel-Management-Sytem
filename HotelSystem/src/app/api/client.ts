@@ -1,3 +1,4 @@
+import type { AnyReservationDto, MultiReservationDto, MultiCreateInput, MultiEditInput } from "./contracts";
 import type { CreateInput, GuestDto, GuestInput, PatchInput, ReferencesDto, ReservationDto, LifecycleAction, LifecycleInput, DefinitionKind, DefinitionMap } from "./contracts";
 
 export class ApiError extends Error {
@@ -78,8 +79,15 @@ export class ApiClient {
   }
   references(signal?: AbortSignal) { return this.request<ReferencesDto>("/reference-data", "GET", undefined, undefined, signal); }
   guests(signal?: AbortSignal) { return this.all<GuestDto>("/guests", signal); }
-  reservations(signal?: AbortSignal) { return this.all<ReservationDto>("/reservations", signal); }
-  reservation(id: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}`); }
+  reservations(signal?: AbortSignal) { return this.all<AnyReservationDto>("/reservations", signal); }
+  reservation(id: string) { return this.request<AnyReservationDto>(`/reservations/${encodeURIComponent(id)}`); }
+  billingDocuments(id:string) { return this.all<import("./billingDocuments").BillingDocumentDto>(`/reservations/${encodeURIComponent(id)}/billing-documents`); }
+  billingDocument(id:string, signal?:AbortSignal) { return this.request<import("./billingDocuments").BillingDocumentDto>(`/billing-documents/${encodeURIComponent(id)}`,"GET",undefined,undefined,signal); }
+  createBillingDraft(id:string,body:{expected_reservation_version:number},key:string) { return this.request<import("./billingDocuments").BillingDocumentDto>(`/reservations/${encodeURIComponent(id)}/billing-documents`,"POST",body,key); }
+  finalizeBill(id:string,body:{expected_version:number},key:string) { return this.request<import("./billingDocuments").BillingDocumentDto>(`/billing-documents/${encodeURIComponent(id)}/finalize`,"POST",body,key); }
+  createMulti(body:MultiCreateInput,key:string){return this.request<MultiReservationDto>("/multi-room-reservations","POST",body,key);}
+  editAllocations(id:string,body:MultiEditInput,key:string){return this.request<MultiReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-allocations`,"POST",body,key);}
+  roomLifecycle(id:string,action:string,body:{expected_version:number;allocation_id?:string;guest_has_vacated?:boolean},key:string){return this.request<MultiReservationDto>(`/reservations/${encodeURIComponent(id)}/room-lifecycle/${action}`,"POST",body,key);}
   createGuest(body: GuestInput, key: string) { return this.request<GuestDto>("/guests", "POST", body, key); }
   createReservation(body: CreateInput, key: string) { return this.request<ReservationDto>("/reservations", "POST", body, key); }
   patchReservation(id: string, body: PatchInput, key: string) { return this.request<ReservationDto>(`/reservations/${encodeURIComponent(id)}`, "PATCH", body, key); }

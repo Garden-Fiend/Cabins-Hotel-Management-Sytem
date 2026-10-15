@@ -1,12 +1,16 @@
+import type { AnyReservationDto, MultiCreateInput, MultiEditInput, MultiReservationDto } from "./contracts";
 import { createContext } from "react";
 import type { ApiClient } from "./client";
 import type { CreateInput, GuestDto, GuestInput, ReferencesDto, ReservationDto, LifecycleAction, LifecycleInput, DefinitionKind, DefinitionMap } from "./contracts";
 
-export interface ApiData { references: ReferencesDto; guests: GuestDto[]; reservations: ReservationDto[] }
+export interface ApiData { references: ReferencesDto; guests: GuestDto[]; reservations: AnyReservationDto[] }
 export interface ApiContextValue {
   client: ApiClient; data: ApiData | null; loadError: string; refreshing: boolean;
   refresh: () => Promise<void>;
-  loadReservation: (id: string) => Promise<ReservationDto>;
+  loadReservation: (id: string) => Promise<AnyReservationDto>;
+  createMulti:(body:MultiCreateInput,key:string)=>Promise<MultiReservationDto>;
+  editAllocations:(id:string,body:MultiEditInput,key:string)=>Promise<MultiReservationDto>;
+  roomLifecycle:(id:string,action:string,body:{expected_version:number;allocation_id?:string;guest_has_vacated?:boolean},key:string)=>Promise<MultiReservationDto>;
   createGuest: (body: GuestInput, key: string) => Promise<GuestDto>;
   createReservation: (body: CreateInput, key: string) => Promise<ReservationDto>;
   patchReservation: (id: string, body: import("./reservationEditInput").ReservationEditInput, key: string) => Promise<ReservationDto>;

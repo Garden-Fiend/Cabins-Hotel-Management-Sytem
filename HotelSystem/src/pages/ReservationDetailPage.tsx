@@ -1,3 +1,4 @@
+import {MultiRoomHeaderActions,RoomAllocationsSection} from "../components/reservations/AllocationOperations";
 import { ChannelGuestSummary } from "../components/channels/ChannelGuestSummary";
 import { ChannelFinancials } from "../components/channels/ChannelFinancials";
 import { fromMinorUnits } from "../lib/money";
@@ -13,6 +14,7 @@ import { getRoomAccommodationPrice } from "../lib/roomPricing";
 import type { ReservationSnapshot } from "../types/reservation";
 import { AppliedDiscountDescription } from "../components/reservations/AppliedDiscountDescription";
 import { SavedLineAmounts } from "../components/reservations/SavedLineAmounts";
+import { BillingDocumentsSection } from "../components/billing/BillingDocumentsSection";
 
 const cardClass =
   "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm";
@@ -71,6 +73,10 @@ export function ReservationDetailPage() {
     reservation.status === "confirmed" ||
     reservation.status === "reserved" ||
     reservation.status === "checked_in";
+  const multiCancelBlocked = Boolean(reservation.aggregateStatus &&
+    reservation.rooms.some(room => room.allocationState !== "reserved" && room.allocationState !== "checked_in"));
+  const multiNoShowBlocked = Boolean(reservation.aggregateStatus &&
+    reservation.rooms.some(room => room.allocationState !== "reserved"));
   const sourceOption = configuration.bookingSources.find(
     (item) => item.id === reservation.bookingSourceId,
   );
@@ -131,20 +137,22 @@ export function ReservationDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <MultiRoomHeaderActions reservation={reservation}/>
           {reservation.status === "confirmed" ||
           reservation.status === "reserved" ? (
             <>
-              <button
+              {!reservation.aggregateStatus && <button
                 type="button"
                 disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
                             onClick={() => actions.checkIn(reservation.id)}
                 className="rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white"
               >
                 Check in
-              </button>
+              </button>}
               <button
                 type="button"
-                disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+                disabled={multiNoShowBlocked || (mode === "api" && (!commands?.lifecycle || commands.busy))}
+                title={multiNoShowBlocked ? "All rooms must remain reserved for an all-room no-show." : undefined}
                             onClick={() => actions.noShow(reservation.id)}
                 className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"
               >
@@ -152,7 +160,7 @@ export function ReservationDetailPage() {
               </button>
             </>
           ) : null}
-          {reservation.status === "checked_in" && (
+          {!reservation.aggregateStatus && reservation.status === "checked_in" && (
             <button
               type="button"
               disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
@@ -165,7 +173,8 @@ export function ReservationDetailPage() {
           {canCancel && (
             <button
               type="button"
-              disabled={mode === "api" && (!commands?.lifecycle || commands.busy)}
+              disabled={multiCancelBlocked || (mode === "api" && (!commands?.lifecycle || commands.busy))}
+              title={multiCancelBlocked ? "All rooms must be reserved or checked in to cancel the complete reservation." : undefined}
                 onClick={() => setCancelChoice("vacated")}
               className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800"
             >
@@ -208,6 +217,7 @@ export function ReservationDetailPage() {
         </div>
       </header>
 
+      <RoomAllocationsSection reservation={reservation}/>
       <section aria-label="Billing summary" className={`${cardClass} grid gap-4 sm:grid-cols-3`}>
         <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total charges</p><p className="mt-2 text-2xl font-bold">{money(reservation.pricing.subtotal, currency)}</p></div>
         <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Amount paid</p><p className="mt-2 text-xl font-semibold text-slate-600">{reservation.pricing.channel ? money(fromMinorUnits(reservation.pricing.channel.verifiedCollectionMinor,currency),currency) : "Not recorded"}</p></div>
@@ -384,6 +394,8 @@ export function ReservationDetailPage() {
             <span>Original subtotal</span>
             <span>{money(reservation.pricing.subtotal, currency)}</span>
           </li>
+          {reservation.pricing.priceOverrides?.map(override => <li key={override.id} className="flex justify-between"><AppliedDiscountDescription discount={override} currency={currency} unitReplacement /><span>{money(override.amount,currency)}</span></li>)}
+          {reservation.pricing.priceOverrides && <li className="flex justify-between"><span>Unit-price replacement effect</span><span>{money(reservation.pricing.priceOverrideTotal ?? 0,currency)}</span></li>}
           {reservation.pricing.discounts.map((discount) => (
             <li key={discount.id} className="flex justify-between">
               <AppliedDiscountDescription discount={discount} currency={currency} />
@@ -468,6 +480,7 @@ export function ReservationDetailPage() {
         </div>
       )}
 
+      <BillingDocumentsSection key={`billing-documents:${reservation.id}`} reservationId={reservation.id}/>
       {editing && (
         <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/40">
           <ReservationPane

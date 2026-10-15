@@ -245,7 +245,8 @@ def test_create_discounts_and_historical_request_hash(patch_api):
     previous_hash = hashlib.sha256(
         json.dumps(
             old.model_dump(
-                mode="json", exclude={"discounts", "charges", "inclusions", "breakfast"}
+                mode="json",
+                exclude={"discounts", "charges", "adjustments", "inclusions", "breakfast"},
             ),
             sort_keys=True,
             separators=(",", ":"),

@@ -8,6 +8,8 @@ import type { ReservationAdjustment, ReservationChargeSnapshot, ReservationDisco
 import type { SampleGuest } from "../data/datasample";
 import type { HotelConfigurationData, RoomConfiguration, ConfigurationValue } from "../features/configuration/types";
 
+export interface CommandRoomInput {useReservationStay?:boolean;start?:Date;durationId?:string;breakfastDates?:string[];roomNumber:string;adults:number;children:number;charges:ReservationChargeSnapshot[];inclusions?:{catalogId:string;quantity:number;overridden?:boolean}[];breakfast:import('../types/reservation').ReservationBreakfastSnapshot[]}
+
 export interface ReservationDemoContextValue {
   mode?: "demo" | "api";
   commands?: {
@@ -16,6 +18,8 @@ export interface ReservationDemoContextValue {
     reviewMessage?: string;
     reviewLatest?: () => Promise<void>;
     busy?: boolean;
+    canEditMultiple?:boolean;canEditCustomStays?:boolean;
+    allocationLifecycle?:(original:ReservationSnapshot,action:"check-in"|"check-out",allocationId?:string)=>Promise<void>;
     canEditGuest?: boolean;
     canEditStay?: boolean;
     canEditAdjustments?: boolean;
@@ -33,8 +37,8 @@ export interface ReservationDemoContextValue {
     lifecycle?: (original: ReservationSnapshot, action: "check-in" | "check-out" | "cancel" | "no-show" | "record-departure", vacated?: boolean) => Promise<void>;
     readiness?: (room: RoomConfiguration, state: "clean" | "cleaning") => Promise<void>;
     saveDefinition?: (section: "roomTypes" | "rooms" | "durations" | "roomTypePrices" | "catalogItems" | "inventoryCategories", id: string | undefined, values: Record<string, ConfigurationValue>, version?: number, defaultInclusions?: { catalogId: string; quantity: number }[]) => Promise<void>;
-    create: (input: { breakfastDates?: string[]; breakfast?: import("../types/reservation").ReservationBreakfastSnapshot[]; inclusions?: { catalogId: string; quantity: number; overridden?: boolean }[]; charges?: ReservationChargeSnapshot[]; discounts?: ReservationDiscount[]; guestId: string; bookingSourceId: string; roomNumber: string; durationId: string; start: Date; adults: number; children: number; note: string }) => Promise<ReservationSnapshot>;
-    patch: (original: ReservationSnapshot, input: { breakfastDates?: string[]; breakfast?: import("../types/reservation").ReservationBreakfastSnapshot[]; inclusions?: { catalogId: string; quantity: number; overridden?: boolean }[]; discounts?: ReservationDiscount[]; charges?: ReservationChargeSnapshot[]; adjustments?: ReservationAdjustment[]; guestId?: string; roomNumber?: string; durationId?: string; start?: Date; note: string; adults: number; children: number }) => Promise<ReservationSnapshot>;
+    create: (input: { rooms?:CommandRoomInput[]; breakfastDates?: string[]; breakfast?: import("../types/reservation").ReservationBreakfastSnapshot[]; inclusions?: { catalogId: string; quantity: number; overridden?: boolean }[]; charges?: ReservationChargeSnapshot[]; adjustments?: ReservationAdjustment[]; discounts?: ReservationDiscount[]; guestId: string; bookingSourceId: string; roomNumber: string; durationId: string; start: Date; adults: number; children: number; note: string }) => Promise<ReservationSnapshot>;
+    patch: (original: ReservationSnapshot, input: { rooms?:CommandRoomInput[]; breakfastDates?: string[]; breakfast?: import("../types/reservation").ReservationBreakfastSnapshot[]; inclusions?: { catalogId: string; quantity: number; overridden?: boolean }[]; discounts?: ReservationDiscount[]; charges?: ReservationChargeSnapshot[]; adjustments?: ReservationAdjustment[]; guestId?: string; roomNumber?: string; durationId?: string; start?: Date; note: string; adults: number; children: number }) => Promise<ReservationSnapshot>;
     createGuest: (input: { name: string; phone: string; email: string }) => Promise<SampleGuest>;
   };
   capabilities: ChannelCapabilities;

@@ -1,0 +1,52 @@
+{
+  "python": "C:\\Users\\Malala\\Documents\\HotelBookingSystem\\HotelSystem\\backend\\.venv\\Scripts\\python.exe",
+  "prefix": "C:\\Users\\Malala\\Documents\\HotelBookingSystem\\HotelSystem\\backend\\.venv",
+  "databases": {
+    "hms_dev": {
+      "migration": "f19b362d47a0",
+      "timezone": "UTC",
+      "tables": {
+        "room_type_inclusions": 0,
+        "catalog_products": 2,
+        "inventory_categories": 4,
+        "companies": 1,
+        "room_types": 3,
+        "breakfast_eligibility": 0,
+        "discount_presets": 0,
+        "booking_sources": 1,
+        "reservations": 4,
+        "guests": 2,
+        "reference_rates": 2,
+        "durations": 2,
+        "mutation_receipts": 21,
+        "operational_audit": 21,
+        "pricing_revisions": 5,
+        "rooms": 6,
+        "room_allocations": 4
+      }
+    },
+    "hms_test": {
+      "migration": "f19b362d47a0",
+      "timezone": "UTC",
+      "tables": {
+        "room_types": 2,
+        "companies": 2,
+        "durations": 4,
+        "booking_sources": 2,
+        "guests": 1,
+        "reservations": 1,
+        "reference_rates": 4,
+        "mutation_receipts": 9,
+        "catalog_products": 1,
+        "inventory_categories": 7,
+        "room_allocations": 1,
+        "rooms": 2,
+        "operational_audit": 9,
+        "pricing_revisions": 2,
+        "room_type_inclusions": 0,
+        "breakfast_eligibility": 0,
+        "discount_presets": 2
+      }
+    }
+  }
+}

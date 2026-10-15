@@ -16,6 +16,7 @@ import { DiscountsPage } from "../../pages/DiscountsPage";
 import { InventoryPage } from "../../pages/InventoryPage";
 import { ApiGuestForm } from "../../components/reservations/ApiReservationForms";
 import { RichApiBridge } from "./RichApiBridge";
+import { BillingDocumentPrintPage } from "../../pages/BillingDocumentPrintPage";
 
 function ReadOnly({ children }: { children: React.ReactNode }) {
   return <><p className="m-4 rounded-lg border border-amber-200 bg-amber-50 p-3">Configuration writes are not yet available in API mode. Missing metadata/catalog fields are unavailable; no demo fixtures are loaded.</p><fieldset disabled className="min-w-0">{children}</fieldset></>;
@@ -43,7 +44,7 @@ function ApiGate() {
   </>;
 }
 
-const apiRouter = createBrowserRouter([{ element: <ApiGate />, children: [{ element: <AppLayout mode="api" />, children: [
+const apiRouter = createBrowserRouter([{path:"/billing-documents/:documentId/print",element:<BillingDocumentPrintPage/>},{ element: <ApiGate />, children: [{ element: <AppLayout mode="api" />, children: [
   { index: true, element: <DashboardPage /> },
   { path: "/reservations", element: <ReservationsPage /> },
   { path: "/reservations/:reservationId", element: <ReservationDetailPage /> },

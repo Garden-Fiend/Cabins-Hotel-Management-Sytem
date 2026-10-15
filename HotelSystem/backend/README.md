@@ -192,12 +192,13 @@ billable. Original Inventory/Configuration/pane controls are connected. See the
 [Wednesday Session 2 checkpoint](../docs/planning/session-two-checkpoint-2026-10-14.md).
 Restart old backend/frontend launchers together after updating code; no reset or reseeding is required.
 
-## Fixed/percentage presets and recovery rehearsal
+## Discount presets, final prices and recovery rehearsal
 
-Current head: `2cd0458fa054`, thirteen revisions and seventeen HMS tables. Original Discounts
-controls persist fixed/percentage presets; reservation selectors capture server-owned terms.
-Final-price overrides and preset deletion remain unavailable. Disable retains identity/history.
-See the [checkpoint](../docs/planning/presets-recovery-checkpoint-2026-10-14.md).
+Discount milestone head: `f19b362d47a0`, fifteen revisions and seventeen HMS tables. Original Discounts
+controls persist fixed/percentage presets and final unit prices for covered room rates/products.
+Reservation selectors capture server-owned terms. Unit replacements are separate from ordinary
+reductions in schema 5. Deletion remains unavailable; Disable retains identity/history.
+See the [Thursday checkpoint](../docs/planning/final-prices-checkpoint-2026-10-15.md).
 
 The explicit recovery command below creates a new private PostgreSQL container/volume on loopback
 port 55433. It refuses occupied ports and never connects to `hms_dev`/`hms_test`. Only this process
@@ -209,3 +210,58 @@ the already installed PostgreSQL 17.6 image are required. No hosted backup guara
 ```powershell
 & .\scripts\python.ps1 scripts/rehearse-recovery.py
 ```
+
+## Operational billing-document foundation
+
+Current head: `68f75a14d5a4`, sixteen revisions and nineteen HMS tables. This additive revision
+introduces `billing_documents`, company-scoped transactional counters, ownership/source foreign
+keys and database immutability triggers. No existing records are converted into documents.
+
+The backend supports explicit draft capture, GET/list and finalization. Captures reuse existing
+server pricing and preserve overrides, discounts, quantities, labels and adjustments independently
+of later reservation edits. Stale source versions reject rather than refreshing silently. One
+finalized operational bill is permitted per reservation; corrections are deferred. API-mode reservation
+detail now provides draft/review/finalize/read and a separate captured Operational Billing Statement
+print route. Demo document actions are gated. No tax invoice, payment or accounting behavior was added.
+Existing reservation print remains unchanged. See the
+[frontend checkpoint](../docs/planning/billing-documents-ui-checkpoint-2026-10-15.md).
+See [the contract](billing-documents.md) and
+[checkpoint](../docs/planning/billing-documents-checkpoint-2026-10-15.md).
+
+```powershell
+& .\scripts\python.ps1 -m alembic upgrade head
+& .\scripts\python.ps1 scripts/migrate-test.py
+& .\scripts\python.ps1 -m pytest --postgres -q tests/test_billing_documents.py
+& .\scripts\python.ps1 scripts/http-billing-documents.py
+```
+
+Do not run PostgreSQL suites concurrently with the synthetic HTTP runner. Its privileged guarded
+test cleanup briefly locks the document table exclusively, removes only its synthetic company's
+documents and re-enables the row trigger in the same transaction. No application bypass exists.
+
+### B2 shared-stay multi-room reservations
+
+B2 migration head: `b26c31d7e821` (superseded by B3 below). Apply `alembic upgrade head`
+and `scripts/migrate-test.py` using the owned Python wrapper for other checkouts; the current local
+targets are migrated. Restart an older launcher normally; no reset/reseed is needed.
+Original Add/Remove Room and expanded-detail individual/strict bulk lifecycle controls are connected.
+See [contracts](contracts.md#shared-stay-multiple-allocations-b2) and
+[B2 checkpoint](../docs/planning/b2-multi-room-checkpoint-2026-10-15.md).
+
+Focused PostgreSQL: `& .\scripts\python.ps1 -m pytest --postgres -q tests/test_multi_room.py`.
+From app root: `& .\backend\scripts\python.ps1 integration-tests/run-multi-room.py`.
+Run PostgreSQL suites separately from synthetic browser harnesses.
+
+### B3 independent room stays
+
+Current head: **`c37d42e8f932`** (19 revisions / 19 tables). Other checkouts must run
+`alembic upgrade head` and `scripts/migrate-test.py` through the owned wrapper. Current local targets
+are migrated; restart an older launcher normally, without reset/reseed. Original Custom stay/Same as
+reservation controls persist each room's arrival and selected hourly/nightly duration. Parent dates
+are the overall range, not every room's availability. See the
+[contract](contracts.md#independent-allocation-stays-b3) and
+[B3 checkpoint](../docs/planning/b3-custom-stays-checkpoint-2026-10-15.md).
+
+Focused backend: `& .\scripts\python.ps1 -m pytest --postgres -q tests/test_custom_stays.py`.
+From app root, separately: `& .\backend\scripts\python.ps1 integration-tests/run-custom-stays.py`.
+The guarded runner owns only its generated test company and temporary API/frontend processes.

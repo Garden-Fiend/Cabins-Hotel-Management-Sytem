@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { ApiError, errorMessage } from "./client";
 
-export function useMutation<T, R>(save: (body: T, key: string) => Promise<R>, recoveryKey?: string) {
+export function useMutation<T, R>(save: (body: T, key: string) => Promise<R>, recoveryKey?: string, formatError: (error:unknown)=>string = errorMessage) {
   const [recovered] = useState<{ body: T; signature: string; key: string } | null>(() => {
     if (!recoveryKey) return null;
     try {
@@ -41,7 +41,7 @@ export function useMutation<T, R>(save: (body: T, key: string) => Promise<R>, re
     } catch (failure) {
       const ambiguous = !(failure instanceof ApiError) || failure.uncertain;
       setUncertain(ambiguous); setConflict(failure instanceof ApiError && failure.code === "version_conflict");
-      setError(errorMessage(failure));
+      setError(formatError(failure));
       if (!ambiguous) {
         request.current = null;
         if (recoveryKey) { try { sessionStorage.removeItem(recoveryKey); } catch { /* Stored replay remains safe; no second write is implied. */ } }

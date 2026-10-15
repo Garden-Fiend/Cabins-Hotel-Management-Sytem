@@ -15,12 +15,22 @@ def request_hash(body, *, resource_id: UUID | None = None, exclude_fields=frozen
     # New optional discount input must not alter previously committed command hashes.
     if "discounts" in type(body).model_fields and "discounts" not in body.model_fields_set:
         exclude_fields = set(exclude_fields) | {"discounts"}
-    if type(body).__name__ == "ReservationCreate" and "charges" not in body.model_fields_set:
-        exclude_fields = set(exclude_fields) | {"charges"}
+    if type(body).__name__ == "ReservationCreate":
+        for optional in ("charges", "adjustments"):
+            if optional not in body.model_fields_set:
+                exclude_fields = set(exclude_fields) | {optional}
     for optional in ("inclusions", "default_inclusions", "breakfast"):
         if optional in type(body).model_fields and optional not in body.model_fields_set:
             exclude_fields = set(exclude_fields) | {optional}
+    if type(body).__name__.startswith("DiscountPreset"):
+        for optional in ("rate_prices", "replacement_unit_amount_minor"):
+            if optional not in body.model_fields_set:
+                exclude_fields = set(exclude_fields) | {optional}
     payload = body.model_dump(mode="json", exclude=exclude_fields)
+    if type(body).__name__ in ("MultiCreate", "MultiEdit"):
+        for intent, value in zip(body.allocations, payload["allocations"], strict=True):
+            if "stay" not in intent.model_fields_set:
+                value.pop("stay", None)
     # Adding preset support must preserve hashes of existing manual-discount requests.
     for discount in payload.get("discounts", []):
         if discount.get("preset_id") is None:

@@ -143,6 +143,33 @@ reservations = sa.Table(
     Base.metadata,
     identity(),
     ownership(),
+    sa.Column("multi_room", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("independent_stays", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("default_stay_start", sa.DateTime(timezone=True)),
+    sa.Column("default_duration_id", UUID(as_uuid=True)),
+    sa.ForeignKeyConstraint(
+        ["default_duration_id", "company_id"],
+        ["hms.durations.id", "hms.durations.company_id"],
+        name="fk_default_duration_company",
+    ),
+    sa.CheckConstraint(
+        "NOT independent_stays OR (multi_room AND default_stay_start IS NOT NULL "
+        "AND default_duration_id IS NOT NULL)",
+        name="independent_stay_defaults",
+    ),
+    sa.Column("shared_start", sa.DateTime(timezone=True)),
+    sa.Column("shared_end", sa.DateTime(timezone=True)),
+    sa.Column("shared_duration_id", UUID(as_uuid=True)),
+    sa.ForeignKeyConstraint(
+        ["shared_duration_id", "company_id"],
+        ["hms.durations.id", "hms.durations.company_id"],
+        name="fk_shared_duration_company",
+    ),
+    sa.CheckConstraint(
+        "NOT multi_room OR (shared_start IS NOT NULL AND shared_end IS NOT NULL "
+        "AND shared_end > shared_start AND (independent_stays OR shared_duration_id IS NOT NULL))",
+        name="multi_shared_stay",
+    ),
     sa.Column("business_number", sa.BigInteger, sa.Identity(), nullable=False, unique=True),
     sa.Column("guest_id", UUID(as_uuid=True), sa.ForeignKey("hms.guests.id"), nullable=False),
     sa.Column(
@@ -175,12 +202,24 @@ allocations = sa.Table(
     sa.CheckConstraint("jsonb_typeof(inclusions) = 'array'", name="inclusions_array"),
     identity(),
     ownership(),
+    sa.Column("state", sa.Text),
+    sa.Column("uses_reservation_stay", sa.Boolean, nullable=False, server_default=sa.true()),
+    sa.Column("removed_at", sa.DateTime(timezone=True)),
+    sa.CheckConstraint(
+        "state IS NULL OR state IN "
+        "('reserved','checked_in','checked_out','cancelled','no_show','removed')",
+        name="allocation_state",
+    ),
+    sa.CheckConstraint(
+        "removed_at IS NULL OR (state = 'removed' AND NOT blocks_availability "
+        "AND actual_check_in IS NULL AND actual_check_out IS NULL)",
+        name="removed_allocation",
+    ),
     sa.Column(
         "reservation_id",
         UUID(as_uuid=True),
         sa.ForeignKey("hms.reservations.id"),
         nullable=False,
-        unique=True,
     ),
     sa.Column("room_id", UUID(as_uuid=True), nullable=False),
     sa.Column("duration_id", UUID(as_uuid=True), sa.ForeignKey("hms.durations.id"), nullable=False),
@@ -206,6 +245,13 @@ allocations = sa.Table(
         using="gist",
         name="excl_active_room_overlap",
     ),
+)
+sa.Index(
+    "uq_active_reservation_room",
+    allocations.c.reservation_id,
+    allocations.c.room_id,
+    unique=True,
+    postgresql_where=allocations.c.removed_at.is_(None),
 )
 rooms.append_constraint(
     sa.ForeignKeyConstraint(

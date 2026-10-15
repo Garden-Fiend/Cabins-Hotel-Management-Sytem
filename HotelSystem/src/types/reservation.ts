@@ -118,6 +118,8 @@ export interface AppliedDiscount {
 }
 
 export interface ReservationPriceSummary {
+  priceOverrides?: AppliedDiscount[];
+  priceOverrideTotal?: number;
   channel?: ChannelPricingSnapshot;
   lines: ReservationPriceLine[];
   discounts: AppliedDiscount[];
@@ -155,6 +157,9 @@ export interface ReservationBreakfastSnapshot {
 export type InclusionOrigin = { source: "default" | "manual"; overridden?: boolean };
 
 export interface ReservationRoomSnapshot {
+  allocationId?:string;
+  useReservationStay?:boolean;
+  allocationState?:"reserved"|"checked_in"|"checked_out"|"cancelled"|"no_show";
   inclusionOrigins?: Record<string, InclusionOrigin>;
   roomNumber: string;
   roomTypeId: string;
@@ -221,6 +226,8 @@ export interface CalendarReservationContext {
 }
 
 export interface ReservationSnapshot {
+  aggregateStatus?:string;
+  stayDefaults?:{start:Date;end:Date;durationId:string};
   serverVersion?: number;
   channelTerms?: ReservationChannelTerms;
   supersededChannelTerms?: ReservationChannelTerms[];

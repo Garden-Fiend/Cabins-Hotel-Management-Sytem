@@ -46,6 +46,8 @@ def transition(service, id: UUID, action: str, request: LifecycleCommand, key: U
         if replay is not None:
             return ReservationRead.model_validate(replay)
         reservation = service.owned(session, reservations, id, lock=True, exclusive=True)
+        if reservation["multi_room"]:
+            raise DomainError("plural_command_required", "Use the explicit multi-room command", 409)
         if reservation["version"] != request.expected_version:
             raise DomainError("version_conflict", "Reservation changed; reload before retrying")
         if reservation["version"] >= 2**31 - 1:

@@ -71,6 +71,22 @@ def save_definition(service, kind, request, key, id=None):
             replay = replay_or_lock(session, service.context, operation, key, digest)
             if replay is not None:
                 return read.model_validate(replay)
+            if kind == "discount-presets" and request.method == "final_price":
+                # Match reservation pricing order before exclusively locking a definition.
+                # Re-read/validate the owned rates below while these shared locks remain held.
+                covered_rates = [
+                    service.owned(session, rates, p.rate_id) for p in request.rate_prices
+                ]
+                for duration_id in sorted(
+                    {r["duration_id"] for r in covered_rates if r["duration_id"]}, key=str
+                ):
+                    service.owned(session, durations, duration_id, lock=True)
+                if request.target_room_type_id:
+                    service.owned(session, room_types, request.target_room_type_id, lock=True)
+                for covered in sorted(request.rate_prices, key=lambda p: str(p.rate_id)):
+                    service.owned(session, rates, covered.rate_id, lock=True)
+                if request.target_product_id:
+                    service.owned(session, products, request.target_product_id, lock=True)
             if kind == "rates":
                 # Match booking pricing locks: duration -> type -> rate. Holding an
                 # edited rate first could deadlock a booking resolving that same rate.
@@ -87,11 +103,59 @@ def save_definition(service, kind, request, key, id=None):
                     raise DomainError("version_exhausted", "Definition version cannot be advanced")
             values = request.model_dump(exclude={"expected_version", "default_inclusions"})
             if kind == "discount-presets":
+                values["rate_prices"] = [p.model_dump(mode="json") for p in request.rate_prices]
+                # Omission on an ordinary definition update retains backward-compatible clears.
                 if request.method == "fixed":
                     # Hash the original validated intent; normalize stored PHP values separately.
                     values["value"] = Decimal(request.value).quantize(
                         Decimal("0.01"), rounding=ROUND_HALF_UP
                     )
+                if request.method == "final_price":
+                    retiring_unchanged = (
+                        previous is not None
+                        and not request.enabled
+                        and previous["method"] == "final_price"
+                        and previous["target_room_type_id"] == request.target_room_type_id
+                        and previous["target_product_id"] == request.target_product_id
+                        and previous["rate_prices"] == values["rate_prices"]
+                        and previous["replacement_unit_amount_minor"]
+                        == request.replacement_unit_amount_minor
+                    )
+                    for covered in request.rate_prices:
+                        rate = service.owned(session, rates, covered.rate_id, lock=True)
+                        duration_active = (
+                            rate["duration_id"] is None
+                            or service.owned(session, durations, rate["duration_id"], lock=True)[
+                                "enabled"
+                            ]
+                        )
+                        if rate["room_type_id"] != request.target_room_type_id or (
+                            not retiring_unchanged
+                            and (
+                                not rate["enabled"]
+                                or not duration_active
+                                or covered.unit_amount_minor > rate["unit_amount_minor"]
+                            )
+                        ):
+                            raise DomainError(
+                                "invalid_override_rate",
+                                "Replacement must cover an active owned room rate "
+                                "and not exceed its base unit price",
+                                422,
+                            )
+                    if request.target_product_id:
+                        product = service.owned(
+                            session, products, request.target_product_id, lock=True
+                        )
+                        if (
+                            not retiring_unchanged
+                            and request.replacement_unit_amount_minor > product["unit_amount_minor"]
+                        ):
+                            raise DomainError(
+                                "invalid_override_price",
+                                "Replacement cannot exceed the product unit price",
+                                422,
+                            )
                 if request.target_room_type_id:
                     target = service.owned(
                         session, room_types, request.target_room_type_id, lock=True

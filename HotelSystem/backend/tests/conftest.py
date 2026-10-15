@@ -152,6 +152,13 @@ def isolated_company(pg_engine):
         yield CommandContext(owner), ids
     finally:
         with pg_engine.begin() as c:
+            # Test-owner cleanup of this fixture's random company only. Deferred aggregate
+            # guards still run; the complete parent/children set is removed in this transaction.
+            c.execute(
+                reservations.update()
+                .where(reservations.c.company_id == owner)
+                .values(multi_room=False, independent_stays=False)
+            )
             c.execute(
                 rooms.update()
                 .where(rooms.c.company_id == owner)

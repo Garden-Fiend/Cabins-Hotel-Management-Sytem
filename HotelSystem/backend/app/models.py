@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 
 from app.core_models import audit_events, companies, mutation_receipts
-from app.modules.billing.models import pricing_revisions
+from app.modules.billing.models import billing_documents, document_counters, pricing_revisions
 from app.modules.configuration.models import (
     breakfast_eligibility,
     categories,
@@ -71,6 +71,8 @@ sa.Index(
 )
 
 __all__ = [
+    "billing_documents",
+    "document_counters",
     "discount_presets",
     "breakfast_eligibility",
     "room_type_inclusions",

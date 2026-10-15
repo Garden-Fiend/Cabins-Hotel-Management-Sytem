@@ -8,7 +8,7 @@ export type StayStatus =
   | "no_show";
 
 export interface Stay {
-  id: number;
+  id: number | string;
   reservationId?: string;
   room: string;
   guest: string;

@@ -14,10 +14,17 @@ from app.modules.reservations.schemas import (
 )
 
 
+class OverrideRatePrice(DTO):
+    rate_id: UUID
+    unit_amount_minor: Minor
+
+
 class DiscountPresetWrite(DTO):
     label: str = Field(min_length=1, max_length=200)
     scope: Literal["reservation", "room", "item"]
-    method: Literal["fixed", "percentage"]
+    method: Literal["fixed", "percentage", "final_price"]
+    replacement_unit_amount_minor: Minor | None = None
+    rate_prices: tuple[OverrideRatePrice, ...] = Field(default=(), max_length=100)
     value: StrictStr = Field(min_length=1, max_length=40)
     currency: Literal["PHP"] = "PHP"
     target_room_type_id: UUID | None = None
@@ -26,9 +33,29 @@ class DiscountPresetWrite(DTO):
 
     @model_validator(mode="after")
     def valid_definition(self):
-        ManualDiscountIntent(
-            id=UUID(int=1), label=self.label, scope=self.scope, method=self.method, value=self.value
-        )
+        if self.method == "final_price":
+            if self.value != "0" or self.scope == "reservation":
+                raise ValueError("Final prices replace unit amounts, not reservation discounts")
+            if self.scope == "room" and (
+                not self.rate_prices or self.replacement_unit_amount_minor is not None
+            ):
+                raise ValueError("Select covered room rates with their replacement unit prices")
+            if self.scope == "item" and (
+                self.rate_prices or self.replacement_unit_amount_minor is None
+            ):
+                raise ValueError("Specify one item replacement unit price")
+            if len({p.rate_id for p in self.rate_prices}) != len(self.rate_prices):
+                raise ValueError("Covered rates must be unique")
+        else:
+            if self.rate_prices or self.replacement_unit_amount_minor is not None:
+                raise ValueError("Ordinary reductions cannot carry unit replacements")
+            ManualDiscountIntent(
+                id=UUID(int=1),
+                label=self.label,
+                scope=self.scope,
+                method=self.method,
+                value=self.value,
+            )
         if self.method == "fixed":
             if Decimal(self.value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) <= 0:
                 raise ValueError("Fixed preset must round to a positive PHP amount")

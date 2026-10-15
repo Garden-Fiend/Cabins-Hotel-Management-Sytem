@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.db import get_engine
 from app.errors import DomainError
+from app.modules.billing.router import router as billing_router
 from app.modules.configuration.router import router as configuration_router
 from app.modules.reservations.router import router
 from app.settings import get_settings
@@ -27,6 +28,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(router)
     application.include_router(configuration_router)
+    application.include_router(billing_router)
 
     @application.exception_handler(DomainError)
     async def domain_error(_request, error):

@@ -1,6 +1,8 @@
 export interface DiscountDefinitionConfiguration {
   serverVersion?: number;
   serverValue?: string;
+  serverReplacementMinor?: number;
+  serverRatePrices?: {rate_id:string;unit_amount_minor:number}[];
   id: string;
   label: string;
   method: "fixed" | "percentage" | "final_price";

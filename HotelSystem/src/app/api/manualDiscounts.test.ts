@@ -40,11 +40,33 @@ describe("manual discount API boundary", () => {
    const local = original.discounts.map(d => d.id === "room-discount" ? { ...d, value: 100 } : d);
    expect(mergeManualDiscountInputs(original.discounts, local, room, changed).map(d => d.value)).toEqual(["20", "100", "20"]);
  });
- it("maps presets but rejects final-price overrides and invalid values", () => {
+ it("maps presets but rejects reservation-level final prices and invalid values", () => {
    const item = { id: "discount", label: "Courtesy", scope: "reservation", method: "percentage", value: 10, targetId: "" } as ReservationDiscount;
    expect(manualDiscountInputs([{ ...item, sourcePresetId: "preset" }], room)[0].preset_id).toBe("preset");
-   expect(() => manualDiscountInputs([{ ...item, method: "final_price", sourcePresetId: "preset" }], room)).toThrow("Final-price");
+   expect(() => manualDiscountInputs([{ ...item, method: "final_price", sourcePresetId: "preset" }], room)).toThrow("Final prices");
    expect(() => manualDiscountInputs([{ ...item, value: 101 }], room)).toThrow("valid");
+ });
+ it("captures unit replacements separately and preserves remote replacements on reviewed saves",()=>{
+   const updated = structuredClone(dto);
+   updated.pricing.snapshot.schema_version=5;
+   updated.pricing.snapshot.price_overrides=[{id:"override",preset_id:"preset",preset_version:1,label:"Nightly offer",scope:"room",line_id:`room:${room}`,target_id:"type",rate_id:null,currency:"PHP",original_unit_amount_minor:110000,replacement_unit_amount_minor:90000,quantity:1,effect_minor:20000,provenance:"preset_final_price",applied_at:"2026-10-14T00:01:00Z"}];
+   updated.pricing.snapshot.discount_total_minor=9000;
+   updated.pricing.snapshot.price_override_total_minor=20000;
+   updated.pricing.snapshot.discounts=updated.pricing.snapshot.discounts!.slice(0,1);
+   const shown=richReservation(updated,refs);
+   expect(shown.pricing).toMatchObject({discountTotal:90,priceOverrideTotal:200,amountOwed:810});
+   expect(shown.pricing.lines[0]).toMatchObject({amount:1100,effectiveAmount:900,finalAmount:810});
+   expect(shown.pricing.discounts).toHaveLength(1);expect(shown.pricing.priceOverrides).toHaveLength(1);
+   expect(manualDiscountInputs(shown.discounts,room,updated)[0]).toMatchObject({method:"final_price",value:"0",target_id:room,preset_id:"preset"});
+   const merged=mergeManualDiscountInputs([],[],room,updated);
+   expect(merged.find(d=>d.id==="override")).toMatchObject({method:"final_price",value:"0",target_id:room});
+   expect(mergeManualDiscountInputs(shown.discounts,shown.discounts.filter(d=>d.id!=="override"),room,updated).some(d=>d.id==="override")).toBe(false);
+ });
+ it("uses the same calculator while keeping API replacement effects separate from demo discounts",()=>{
+   const lines=[{id:"room:101",label:"Nightly",kind:"room" as const,roomNumber:"101",amount:6600,baseUnitPrice:2200,pricingQuantity:3,roomTypeId:"type",rateId:"nightly",currency:"PHP"}];
+   const discounts:ReservationDiscount[]=[{id:"override",label:"Nightly offer",scope:"room",method:"final_price",value:0,targetId:"room:101",sourcePresetId:"preset",targetRoomTypeId:"type",rateId:"nightly",currency:"PHP",discountedUnitPrice:1900},{id:"percent",label:"Ten",scope:"reservation",method:"percentage",value:10,targetId:""}];
+   expect(calculateReservationPrice(lines,discounts,[],{staged:true,separateUnitReplacements:true})).toMatchObject({discountTotal:570,priceOverrideTotal:900,amountOwed:5130});
+   expect(calculateReservationPrice(lines,discounts,[],{staged:true})).toMatchObject({discountTotal:1470,amountOwed:5130});
  });
  it("matches staged demo financial fixtures including eligible caps", () => {
    const lines = [{ id: "room:101", label: "Room", kind: "room" as const, roomNumber: "101", amount: 1100 }, { id: "purchase", label: "Meal", kind: "charge" as const, roomNumber: "101", amount: 200.25 }];

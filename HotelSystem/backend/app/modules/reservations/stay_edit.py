@@ -40,6 +40,8 @@ def edit_stay(service, id: UUID, request: ReservationStayEdit, key: UUID):
         if replay is not None:
             return ReservationRead.model_validate(replay)
         reservation = service.owned(session, reservations, id, lock=True, exclusive=True)
+        if reservation["multi_room"]:
+            raise DomainError("plural_command_required", "Use the explicit multi-room command", 409)
         if reservation["version"] != request.expected_version:
             raise DomainError("version_conflict", "Reservation changed; reload before editing")
         if reservation["version"] >= 2**31 - 1:
@@ -190,6 +192,11 @@ def edit_stay(service, id: UUID, request: ReservationStayEdit, key: UUID):
             )
             if "discounts" in before["pricing"]["snapshot"]:
                 captured = {**captured, "discounts": before["pricing"]["snapshot"]["discounts"]}
+            if "price_overrides" in before["pricing"]["snapshot"]:
+                captured = {
+                    **captured,
+                    "price_overrides": before["pricing"]["snapshot"]["price_overrides"],
+                }
             if "charges" in before["pricing"]["snapshot"]:
                 captured = {**captured, "charges": before["pricing"]["snapshot"]["charges"]}
             if purchases:

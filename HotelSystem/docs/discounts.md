@@ -115,14 +115,23 @@ from current definitions. Unchanged saves return the existing snapshot directly.
 
 There are no coupon codes, automatic personal eligibility checks, date schedules,
 rate overrides by physical room, payments or tax compliance rules. API-backed manual
-discounts use the same staged behavior with server-owned captures; presets remain unsupported
-in API mode.
+discounts use the same staged behavior with server-owned captures. API mode also supports
+configured fixed/percentage presets and separately captured final unit prices.
 Only extras and ordinary products are chargeable item targets; included breakfast,
 amenities and inclusions remain outside item preset selection. There is no
 apply-to-all-items action or discount priority editor. Multiple preset definitions
 can exist, but a room/item selector applies one at a time plus manual exceptions.
 
 ## Verification
+
+API mode keeps unit-price replacement effects separate from ordinary discount totals, as
+required by the October 15 contract. Demo retains its original combined discount presentation.
+Both use the same order: original units → one replacement per line → room/item reductions →
+reservation reductions → signed adjustments → zero clamp. Nightly and item replacements
+multiply by the captured quantity; fixed item reductions apply to the extended line total.
+Saved API pricing schema 5 preserves original/replacement units, quantities, definition
+identity/version, labels, targets and application times. Company/reservation provenance belongs
+to the owning pricing revision. Schemas 1–4 and old receipts remain unchanged.
 
 Tests cover applicability, configuration validation, unit replacements, nightly
 and item multiplication, scope differences, stable staging, caps, adjustments,

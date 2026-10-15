@@ -128,7 +128,7 @@ class ManualDiscountIntent(DTO):
     id: UUID
     label: str = Field(min_length=1, max_length=200)
     scope: Literal["reservation", "room", "item"]
-    method: Literal["fixed", "percentage"]
+    method: Literal["fixed", "percentage", "final_price"]
     value: StrictStr = Field(min_length=1, max_length=40)
     target_id: StrictStr = ""
     currency: Literal["PHP"] = "PHP"
@@ -140,7 +140,7 @@ class ManualDiscountIntent(DTO):
 
         if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", value):
             raise ValueError("Use a positive decimal string")
-        if Decimal(value) <= 0 or Decimal(value) > Decimal(MAX_MINOR) / 100:
+        if Decimal(value) < 0 or Decimal(value) > Decimal(MAX_MINOR) / 100:
             raise ValueError("Discount exceeds supported positive monetary range")
         return value
 
@@ -148,6 +148,14 @@ class ManualDiscountIntent(DTO):
     def valid_percentage(self):
         from decimal import Decimal
 
+        if self.method == "final_price":
+            if self.preset_id is None or self.scope == "reservation" or Decimal(self.value) != 0:
+                raise ValueError(
+                    "Final prices require a configured room/item preset, "
+                    "with no client monetary authority"
+                )
+        elif Decimal(self.value) <= 0:
+            raise ValueError("Ordinary discount values must be positive")
         if self.method == "percentage" and Decimal(self.value) > 100:
             raise ValueError("Percentage must be at most 100")
         return self
@@ -167,14 +175,17 @@ class ReservationCreate(DTO):
     inclusions: tuple[InclusionIntent, ...] = Field(default=(), max_length=100)
     _inclusions_valid = field_validator("inclusions")(distinct_inclusions)
     charges: tuple["ChargeIntent", ...] = Field(default=(), max_length=100)
+    adjustments: tuple["AdjustmentCapture", ...] = Field(default=(), max_length=100)
+
+    @field_validator("adjustments")
+    @classmethod
+    def initial_adjustments(cls, value):
+        return unique_adjustments(value)
 
     @field_validator("charges")
     @classmethod
-    def initial_extras(cls, value):
-        unique_charges(value)
-        if any(item.usage != "extra_charge" for item in value):
-            raise ValueError("Initial bill lines currently support special extra charges only")
-        return value
+    def initial_charges(cls, value):
+        return unique_charges(value)
 
     discounts: tuple[ManualDiscountIntent, ...] = Field(default=(), max_length=100)
 
@@ -501,6 +512,30 @@ class ManualDiscountCapture(ManualDiscountIntent):
     order: Count
     allocations: tuple[DiscountAllocation, ...]
 
+    @model_validator(mode="after")
+    def ordinary_reductions_only(self):
+        if self.method == "final_price":
+            raise ValueError("Unit replacements must be captured separately from discounts")
+        return self
+
+
+class PriceOverrideCapture(DTO):
+    id: UUID
+    preset_id: UUID
+    preset_version: Positive
+    label: str = Field(min_length=1, max_length=200)
+    scope: Literal["room", "item"]
+    line_id: str
+    target_id: UUID  # Room type or catalog product; ownership belongs to pricing revision.
+    rate_id: UUID | None = None
+    currency: Literal["PHP"] = "PHP"
+    original_unit_amount_minor: Minor
+    replacement_unit_amount_minor: Minor
+    quantity: Positive
+    effect_minor: Minor
+    provenance: Literal["preset_final_price"] = "preset_final_price"
+    applied_at: AwareDatetime
+
 
 class DiscountedPricingSnapshot(ChargedPricingSnapshot):
     schema_version: Literal[4] = 4
@@ -522,13 +557,82 @@ class DiscountedPricingSnapshot(ChargedPricingSnapshot):
             {k: v for k, v in d.items() if k not in ("amount_minor", "order", "allocations")}
             for d in raw["discounts"]
         ]
-        calculated, reduction, total = calculate_discounts(raw, intents)
+        overrides = raw.get("price_overrides", [])
+        calculated, reduction, total = calculate_discounts(raw, intents, overrides)
+        if (
+            overrides
+            and sum(o["effect_minor"] for o in overrides) != raw["price_override_total_minor"]
+        ):
+            raise ValueError("Replacement effect must equal captured unit effects")
         if (
             calculated != raw["discounts"]
             or reduction != self.discount_total_minor
             or total != self.total_minor
         ):
             raise ValueError("Discount capture must match the deterministic server calculation")
+        return self
+
+
+class OverridePricingSnapshot(DiscountedPricingSnapshot):
+    schema_version: Literal[5] = 5
+    calculation_version: Literal["direct-unit-overrides-v1"] = "direct-unit-overrides-v1"
+    price_overrides: tuple[PriceOverrideCapture, ...] = Field(max_length=100)
+    price_override_total_minor: Minor
+
+    @model_validator(mode="after")
+    def exact_override_total(self):
+        if sum(o.effect_minor for o in self.price_overrides) != self.price_override_total_minor:
+            raise ValueError("Replacement total must equal captured effects")
+        if len({o.id for o in self.price_overrides}) != len(self.price_overrides):
+            raise ValueError("Replacement identities must be unique")
+        if {o.id for o in self.price_overrides} & {d.id for d in self.discounts}:
+            raise ValueError("Replacement and reduction identities must be distinct")
+        for override in self.price_overrides:
+            line = next(
+                (line for line in self.lines if override.line_id == f"room:{line.room_id}"), None
+            )
+            charge = next(
+                (charge for charge in self.charges if override.line_id == str(charge.id)), None
+            )
+            if override.scope == "room":
+                if (
+                    line is None
+                    or override.target_id != line.room_type_id
+                    or override.rate_id != line.rate_id
+                ):
+                    raise ValueError("Replacement must match the captured room type and rate")
+            elif (
+                charge is None
+                or override.target_id != charge.product_id
+                or override.rate_id is not None
+            ):
+                raise ValueError("Replacement must match the captured product")
+        return self
+
+
+class MultiCapturedLine(CapturedLine):
+    allocation_id: UUID
+
+
+class MultiChargeCapture(ChargeCapture):
+    allocation_id: UUID
+
+
+class MultiPricingSnapshot(OverridePricingSnapshot):
+    schema_version: Literal[6] = 6
+    calculation_version: Literal["direct-multi-room-v1"] = "direct-multi-room-v1"
+    lines: tuple[MultiCapturedLine, ...] = Field(min_length=1, max_length=50)
+    charges: tuple[MultiChargeCapture, ...] = ()
+
+    @model_validator(mode="after")
+    def allocation_attribution(self):
+        owners = {line.allocation_id for line in self.lines}
+        if len(owners) != len(self.lines) or len({line.room_id for line in self.lines}) != len(
+            self.lines
+        ):
+            raise ValueError("Accommodation allocations and physical rooms must be distinct")
+        if any(charge.allocation_id not in owners for charge in self.charges):
+            raise ValueError("Every charge must belong to a captured allocation")
         return self
 
 
@@ -542,6 +646,8 @@ class PricingRead(DTO):
         | AdjustedPricingSnapshot
         | ChargedPricingSnapshot
         | DiscountedPricingSnapshot
+        | OverridePricingSnapshot
+        | MultiPricingSnapshot
     )
 
 

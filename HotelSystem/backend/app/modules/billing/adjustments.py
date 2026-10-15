@@ -17,6 +17,8 @@ from app.modules.reservations.schemas import (
     ChargedPricingSnapshot,
     DiscountedPricingSnapshot,
     ManualDiscountIntent,
+    MultiPricingSnapshot,
+    OverridePricingSnapshot,
     ReservationRead,
 )
 from app.mutations import replay_or_lock, request_hash, save_receipt
@@ -27,6 +29,16 @@ def adjusted_snapshot(captured, adjustments, discounts=None, *, service=None, se
         from app.modules.billing.discounts import calculate_discounts
 
         old = {item["id"]: item for item in captured.get("discounts", [])}
+        old_overrides = {o["id"]: o for o in captured.get("price_overrides", [])}
+        for identity, override in old_overrides.items():
+            old[identity] = {
+                **override,
+                "method": "final_price",
+                "value": "0",
+                "target_id": override["line_id"].removeprefix("room:")
+                if override["scope"] == "room"
+                else override["line_id"],
+            }
         selected = (
             discounts
             if discounts is not None
@@ -38,12 +50,46 @@ def adjusted_snapshot(captured, adjustments, discounts=None, *, service=None, se
             )
         )
         now = datetime.now(UTC).isoformat()
+        if any(
+            (str(item.id) in old_overrides and item.method != "final_price")
+            or (
+                str(item.id) in old
+                and str(item.id) not in old_overrides
+                and item.method == "final_price"
+            )
+            for item in selected
+        ):
+            raise DomainError(
+                "invalid_discount_identity",
+                "Remove the old selection before adding a different discount classification",
+                422,
+            )
+        from app.modules.billing.overrides import capture_override
         from app.modules.billing.presets import capture_preset_intent
 
         intents = [
             capture_preset_intent(service, session, captured, item, old.get(str(item.id)), now)
             for item in selected
+            if item.method != "final_price"
         ]
+        overrides = [
+            capture_override(service, session, captured, item, old_overrides.get(str(item.id)), now)
+            for item in selected
+            if item.method == "final_price"
+        ]
+        targets = [o["line_id"] for o in overrides]
+        if len(set(targets)) != len(targets):
+            raise DomainError(
+                "duplicate_override", "Select at most one final unit price per charge line", 422
+            )
+        if any(
+            (f"room:{d['target_id']}" if d["scope"] == "room" else d["target_id"]) in targets
+            for d in intents
+            if d.get("provenance") == "preset"
+        ):
+            raise DomainError(
+                "duplicate_preset", "Replace the existing line preset explicitly", 422
+            )
         preset_targets = [
             (d["scope"], d["preset_id"] if d["scope"] == "reservation" else d["target_id"])
             for d in intents
@@ -61,14 +107,34 @@ def adjusted_snapshot(captured, adjustments, discounts=None, *, service=None, se
             "charges": captured.get("charges", []),
         }
         try:
-            result, reduction, total = calculate_discounts(raw, intents)
+            result, reduction, total = calculate_discounts(raw, intents, overrides)
         except ValueError as error:
             raise DomainError("invalid_discount", str(error), 422) from None
-        return DiscountedPricingSnapshot(
+        with_overrides = bool(overrides) or "price_overrides" in captured
+        multi = captured.get("schema_version") == 6
+        return (
+            MultiPricingSnapshot
+            if multi
+            else OverridePricingSnapshot
+            if with_overrides
+            else DiscountedPricingSnapshot
+        )(
             **{
                 **raw,
-                "schema_version": 4,
-                "calculation_version": "direct-manual-discounts-v1",
+                "schema_version": 6 if multi else 5 if with_overrides else 4,
+                "calculation_version": "direct-multi-room-v1"
+                if multi
+                else "direct-unit-overrides-v1"
+                if with_overrides
+                else "direct-manual-discounts-v1",
+                **(
+                    {
+                        "price_overrides": overrides,
+                        "price_override_total_minor": sum(o["effect_minor"] for o in overrides),
+                    }
+                    if with_overrides
+                    else {}
+                ),
                 "pipeline_version": 2,
                 "discounts": result,
                 "discount_total_minor": reduction,
@@ -130,6 +196,8 @@ def save_adjustments(
         if replay is not None:
             return ReservationRead.model_validate(replay)
         reservation = service.owned(session, reservations, id, lock=True, exclusive=True)
+        if reservation["multi_room"]:
+            raise DomainError("plural_command_required", "Use the explicit multi-room command", 409)
         if reservation["version"] != request.expected_version:
             raise DomainError("version_conflict", "Reservation changed; reload before editing")
         if reservation["version"] >= 2**31 - 1:

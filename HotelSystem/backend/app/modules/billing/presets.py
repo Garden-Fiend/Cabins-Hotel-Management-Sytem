@@ -36,6 +36,10 @@ def capture_preset_intent(service, session, captured, item, old, now):
                 "invalid_preset", "Preset resolution requires the command transaction", 422
             )
         definition = service.owned(session, discount_presets, item.preset_id, lock=True)
+        if definition["method"] != item.method or definition["scope"] != item.scope:
+            raise DomainError(
+                "invalid_preset", "Select a preset matching its configured method and scope", 422
+            )
         if not definition["enabled"]:
             raise DomainError("inactive_preset", "Select an enabled preset", 422)
         if definition["scope"] != "reservation":
@@ -68,11 +72,19 @@ def capture_preset_intent(service, session, captured, item, old, now):
                 definition["target_room_type_id"] or definition["target_product_id"] or ""
             ),
             "applied_at": now,
-            "preset_rate_id": str(captured["lines"][0]["rate_id"])
+            "preset_rate_id": str(
+                next(
+                    (line for line in captured["lines"] if str(line["room_id"]) == item.target_id),
+                    captured["lines"][0],
+                )["rate_id"]
+            )
             if definition["scope"] == "room"
             else None,
         }
-    line = captured["lines"][0]
+    line = next(
+        (line for line in captured["lines"] if str(line["room_id"]) == item.target_id),
+        captured["lines"][0],
+    )
     if result["scope"] == "room" and result.get("preset_rate_id") != str(line["rate_id"]):
         raise DomainError(
             "invalid_preset_target",

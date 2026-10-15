@@ -7,5 +7,5 @@ export function competingStays(entries: { stay: Stay; position: TimelinePosition
     const end = position.endRatio * width;
     const targetStart = Math.max(0, Math.min(width - 16, start - 8));
     return end - start < 1 ? x >= targetStart && x < targetStart + 16 : x >= start && x < end;
-  }).map(entry => entry.stay).sort((a, b) => a.checkIn.getTime() - b.checkIn.getTime() || a.id - b.id);
+  }).map(entry => entry.stay).sort((a, b) => a.checkIn.getTime() - b.checkIn.getTime() || (typeof a.id === "number" && typeof b.id === "number" ? a.id - b.id : String(a.id).localeCompare(String(b.id))));
 }

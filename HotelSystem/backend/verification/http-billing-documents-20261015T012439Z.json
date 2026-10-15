@@ -1,0 +1,31 @@
+{
+  "timestamp": "20261015T012439Z",
+  "database": "hms_test",
+  "health": "PASS",
+  "create": "PASS",
+  "read_after_process_restart": "PASS",
+  "durable_idempotent_replay": "PASS",
+  "changed_body_conflict": "PASS",
+  "patch": "PASS",
+  "patch_get_after_restart": "PASS",
+  "durable_patch_replay": "PASS",
+  "stale_patch": "PASS",
+  "changed_patch_body_conflict": "PASS",
+  "pricing_unchanged": "PASS",
+  "synthetic_company": "68342c6e-96a2-4822-b136-81a4bfb43b07",
+  "document_read_after_restart": "PASS",
+  "durable_draft_and_finalization_replay": "PASS",
+  "number": "HMS-BILL-00000001",
+  "capture_hash": "24e1215cb1706d1fcb06bad4741e268ffb37d5720ec7824ec527a1c48a3c9bac",
+  "counts_before_cleanup": {
+    "guests": 1,
+    "reservations": 1,
+    "room_allocations": 1,
+    "pricing_revisions": 1,
+    "operational_audit": 5,
+    "mutation_receipts": 5,
+    "billing_documents": 1,
+    "billing_document_counters": 1
+  },
+  "cleanup": "Only synthetic company rows removed; verification API stopped"
+}

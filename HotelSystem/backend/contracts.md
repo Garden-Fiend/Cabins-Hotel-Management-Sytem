@@ -4,6 +4,11 @@ Approved scope: one company, PHP, **single-room direct bookings**, versioned ess
 server-owned prices. Guest creation is independent, matching the current pane's provider flow.
 No transaction-integrity requirement found that warrants silently changing guest ownership.
 
+The backend-only operational billing-document API is defined in
+[billing-documents.md](billing-documents.md): fixed draft capture, explicit versioned finalization,
+company-scoped numbering, immutable snapshots and durable replay. It does not change reservation
+pricing/print behavior and is not a tax invoice, payment or accounting implementation.
+
 Frontend demo stays independent. The explicit API-backed branch is documented in the
 [integration checkpoint](../docs/planning/frontend-api-integration-2026-10-13.md);
 unsupported multi-room/custom stay, OTA/settlement, final-price overrides, accounting and
@@ -341,6 +346,115 @@ Historical omitted-preset manual request hashes are preserved. Note/count edits 
 financial edits reuse atomic reservation/pricing/audit/receipt boundaries. New nullable preset
 metadata is additive to captured discount reads; old raw revisions and receipts are not rewritten.
 
-`final_price` remains rejected and unavailable in API mode. It is a unit-price replacement before
-sequential reductions, not an ordinary fixed reduction. No final-price values were migrated or
-converted. See [the checkpoint](../docs/planning/presets-recovery-checkpoint-2026-10-14.md).
+`final_price` is a separate captured unit replacement. Definitions use `value:"0"` plus either
+room `rate_prices:[{rate_id,unit_amount_minor}]` or item `replacement_unit_amount_minor`.
+They retain the existing scope target and version/key/audit conventions. Monetary inputs are
+integer PHP centavos; zero is valid and replacements cannot exceed applicable base units.
+Room coverage is validated against company-owned active rates, with matching room type.
+
+Existing reservation discount intents select `preset_id`, `method:"final_price"`, `value:"0"`
+and the canonical room UUID or purchased-line UUID. They never supply captured replacement
+prices. One line preset is supported at a time; manual reductions may follow it. Duplicate
+replacements, forged capture fields and reclassification of an existing selection UUID reject.
+Remove/replace a selection explicitly to change its identity or terms.
+
+Pricing schema 5 stores `price_overrides` separately from `discounts`, with
+`price_override_total_minor` separate from `discount_total_minor`. Calculation version is
+`direct-unit-overrides-v1`. Captures contain original/replacement unit, quantity, exact effect,
+definition UUID/version, historical label, scope, line/type-or-product/rate identities,
+PHP, `preset_final_price` provenance and server application time. Company identity and
+reservation-version provenance remain on the owning pricing revision/audit.
+
+Calculation order: original units → one unit replacement per line → room/item reductions →
+reservation reductions → adjustments → zero clamp. Quantity changes retain replacement units
+and first-application time, recalculating extension once in a new revision. Incompatible room,
+type/rate/product changes and removed dependent lines reject unless explicitly addressed.
+Unchanged captures survive definition edits/retirement and catalog changes. No schema 1–4
+history or receipts are rewritten. Omitted additive definition fields preserve old hashes.
+
+## Initial reservation financial inputs (B1)
+
+Reservation create accepts ordinary `purchase` and protected `extra_charge` intents through the
+existing `charges` field. Product identity/quantity/classification are inputs; unit prices and labels
+are resolved by the server. Optional `adjustments` accepts the same UUID, strict signed nonzero
+`amount_minor` and trimmed nonblank `reason` contract as saved billing edits (maximum 100, unique IDs).
+No actor, calculated total or client-priced charge fields are accepted.
+
+Accommodation, purchases/extras, final-unit replacements, sequential discounts, signed adjustments,
+inclusions and breakfast are captured in the original create transaction with allocation, one pricing
+revision, creation audit and durable receipt. No follow-up billing mutation is needed. Adjustments
+remain separate from discount eligibility and precede the existing final zero clamp. Omitting
+`adjustments` preserves earlier create hashes; explicitly supplying it participates in the hash.
+
+## Shared-stay multiple allocations (B2)
+
+`POST /api/v1/multi-room-reservations` accepts guest/source, shared `duration_id` and
+`scheduled_start`, note, 1–50 unique room `allocations`, discounts and adjustments. Each allocation
+contains room identity, counts, charge intents, inclusions and breakfast. New allocation UUIDs are
+server-owned. `POST /api/v1/reservations/{id}/edit-allocations` accepts this desired set,
+`expected_version` and existing allocation IDs; omitting an active room removes it by tombstone.
+Original single-room create/GET/list contracts and hashes remain unchanged. A legacy reservation
+can be promoted through the plural edit, retaining its parent and original allocation UUIDs.
+
+Plural reads use `allocation: null`, `allocations` (including removed history), `aggregate_status`,
+`shared_start`, `shared_end` and `shared_duration_id`. They never designate a primary room.
+Old singular mutation commands reject promoted records explicitly; use the plural edit for notes,
+counts, financial inputs and shared-stay changes.
+
+`POST /api/v1/reservations/{id}/room-lifecycle/{action}` accepts `expected_version` and optional
+`allocation_id`. Check-in/out without an ID target every active allocation and reject the entire
+command if any target is ineligible. Individual actions target one owned allocation. Actions:
+`check-in`, `check-out`, `cancel`, `no-show`, `record-departure`; bulk departure releases retained
+cancelled occupancies only. Cancellation accepts strict `guest_has_vacated` (default false).
+Mutations require UUID Idempotency-Key and transactional version/audit/receipt guarantees.
+
+Add/remove/shared-stay edits require every active room reserved. Guest/count/note/financial edits
+may occur while operationally active; terminal parents reject edits. Deferred PostgreSQL triggers
+enforce shared dates/duration and complete plural sets; separate guards preserve identities and
+removed history. Sorted room locks complement existing exclusion, occupancy and housekeeping rules.
+Legacy staging remains permitted. No new tables; B3 custom stays remain unsupported.
+
+Parent/aggregate projection: all reserved → confirmed/reserved; occupied plus reserved →
+checked_in/partially_checked_in; occupied plus checked-out → checked_in/partially_checked_out;
+no occupied rooms but reserved plus checked-out → confirmed/partially_checked_out; all checked-out,
+cancelled or no-show → corresponding terminal state. Cancelled physical occupancy remains separately
+locked until departure. Calendar colors use each allocation rather than the parent status.
+
+Pricing schema 6 (`direct-multi-room-v1`) extends the same calculator with allocation-owned lines.
+Room replacements/presets affect the intended room; manual room discounts also cover its charges;
+reservation reductions/adjustments apply once. Existing captured units/labels survive unrelated
+changes; new rooms or duration changes capture current rates. Removal preserves old allocation and
+financial history. Inclusions and breakfast remain per-room. Billing capture schema 2 records all
+active allocations and pricing; schema 1 and existing finalized documents remain unchanged.
+
+## Independent allocation stays (B3)
+
+Capability: `reservation.independent-stays.v1`. Existing plural endpoints accept optional allocation
+`stay: {scheduled_start, duration_id, scheduled_end?}`. Arrival must include a UTC offset; departure
+uses existing hourly-package/nightly hotel-policy rules. Optional end is only an assertion and must
+match the server result. No arbitrary minutes/nights/client-price authority. Mixed hourly/nightly
+allocations are supported; one aggregate transaction still owns the initial save and edits.
+
+Omitted `stay` preserves old B2 create fingerprints. In independent edits, omission retains an
+existing custom stay; `stay: null` explicitly resets to the template. Custom provenance survives even
+when dates equal the template. All room availability uses the individual allocation interval.
+
+Independent reads add `stay_mode: independent`, `stay_defaults`, and allocation
+`uses_reservation_stay`. Legacy `shared_start/end` represent the exact minimum arrival/maximum
+departure among nonremoved allocations; `shared_duration_id` is their common duration ID, or null.
+The separate start/duration template is an editing default, not another custom-stay authority. Its
+checkout projection uses an inherited captured stay, or current hotel policy when all rooms are custom.
+Original B2 and singular read/capture/receipt shapes remain readable and unchanged.
+
+All add/remove, date/duration, inheritance and template edits require every room reserved. Arrival-only
+edits retain captured units/quantity/checkout policy. Changed durations capture current applicable rates
+only for that room. Reset adopts the inherited template's captured basis; a changed quantity/package
+basis revises only that room. Old pricing revisions and finalized documents remain unchanged.
+Inclusions and complimentary nightly breakfast follow each allocation. Discount/replacement order,
+minor-unit arithmetic, signed adjustments and zero clamp remain in the existing calculator.
+
+Deferred database checks retain B2 shared invariants and add derived independent-range/common-ID and
+inherited-template checks. Ownership, exclusion, completeness, stable IDs and tombstones remain.
+Individual/bulk lifecycle operations use allocation instants with the existing strict atomic rules.
+Billing capture schema 3 records each independent schedule/provenance/entitlement and captured pricing;
+schemas 1/2 are unchanged. No arbitrary checkout, payment/accounting, post-arrival stay changes or B4.

@@ -7,6 +7,15 @@ from app.context import get_command_context
 from app.db import get_engine
 from app.modules.billing.adjustments import save_adjustments
 from app.modules.reservations.lifecycle import transition
+from app.modules.reservations.multi import save_multi
+from app.modules.reservations.multi_lifecycle import transition_multi
+from app.modules.reservations.multi_schemas import (
+    IndependentRead,
+    MultiCreate,
+    MultiEdit,
+    MultiLifecycle,
+    MultiRead,
+)
 from app.modules.reservations.readiness import set_readiness
 from app.modules.reservations.references import ReferenceRead, RoomRead, read_references
 from app.modules.reservations.schemas import (
@@ -68,12 +77,12 @@ def create_reservation(request: ReservationCreate, key: Key, service: Service):
     return service.create(request, key)
 
 
-@router.get("/reservations", response_model=list[ReservationRead])
+@router.get("/reservations", response_model=list[ReservationRead | MultiRead | IndependentRead])
 def reservations(service: Service, limit: Limit = 100, offset: Offset = 0):
     return service.list(limit=limit, offset=offset)
 
 
-@router.get("/reservations/{id}", response_model=ReservationRead)
+@router.get("/reservations/{id}", response_model=ReservationRead | MultiRead | IndependentRead)
 def reservation(id: UUID, service: Service):
     return service.get(id)
 
@@ -153,3 +162,22 @@ def record_departure(id: UUID, request: LifecycleCommand, key: Key, service: Ser
 @router.post("/rooms/{id}/readiness", response_model=RoomRead)
 def room_readiness(id: UUID, request: RoomReadinessCommand, key: Key, service: Service):
     return set_readiness(service, id, request, key)
+
+
+@router.post(
+    "/multi-room-reservations", response_model=MultiRead | IndependentRead, status_code=201
+)
+def create_multi(request: MultiCreate, key: Key, service: Service):
+    return save_multi(service, request, key)
+
+
+@router.post("/reservations/{id}/edit-allocations", response_model=MultiRead | IndependentRead)
+def edit_allocations(id: UUID, request: MultiEdit, key: Key, service: Service):
+    return save_multi(service, request, key, id)
+
+
+@router.post(
+    "/reservations/{id}/room-lifecycle/{action}", response_model=MultiRead | IndependentRead
+)
+def room_lifecycle(id: UUID, action: str, request: MultiLifecycle, key: Key, service: Service):
+    return transition_multi(service, id, action.replace("-", "_"), request, key)

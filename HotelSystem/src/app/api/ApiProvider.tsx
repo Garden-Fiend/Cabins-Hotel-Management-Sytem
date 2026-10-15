@@ -3,7 +3,7 @@ import { ApiError, errorMessage } from "./client";
 import type { ApiClient } from "./client";
 import type { ApiData } from "./store";
 import { ApiContext } from "./store";
-import type { ReservationDto } from "./contracts";
+import type { AnyReservationDto } from "./contracts";
 import { presentReservation } from "./presentation";
 
 export function ApiProvider({ client, children }: { client: ApiClient; children: React.ReactNode }) {
@@ -41,7 +41,7 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
     const startup = window.setTimeout(() => { void refresh(controller.signal); }, 0);
     return () => { window.clearTimeout(startup); controller.abort(); };
   }, [refresh]);
-  function installReservation(record: ReservationDto) {
+  function installReservation<T extends AnyReservationDto>(record: T) {
     try { presentReservation(record); }
     catch { throw new ApiError("Invalid canonical reservation response.", 0, "invalid_response", true); }
     mutations.current++;
@@ -58,6 +58,9 @@ export function ApiProvider({ client, children }: { client: ApiClient; children:
   }
   return <ApiContext.Provider value={{ client, data, loadError, refreshing, refresh,
     loadReservation: async id => installReservation(await client.reservation(id)),
+    createMulti:async(body,key)=>installReservation(await client.createMulti(body,key)),
+    editAllocations:async(id,body,key)=>installReservation(await client.editAllocations(id,body,key)),
+    roomLifecycle:async(id,action,body,key)=>{const result=installReservation(await client.roomLifecycle(id,action,body,key));await refresh();return result;},
     createGuest: async (body, key) => {
       const guest = await client.createGuest(body, key);
       if (!guest.id || !guest.name) throw new ApiError("Invalid saved guest response.", 0, "invalid_response", true);

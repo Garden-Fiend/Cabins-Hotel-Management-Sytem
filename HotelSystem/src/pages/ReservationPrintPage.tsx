@@ -171,6 +171,8 @@ export function ReservationPrintPage() {
               <span>Original subtotal</span>
               <span>{money(reservation.pricing.subtotal, currency)}</span>
             </li>
+            {reservation.pricing.priceOverrides?.map(override => <li key={override.id} className="flex justify-between"><AppliedDiscountDescription discount={override} currency={currency} unitReplacement /><span>{money(override.amount,currency)}</span></li>)}
+            {reservation.pricing.priceOverrides && <li className="flex justify-between"><span>Unit-price replacement effect</span><span>{money(reservation.pricing.priceOverrideTotal ?? 0,currency)}</span></li>}
             {reservation.pricing.discounts.map((discount) => (
               <li key={discount.id} className="flex justify-between gap-2">
                 <AppliedDiscountDescription discount={discount} currency={currency} />

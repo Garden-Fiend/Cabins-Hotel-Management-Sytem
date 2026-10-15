@@ -31,7 +31,7 @@ export function ApiDashboard() {
       <div className={card}>
         <CalendarToolbar view={view} anchorDate={anchor} onViewChange={setView} onPrevious={() => move(-1)} onNext={() => move(1)} onToday={() => setAnchor(new Date())} />
         <AvailabilityCalendar rooms={[...new Set([...data.references.rooms.map(item => item.number), ...data.reservations.map(item => item.pricing.snapshot.lines[0].room_number)])]}
-          stays={data.reservations.map(item => presentReservation(item).stay)} view={view} anchorDate={anchor}
+          stays={data.reservations.flatMap(item => presentReservation(item).stays)} view={view} anchorDate={anchor}
           onStayClick={stay => { if (stay.reservationId) navigate(`/reservations/${stay.reservationId}`); }}
           onRoomTimeSelect={draft || api.refreshing ? undefined : (number, start) => {
             const room = data.references.rooms.find(item => item.number === number);
@@ -50,7 +50,7 @@ export function ApiReservationList() {
     {api.data!.reservations.length === 0 ? <p>No persisted reservations.</p> : api.data!.reservations.map(record =>
       <article className={card} key={record.id} data-reservation-id={record.id}>
         <Link className="font-semibold text-blue-800 underline" to={`/reservations/${record.id}`}>{record.reference} · {record.guest.name}</Link>
-        <p>Room {record.pricing.snapshot.lines[0].room_number} · {date(record.allocation.scheduled_start)} – {date(record.allocation.scheduled_end)}</p>
+        <p>Room {record.pricing.snapshot.lines[0].room_number} · {date(record.allocation?.scheduled_start ?? ("shared_start" in record ? record.shared_start : ""))} – {date(record.allocation?.scheduled_end ?? ("shared_end" in record ? record.shared_end : ""))}</p>
         <p>Captured accommodation: {formatPhp(record.pricing.snapshot.total_minor)} · Version {record.version}</p>
         <p>{record.note}</p>
       </article>)}
@@ -69,13 +69,14 @@ export function ApiReservationDetail() {
   }
   function saved() { setEditing(false); setNotice("Changes saved to PostgreSQL."); }
   if (!record) return <section className={card}><h1>Reservation not found</h1><p>No demo record was substituted.</p><button onClick={() => void reload()}>Load reservation from server</button>{failure && <p role="alert">{failure}</p>}</section>;
+  if(record.allocation===null)return <p>Multi-room reservations use the integrated reservation detail route.</p>;
   return <div className="space-y-4">
     <Link to="/reservations" className="underline">All reservations</Link>
     <section className={card}>
       <h1 className="text-2xl font-bold">{record.reference}</h1>
       <p>{record.guest.name} · {record.status} · Version {record.version}</p>
       <p>Room {record.pricing.snapshot.lines[0].room_number} · {record.pricing.snapshot.lines[0].room_type_label}</p>
-      <p>{date(record.allocation.scheduled_start)} – {date(record.allocation.scheduled_end)}</p>
+      <p>{date(record.allocation?.scheduled_start ?? ("shared_start" in record ? record.shared_start : ""))} – {date(record.allocation?.scheduled_end ?? ("shared_end" in record ? record.shared_end : ""))}</p>
       <p>{record.allocation.adults} adults · {record.allocation.children} children</p>
       <p data-testid="saved-note">{record.note || "No reservation notes"}</p>
       <p className="font-semibold">Captured accommodation: {formatPhp(record.pricing.snapshot.total_minor)}</p>
