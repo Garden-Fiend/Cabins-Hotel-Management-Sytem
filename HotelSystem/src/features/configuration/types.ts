@@ -52,6 +52,8 @@ export interface DurationConfiguration {
 }
 
 export interface BookingSourceConfiguration {
+  serverVersion?: number;
+  agreementVersion?: number;
   classification?: ChannelClassification;
   referenceRequired?: boolean;
   notes?: string;

@@ -128,7 +128,8 @@ class ReservationService:
             duration = self.owned(session, durations, request.duration_id, lock=True)
             room_type = self.owned(session, room_types, room["room_type_id"], lock=True)
             if (
-                source["source_id"] != "direct"
+                source["classification"] != "direct"
+                or source["reference_required"]
                 or not source["enabled"]
                 or not duration["enabled"]
                 or not room_type["enabled"]
@@ -201,6 +202,7 @@ class ReservationService:
                         company_id=self.context.company_id,
                         guest_id=guest["id"],
                         booking_source_id=source["id"],
+                        booking_source_label=source["label"],
                         note=request.note,
                     )
                     .returning(reservations)
@@ -447,6 +449,10 @@ class ReservationService:
             .order_by(audit_events.c.occurred_at, audit_events.c.id)
         ).mappings()
         return ReservationRead(
+            booking_source_label=reservation["booking_source_label"]
+            or (lambda source: source["initial_label"] or source["label"])(
+                self.owned(session, booking_sources, reservation["booking_source_id"])
+            ),
             **{
                 name: reservation[name]
                 for name in (

@@ -285,7 +285,7 @@ export function ConfigurationPage() {
   const [editingVersion, setEditingVersion] = useState<number | undefined>();
   const [activeSection, setActiveSection] = useState<SectionKey>("roomTypes");
   const supportedSection = ["roomTypes", "rooms", "durations", "roomTypePrices", "catalogItems"].includes(activeSection);
-  const definitionUnavailable = mode === "api" && (!supportedSection || !commands?.saveDefinition);
+  const definitionUnavailable = mode === "api" && (activeSection==='bookingSources' ? !commands?.saveSource : (!supportedSection || !commands?.saveDefinition));
   const [defaultInclusions, setDefaultInclusions] = useState<NonNullable<RoomTypeConfiguration["defaultInclusions"]>>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, ConfigurationValue>>(

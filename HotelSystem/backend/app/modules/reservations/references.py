@@ -6,6 +6,7 @@ import sqlalchemy as sa
 from pydantic import Field, model_validator
 
 from app.models import (
+    agreements,
     booking_sources,
     categories,
     companies,
@@ -18,6 +19,7 @@ from app.models import (
 )
 from app.modules.configuration.breakfast import read_eligibility
 from app.modules.configuration.schemas import CategoryRead, DiscountPresetRead, ProductRead
+from app.modules.configuration.sources import AgreementRead, SourceRead, source_read
 from app.modules.reservations.inclusions import read_defaults
 from app.modules.reservations.schemas import (
     DTO,
@@ -103,17 +105,11 @@ class RateRead(DTO):
     enabled: bool
 
 
-class SourceRead(DTO):
-    id: UUID
-    source_id: Literal["direct"]
-    label: str
-    enabled: bool
-
-
 class ReferenceRead(DTO):
     discount_presets: list[DiscountPresetRead] = Field(default_factory=list)
     breakfast_eligible_items: list[BreakfastEligibility] = Field(default_factory=list)
     capabilities: tuple[str, ...] = (
+        "configuration.sources.v1",
         "reservation.multi-room.v1",
         "reservation.independent-stays.v1",
         "reservation.lifecycle.v1",
@@ -137,6 +133,7 @@ class ReferenceRead(DTO):
     durations: list[DurationRead]
     rates: list[RateRead]
     booking_sources: list[SourceRead]
+    source_agreements: list[AgreementRead] = []
     inventory_categories: list[CategoryRead]
     catalog_products: list[ProductRead]
 
@@ -166,7 +163,9 @@ def read_references(service: ReservationService) -> ReferenceRead:
                 .order_by(table.c.id)
             ).mappings()
             result["rates" if table is rates else table.name] = [
-                model(
+                source_read(session, row)
+                if table is booking_sources
+                else model(
                     **{
                         field: read_defaults(session, service.context.company_id, row["id"])
                         if field == "default_inclusions"
@@ -176,4 +175,12 @@ def read_references(service: ReservationService) -> ReferenceRead:
                 )
                 for row in rows
             ]
+        result["source_agreements"] = [
+            AgreementRead.model_validate(row)
+            for row in session.execute(
+                sa.select(agreements)
+                .where(agreements.c.company_id == service.context.company_id)
+                .order_by(agreements.c.source_id, agreements.c.revision)
+            ).mappings()
+        ]
         return ReferenceRead(**result)

@@ -1,4 +1,5 @@
 import type { HotelConfigurationData } from "../../features/configuration/types";
+import {presentSource,presentAgreement,sourceLabel} from './sourceInputs';
 import type { ReservationSnapshot, ReservationAuditEntry, AppliedDiscount, ReservationDiscount } from "../../types/reservation";
 import type { ReferencesDto, AnyReservationDto } from "./contracts";
 import {richMultiReservation} from './multiPresentation';
@@ -24,7 +25,8 @@ export function richConfiguration(refs: ReferencesDto): HotelConfigurationData {
       minutes: r.minutes ?? (r.nights ?? 1) * 1440, nights: r.nights ?? undefined })),
     roomTypePrices: refs.rates.map(r => ({ id: r.id, serverVersion: r.version, serverAmountMinor: r.unit_amount_minor, roomTypeId: r.room_type_id, bookingType: r.booking_kind,
       durationId: r.duration_id ?? undefined, amount: r.unit_amount_minor / 100, currency: r.currency, enabled: r.enabled })),
-    bookingSources: refs.booking_sources.map(r => ({ id: r.id, label: r.label, enabled: r.enabled, classification: "direct" })),
+    bookingSources: refs.booking_sources.map(presentSource),
+    channelAgreements: (refs.source_agreements??[]).map(presentAgreement),
     // These capabilities are unavailable, not populated from demo fixtures.
     inventoryCategories: (refs.inventory_categories ?? []).map(r => ({ id: r.id, serverVersion: r.version, label: r.label, type: r.type, enabled: r.enabled, systemDefined: r.system_defined })),
     catalogItems: (refs.catalog_products ?? []).map(r => ({ id: r.id, serverVersion: r.version, serverUnitAmountMinor: r.unit_amount_minor, label: r.label,
@@ -55,7 +57,7 @@ export function richReservation(dto: AnyReservationDto, refs: ReferencesDto): Re
   };
   return {
     id: dto.id, serverVersion: dto.version, status: dto.status, guestId: dto.guest.id,
-    bookingSourceId: dto.booking_source_id, bookingSourceLabel: refs.booking_sources.find(s => s.id === dto.booking_source_id)?.label ?? "Direct",
+    bookingSourceId: dto.booking_source_id, bookingSourceLabel: sourceLabel(dto.booking_source_id,dto.booking_source_label,refs.booking_sources),
     checkIn: apiInstant(a.scheduled_start), checkOut: apiInstant(a.scheduled_end), note: dto.note,
     createdAt: apiInstant(dto.created_at), actualCheckInAt: a.actual_check_in ? apiInstant(a.actual_check_in) : undefined,
     actualCheckOutAt: a.actual_check_out ? apiInstant(a.actual_check_out) : undefined,

@@ -33,6 +33,7 @@ export interface CapturedLineDto {
   quantity: number; amount_minor: number; currency: "PHP";
 }
 export interface ReservationDto {
+  booking_source_label?:string|null;
   id: string; company_id: string; business_number: number; reference: string; version: number;
   status: "confirmed" | "reserved" | "checked_in" | "checked_out" | "cancelled" | "no_show";
   guest: GuestDto; booking_source_id: string; note: string; created_at: string; updated_at: string;
@@ -82,7 +83,8 @@ export interface ReferencesDto {
   rates: { id: string; source_id: string; room_type_id: string; booking_kind: "hourly" | "overnight";
     version?: number;
     duration_id: string | null; currency: "PHP"; unit_amount_minor: number; enabled: boolean }[];
-  booking_sources: { id: string; source_id: "direct"; label: string; enabled: boolean }[];
+  booking_sources: import('./sourceInputs').SourceDto[];
+  source_agreements?: import('./sourceInputs').AgreementDto[];
   inventory_categories?: { id: string; version: number; label: string; type: "ordinary" | "amenities" | "extra" | "inclusion" | "breakfast"; enabled: boolean; system_defined: boolean }[];
   catalog_products?: { id: string; version: number; label: string; category_id: string; unit_amount_minor: number; currency: "PHP"; enabled: boolean; archived: boolean; available_for_sale: boolean }[];
 }

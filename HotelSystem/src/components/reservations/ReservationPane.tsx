@@ -602,6 +602,7 @@ export function ReservationPane({
     setChannelTerms(verified.channelTerms);setPendingFinancialAudit(current=>[...current,...verified.audit.slice(-1)]);markDirty();
   }
   function changeSource(id:string,reviewed=false) {
+    if(persistent){if(initialReservation)return;setBookingSource(id);setChannelTerms(undefined);markDirty();return;}
     if (initialReservation && id !== bookingSource && !reviewed) {setPendingSource(id);return;}
     try {
       requireCapability(capabilities,"edit_channel_terms");
@@ -613,7 +614,7 @@ export function ReservationPane({
     }catch(error){setErrorMessage(error instanceof Error ? error.message : "Unable to capture channel agreement.");}
   }
   const [bookingSource, setBookingSource] = useState(
-    initialReservation?.bookingSourceId ?? (persistent ? bookingSources.find(source => source.enabled)?.id ?? "" : ""),
+    initialReservation?.bookingSourceId ?? (persistent ? bookingSources.find(source => source.enabled&&(source.classification??'direct')==='direct'&&!source.referenceRequired)?.id ?? "" : ""),
   );
   const [note, setNote] = useState(initialReservation?.note ?? "");
   const [discounts, setDiscounts] = useState<ReservationDiscount[]>(
@@ -2410,7 +2411,7 @@ export function ReservationPane({
             <label>
               <span className={labelClass}>Booking source *</span>
               <select
-                disabled={persistent}
+                disabled={persistent&&Boolean(initialReservation)}
                 className={inputClass}
                 onChange={(event) => {
                   changeSource(event.target.value);
@@ -2435,10 +2436,11 @@ export function ReservationPane({
                   <option
                     key={source.id}
                     value={source.id}
-                    disabled={!source.enabled}
+                    disabled={!source.enabled||(persistent&&((source.classification??'direct')!=='direct'||source.referenceRequired))}
                   >
                     {source.label}
                     {!source.enabled ? " (inactive historical source)" : ""}
+                    {persistent&&((source.classification??'direct')!=='direct'||source.referenceRequired)?' (channel booking capture requires B6)':''}
                   </option>
                   ))}
               </select>

@@ -278,3 +278,15 @@ and [checkpoint](../docs/planning/b4-room-type-retirement-checkpoint-2026-10-15.
 Focused backend: `& .\scripts\python.ps1 -m pytest --postgres -q tests/test_retirement.py tests/test_retirement_multi.py tests/test_configuration_api.py tests/test_reservation_lifecycle.py`.
 From app root, separately: `& .\backend\scripts\python.ps1 integration-tests/run-retirement.py`.
 Restart an older launcher normally; no migration/reset/reseed required.
+### B5 booking sources and versioned agreements
+
+Current head: `d48e53f9a043` (20 revisions / 20 tables). Original Configuration → Booking Sources
+persists identities, Enabled state, commercial agreement drafts/history, published-rule protection
+and inclusive effective periods. Commercial settings do not calculate commission or collect money.
+Direct source selection works in the original reservation pane; non-direct/external-reference
+captures and reviewed source changes remain B6. See [contract](booking-source-agreements.md).
+
+Other checkouts must explicitly upgrade their isolated development/test databases; the current
+owned targets are migrated. Normally restart an older launcher before `run-api.bat`; no reset/reseed.
+Focused backend: `& .\scripts\python.ps1 -m pytest --postgres -q tests/test_sources.py`.
+From app root, separately: `& .\backend\scripts\python.ps1 integration-tests/run-sources.py`.

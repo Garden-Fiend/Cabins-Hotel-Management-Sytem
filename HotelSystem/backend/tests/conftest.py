@@ -2,6 +2,7 @@ from pathlib import Path
 from uuid import uuid4, uuid5
 
 import pytest
+import sqlalchemy as sa
 from dotenv import dotenv_values
 
 from app.context import CommandContext
@@ -153,6 +154,16 @@ def isolated_company(pg_engine):
     finally:
         with pg_engine.begin() as c:
             # Test-owner cleanup of this fixture's random company only. Deferred aggregate
+            from app.models import agreements
+
+            c.execute(sa.text("LOCK TABLE hms.source_agreements IN ACCESS EXCLUSIVE MODE"))
+            c.execute(
+                sa.text("ALTER TABLE hms.source_agreements DISABLE TRIGGER source_agreement_guard")
+            )
+            c.execute(agreements.delete().where(agreements.c.company_id == owner))
+            c.execute(
+                sa.text("ALTER TABLE hms.source_agreements ENABLE TRIGGER source_agreement_guard")
+            )
             # guards still run; the complete parent/children set is removed in this transaction.
             c.execute(
                 reservations.update()

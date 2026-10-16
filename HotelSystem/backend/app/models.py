@@ -9,6 +9,7 @@ from app.modules.configuration.models import (
     products,
     room_type_inclusions,
 )
+from app.modules.configuration.source_models import agreements  # noqa: F401
 from app.modules.reservations.models import (
     allocations,
     booking_sources,

@@ -108,6 +108,8 @@ export class ApiClient {
   retireDefinition(kind: "rooms" | "room-types", id: string, body: {expected_version:number;action:"archive"|"restore"|"delete"}, key: string) {
     return this.request<{id:string;version:number;action:string}>(`/configuration/${kind}/${encodeURIComponent(id)}/retirement`, "POST", body, key);
   }
+  saveSource(id:string|undefined,body:ReturnType<typeof import('./sourceInputs').sourceInput>,key:string){return this.request<import('./sourceInputs').SourceDto>(`/configuration/booking-sources${id?`/${encodeURIComponent(id)}`:''}`,id?'PATCH':'POST',body,key);}
+  saveAgreement(sourceId:string,id:string|undefined,body:ReturnType<typeof import('./sourceInputs').agreementInput>,key:string){return this.request<import('./sourceInputs').AgreementDto>(`/configuration/booking-sources/${encodeURIComponent(sourceId)}/agreements${id?`/${encodeURIComponent(id)}`:''}`,id?'PATCH':'POST',body,key);}
   saveDefinition<K extends DefinitionKind>(kind: K, id: string | undefined, body: DefinitionMap[K] & { expected_version?: number }, key: string) {
     return this.request<{ id: string; version: number }>(`/configuration/${kind}${id ? `/${encodeURIComponent(id)}` : ""}`, id ? "PATCH" : "POST", body, key);
   }

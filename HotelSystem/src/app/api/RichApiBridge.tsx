@@ -14,6 +14,13 @@ import { manualDiscountInputs } from "./discountInputs";
 import { breakfastInputs } from "./breakfastInputs";
 import { toMinorUnits } from "../../lib/money";
 import { definitionIntent, type DefinitionIntent } from "./definitionInputs";
+import {sourceInput,agreementInput,presentSource,presentAgreement} from './sourceInputs';
+import {ApiError,errorMessage} from './client';
+function configurationError(error:unknown){
+  if(error instanceof ApiError&&error.code==='version_conflict')return 'Source or agreement changed. Your draft is retained. Load latest versions and review before retrying.';
+  if(error instanceof ApiError&&error.uncertain)return 'The outcome is not confirmed. Keep your draft and confirm the original configuration request.';
+  return errorMessage(error);
+}
 
 export function RichApiBridge({ children }: { children: React.ReactNode }) {
   const api = useApi();
@@ -24,6 +31,8 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
   const lifecycle = useMutation((input: { id: string; action: LifecycleAction; body: LifecycleInput }, key: string) => api.lifecycleReservation(input.id, input.action, input.body, key), `${scope}:lifecycle`);
   const readiness = useMutation((input: { id: string; body: { expected_version: number; housekeeping: "clean" | "cleaning" } }, key: string) => api.roomReadiness(input.id, input.body, key), `${scope}:readiness`);
   const definition = useMutation((input: DefinitionIntent, key: string) => api.saveDefinition(input.kind, input.id, input.body, key), `${scope}:definition`);
+  const sourceSave=useMutation(async(input:{id?:string;body:ReturnType<typeof sourceInput>},key:string)=>{const result=await api.client.saveSource(input.id,input.body,key);await api.refresh();return result;},`${scope}:source`,configurationError);
+  const agreementSave=useMutation(async(input:{sourceId:string;id?:string;body:ReturnType<typeof agreementInput>},key:string)=>{const result=await api.client.saveAgreement(input.sourceId,input.id,input.body,key);await api.refresh();return result;},`${scope}:agreement`,configurationError);
   const retirement = useMutation(async(input:{kind:"rooms"|"room-types";id:string;body:{expected_version:number;action:"archive"|"restore"|"delete"}},key:string)=>{
     const saved=await api.client.retireDefinition(input.kind,input.id,input.body,key);
     await api.refresh();
@@ -45,12 +54,15 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
   });
   const unsupported = () => { throw new Error("This operation is not available in API mode. No records were changed."); };
   return <ReservationDemoContext.Provider value={{ mode: "api", actor: "local-development",
-    capabilities: { manage_channels: false, edit_channel_terms: false, override_accommodation: false,
+    capabilities: { manage_channels: references.capabilities?.includes('configuration.sources.v1')??false, edit_channel_terms: false, override_accommodation: false,
       verify_collection: false, confirm_commission: false, record_settlement: false, reconcile_settlement: false },
     reservations: reservations.map(r => richReservation(r, references)), stays: reservations.flatMap(r => presentReservation(r).stays),
     guests, configuration, settlements: [],
     setReservations: unsupported, setStays: unsupported, setGuests: unsupported, setConfiguration: unsupported, setSettlements: unsupported,
     commands: {
+      saveSource:async(source,isNew)=>{const result=await sourceSave.submit({id:isNew?undefined:source.id,body:sourceInput(source,isNew)});if(!result)throw new Error('Source save was not confirmed. Your draft is retained. Review the API message or confirm the original source request.');return presentSource(result);},
+      saveAgreement:async(agreement,source,isNew)=>{const result=await agreementSave.submit({sourceId:source.id,id:isNew?undefined:agreement.id,body:agreementInput(agreement,source,isNew)});if(!result)throw new Error('Agreement save was not confirmed. Your draft is retained. Review the API message or confirm the original agreement request.');},
+      loadChannels:async()=>{const refs=await api.client.references();await api.refresh();return {sources:refs.booking_sources.map(presentSource),agreements:(refs.source_agreements??[]).map(presentAgreement)};},
       retireDefinition: async(kind,id,version,action)=>{
         const result=await retirement.submit({kind,id,body:{expected_version:version,action}});
         if(!result)throw new Error("Operation not confirmed. Review the API message or confirm the original retirement request.");
@@ -87,7 +99,7 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
       canEditPurchases: references.capabilities?.includes("reservation.purchases.v1"),
       canEditRoomStatus: references.capabilities?.includes("room.status.v1"),
       error: retirement.error || create.error || patch.error || guest.error || lifecycle.error || readiness.error || definition.error || multiCreate.error || multiEdit.error || multiLife.error,
-      busy: retirement.pending || lifecycle.pending || readiness.pending || definition.pending || create.pending || patch.pending || guest.pending || multiCreate.pending || multiEdit.pending || multiLife.pending || api.refreshing,
+      busy: sourceSave.pending || agreementSave.pending || retirement.pending || lifecycle.pending || readiness.pending || definition.pending || create.pending || patch.pending || guest.pending || multiCreate.pending || multiEdit.pending || multiLife.pending || api.refreshing,
       saveDefinition: references.capabilities?.includes("configuration.definitions.v1") ? async (section, id, values, version, defaultInclusions) => {
         const result = await definition.submit(definitionIntent(section, id, values, configuration, version, defaultInclusions));
         if (!result) throw new Error("Configuration save was not confirmed. Your draft is retained. " + (definition.error || "Resolve the API error before retrying."));
@@ -157,6 +169,10 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
       },
     },
   }}>
+    {(sourceSave.error||agreementSave.error)&&<div role="alert" className="m-4 rounded-xl border border-rose-300 p-4">{sourceSave.error||agreementSave.error}
+      {sourceSave.uncertain&&<button onClick={()=>void sourceSave.retryOriginal()}>Confirm original source request</button>}
+      {agreementSave.uncertain&&<button onClick={()=>void agreementSave.retryOriginal()}>Confirm original agreement request</button>}
+    </div>}
     {retirement.error && <div role="alert" className="m-4 rounded-xl border border-rose-300 p-4">{retirement.error}
       {retirement.uncertain && <button onClick={()=>void retirement.retryOriginal()}>Confirm original retirement request</button>}
       {!retirement.uncertain && <button onClick={()=>void api.refresh()}>Reload configuration</button>}

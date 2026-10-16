@@ -1,7 +1,10 @@
+from datetime import date
 from uuid import UUID
 
+import sqlalchemy as sa
 from fastapi import APIRouter
 
+from app.models import booking_sources
 from app.modules.configuration.breakfast import save_breakfast
 from app.modules.configuration.retirement import RetirementIntent, RetirementRead, retire_definition
 from app.modules.configuration.schemas import (
@@ -24,11 +27,69 @@ from app.modules.configuration.schemas import (
     RoomWrite,
 )
 from app.modules.configuration.services import save_definition
+from app.modules.configuration.sources import (
+    AgreementEdit,
+    AgreementRead,
+    AgreementWrite,
+    SourceEdit,
+    SourceRead,
+    SourceWrite,
+    list_agreements,
+    save_agreement,
+    save_source,
+    source_read,
+)
 from app.modules.reservations.references import DurationRead, RateRead, RoomRead, RoomTypeRead
 from app.modules.reservations.router import Key, Service
 from app.modules.reservations.schemas import BreakfastConfiguration, BreakfastConfigurationRead
 
 router = APIRouter(prefix="/api/v1/configuration", tags=["local-development configuration"])
+
+
+@router.post("/booking-sources", response_model=SourceRead, status_code=201)
+def create_source(body: SourceWrite, key: Key, service: Service):
+    return save_source(service, body, key)
+
+
+@router.patch("/booking-sources/{id}", response_model=SourceRead)
+def update_source(id: UUID, body: SourceEdit, key: Key, service: Service):
+    return save_source(service, body, key, id)
+
+
+@router.get("/booking-sources/{id}/agreements", response_model=list[AgreementRead])
+def read_source_agreements(id: UUID, service: Service, effective_on: date | None = None):
+    return list_agreements(service, id, effective_on)
+
+
+@router.get("/booking-sources", response_model=list[SourceRead])
+def list_sources(service: Service):
+    with service.transaction() as session:
+        return [
+            source_read(session, row)
+            for row in session.execute(
+                sa.select(booking_sources)
+                .where(booking_sources.c.company_id == service.context.company_id)
+                .order_by(booking_sources.c.id)
+            ).mappings()
+        ]
+
+
+@router.get("/booking-sources/{id}", response_model=SourceRead)
+def read_source(id: UUID, service: Service):
+    with service.transaction() as session:
+        return source_read(session, service.owned(session, booking_sources, id, lock=True))
+
+
+@router.post("/booking-sources/{id}/agreements", response_model=AgreementRead, status_code=201)
+def create_source_agreement(id: UUID, body: AgreementWrite, key: Key, service: Service):
+    return save_agreement(service, id, body, key)
+
+
+@router.patch("/booking-sources/{id}/agreements/{agreement_id}", response_model=AgreementRead)
+def update_source_agreement(
+    id: UUID, agreement_id: UUID, body: AgreementEdit, key: Key, service: Service
+):
+    return save_agreement(service, id, body, key, agreement_id)
 
 
 @router.post("/rooms/{id}/retirement", response_model=RetirementRead)

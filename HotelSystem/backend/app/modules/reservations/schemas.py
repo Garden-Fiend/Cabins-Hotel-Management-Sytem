@@ -676,6 +676,7 @@ class AuditRead(DTO):
 
 
 class ReservationRead(DTO):
+    booking_source_label: str | None = None
     id: UUID
     company_id: UUID
     business_number: Positive

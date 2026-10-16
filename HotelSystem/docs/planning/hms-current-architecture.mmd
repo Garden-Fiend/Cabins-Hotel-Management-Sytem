@@ -40,7 +40,7 @@ flowchart TB
             RES["Reservations boundary<br/>Guests, rooms, room types, durations, rates,<br/>booking sources, reservations, allocations"]
             BILL["Billing boundary<br/>Append-only operational pricing revisions<br/>Captured purchases and distinct extra charges<br/>Signed adjustments, manual discounts and configured presets<br/>Separate captured final unit prices before reductions<br/>Immutable finalized operational documents and transactional counters<br/>No accounting journal or posting"]
         end
-        CATALOG["Configuration boundary<br/>Owned categories/products and versioned discount/final-price definitions<br/>Protected extras, inclusions and virtual breakfast view<br/>Owned defaults and meal/beverage eligibility<br/>Captured allocation entitlements/selections - zero breakfast charge<br/>No stock movement ledger"]
+        CATALOG["Configuration boundary<br/>Owned categories/products and versioned discount/final-price definitions<br/>Stable booking sources and commercial agreement revisions<br/>Inclusive effective dates, immutable published rules and exact configured units<br/>Protected extras, inclusions and virtual breakfast view<br/>Owned defaults and meal/beverage eligibility<br/>Captured allocation entitlements/selections - zero breakfast charge<br/>No stock movement or channel financial ledger"]
         CATALOG --> ALEMBIC
         ROUTES --> CATALOG
         CATALOG --> ENGINE

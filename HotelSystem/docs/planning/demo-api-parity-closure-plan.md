@@ -117,6 +117,11 @@ historical-reference and lifecycle protection. See the
 
 ## B5 — Booking sources and versioned agreement configuration (medium–large)
 
+Implemented October 16 within the configuration boundary. Inclusive end dates and editable drafts
+preserve demo semantics; published rules are immutable. See the
+[B5 checkpoint](b5-booking-source-agreements-checkpoint-2026-10-16.md) for executed verification.
+Non-direct reservation captures/source changes remain B6, not implicit effects of these definitions.
+
 - Files: BookingChannelsEditor, ConfigurationPage, channel types/finance; reference DTO/adapter;
   new configuration services/models/router. Schema: remove direct-only restriction additively, add
   classification/reference-required/notes/version and owned agreement versions/effective dates/rules.

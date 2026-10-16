@@ -4,6 +4,7 @@ export type CommissionMethod = "percentage" | "fixed" | "manual" | "none";
 export type CommissionBasis = "confirmed_accommodation" | "reference_value" | "explicit_amount";
 export type SettlementMethod = "deducted" | "separate_invoice" | "offset" | "manual";
 export interface ChannelAgreement {
+    serverVersion?: number;
     id: string;
     channelId: string;
     version: number;

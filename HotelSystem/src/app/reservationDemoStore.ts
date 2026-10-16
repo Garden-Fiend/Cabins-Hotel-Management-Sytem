@@ -18,6 +18,9 @@ export interface ReservationDemoContextValue {
     reviewMessage?: string;
     reviewLatest?: () => Promise<void>;
     busy?: boolean;
+    saveSource?:(source:import('../features/configuration/types').BookingSourceConfiguration,isNew:boolean)=>Promise<import('../features/configuration/types').BookingSourceConfiguration>;
+    saveAgreement?:(agreement:import('../features/channels/types').ChannelAgreement,source:import('../features/configuration/types').BookingSourceConfiguration,isNew:boolean)=>Promise<void>;
+    loadChannels?:()=>Promise<{sources:import('../features/configuration/types').BookingSourceConfiguration[];agreements:import('../features/channels/types').ChannelAgreement[]}>;
     canEditMultiple?:boolean;canEditCustomStays?:boolean;
     allocationLifecycle?:(original:ReservationSnapshot,action:"check-in"|"check-out",allocationId?:string)=>Promise<void>;
     canEditGuest?: boolean;

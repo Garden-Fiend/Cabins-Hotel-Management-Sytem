@@ -6,17 +6,20 @@ import type { ChannelAgreement } from "../../features/channels/types";
 import { parseMinor, validateAgreement } from "../../lib/channelFinance";
 import { fromMinorUnits } from "../../lib/money";
 import { hotelDateKey } from "../../lib/hotelTime";
+import {phpDecimal} from '../../app/api/presentation';
 const input = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
 const button = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold";
 export function BookingChannelsEditor() {
-    const { configuration, setConfiguration, capabilities } = useReservationDemo();
+    const { configuration, setConfiguration, capabilities,mode,commands } = useReservationDemo();
     const [channel, setChannel] = useState<BookingSourceConfiguration>();
     const [agreement, setAgreement] = useState<ChannelAgreement>();
     const [notice, setNotice] = useState("");
     const [fixed, setFixed] = useState("0");
     const [rate, setRate] = useState("0");
+    const [reviewing,setReviewing]=useState(false);
     const editable = can(capabilities, "manage_channels");
-    function saveChannel() {
+    async function saveChannel() {
+        if(reviewing)return;
         try {
             if (!editable || !channel)
                 throw new Error("Channel management permission is required.");
@@ -24,8 +27,11 @@ export function BookingChannelsEditor() {
                 throw new Error("Channel name is required.");
             if (configuration.bookingSources.some(c => c.id !== channel.id && c.label.toLowerCase() === channel.label.trim().toLowerCase()))
                 throw new Error("Channel names must be unique.");
-            setConfiguration(current => ({ ...current, bookingSources: [...current.bookingSources.filter(c => c.id !== channel.id), { ...channel, label: channel.label.trim() }] }));
-            setNotice("Channel saved in this demo session.");
+            if(mode==='api'){
+                if(!commands?.saveSource)throw new Error('Source configuration is unavailable.');
+                setChannel(await commands.saveSource(channel,!configuration.bookingSources.some(c=>c.id===channel.id)));
+            } else setConfiguration(current => ({ ...current, bookingSources: [...current.bookingSources.filter(c => c.id !== channel.id), { ...channel, label: channel.label.trim() }] }));
+            setNotice(mode==='api'?'Source saved. No reservation terms or financial records were changed.':"Channel saved in this demo session.");
         }
         catch (e) {
             setNotice(e instanceof Error ? e.message : "Unable to save channel.");
@@ -38,17 +44,36 @@ export function BookingChannelsEditor() {
         const next: ChannelAgreement = { id: crypto.randomUUID(), channelId: source.id, version, effectiveFrom: hotelDateKey(new Date()), status: "draft", currency: configuration.currency, pricing: { allowOverride: false, reasonRequired: true }, commission: { method: "none", basis: "confirmed_accommodation", rateBasisPoints: 0, fixedMinor: 0, allowOverride: false }, payment: { collection: "hotel" }, settlement: { method: "manual" }, ...(previous ? { ...structuredClone(previous), id: crypto.randomUUID(), version, status: "draft", effectiveFrom: hotelDateKey(new Date()), effectiveTo: undefined } : {}) };
         setChannel(source);
         setAgreement(next);
-        setFixed(String(fromMinorUnits(next.commission.fixedMinor, next.currency)));
+        setFixed(mode==='api'?phpDecimal(next.commission.fixedMinor):String(fromMinorUnits(next.commission.fixedMinor, next.currency)));
         setRate(String(next.commission.rateBasisPoints / 100));
         setNotice("");
     }
-    function saveAgreement() {
+    async function reviewLatest(){
+        if(reviewing)return;
+        setReviewing(true);
+        try{
+            if(!channel||!commands?.loadChannels)return;
+            const latest=await commands.loadChannels();
+            const source=latest.sources.find(s=>s.id===channel.id);
+            if(!source)throw new Error('Save or reopen the persisted source before creating an agreement.');
+            setChannel({...channel,serverVersion:source.serverVersion,agreementVersion:source.agreementVersion});
+            const saved=latest.agreements.find(a=>a.id===agreement?.id);
+            if(agreement&&saved)setAgreement({...agreement,serverVersion:saved.serverVersion});
+            setNotice('Latest versions loaded. Your draft is retained; review it against the updated history before saving.');
+        }catch(error){setNotice(error instanceof Error?error.message:'Unable to review latest configuration.');}
+        finally{setReviewing(false);}
+    }
+    async function saveAgreement() {
+        if(reviewing)return;
         try {
             if (!editable || !agreement)
                 throw new Error("Channel management permission is required.");
             const next = { ...agreement, commission: { ...agreement.commission, fixedMinor: parseMinor(fixed, agreement.currency), rateBasisPoints: parseMinor(rate, "PHP") } };
             validateAgreement(next, configuration.channelAgreements ?? []);
-            setConfiguration(current => ({ ...current, channelAgreements: [...(current.channelAgreements ?? []).filter(a => a.id !== next.id), next] }));
+            if(mode==='api'){
+                if(!commands?.saveAgreement||!channel)throw new Error('Save the source before configuring its agreement.');
+                await commands.saveAgreement(next,channel,!(configuration.channelAgreements??[]).some(a=>a.id===next.id));
+            }else setConfiguration(current => ({ ...current, channelAgreements: [...(current.channelAgreements ?? []).filter(a => a.id !== next.id), next] }));
             setAgreement(undefined);
             setNotice("Agreement saved. Captured reservation versions are unchanged.");
         }
@@ -59,21 +84,21 @@ export function BookingChannelsEditor() {
     return <div className="space-y-5">
     <section className="rounded-2xl border border-slate-200 bg-white p-5">
     <div className="flex justify-between">
-    <h2 className="text-lg font-semibold">Booking channels</h2>{editable && <button className={button} onClick={() => { setChannel({ id: crypto.randomUUID(), label: "", enabled: true, classification: "other", referenceRequired: false, notes: "" }); setAgreement(undefined); }}>Add channel</button>}</div>
-    <p className="mt-2 text-sm text-slate-600">Manual channel terms; all data resets on reload. Classification does not imply prepaid collection or commission.</p>{notice && <p role="status" className="my-3 text-sm text-blue-900">{notice}</p>}<ul className="mt-4 divide-y">{configuration.bookingSources.map(source => <li key={source.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+    <h2 className="text-lg font-semibold">Booking channels</h2>{editable && <button disabled={reviewing||(mode==='api'&&commands?.busy)} className={button} onClick={() => { setChannel({ id: crypto.randomUUID(), label: "", enabled: true, classification: "other", referenceRequired: false, notes: "" }); setAgreement(undefined); }}>Add channel</button>}</div>
+    <p className="mt-2 text-sm text-slate-600">{mode==='api'?'Sources and agreements persist; saving configuration does not collect money, calculate commissions or update existing bookings.':'Manual channel terms; all data resets on reload.'} Classification does not imply prepaid collection or commission.</p>{notice && <p role="status" className="my-3 text-sm text-blue-900">{notice}</p>}<ul className="mt-4 divide-y">{configuration.bookingSources.map(source => <li key={source.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
         <div>
         <p className="font-semibold">{source.label} <span className="text-xs text-slate-500">{source.enabled ? "Enabled" : "Disabled"} / {source.classification ?? "direct"}</span>
         </p>
         <p className="text-xs text-slate-500">{source.notes}</p>
         </div>
         <div className="flex gap-2">
-        <button className={button} onClick={() => { setChannel({ ...source }); setAgreement(undefined); }}>Details / history</button>{editable && <button className={button} onClick={() => newVersion(source)}>New agreement version</button>}</div>
+        <button disabled={reviewing||(mode==='api'&&commands?.busy)} className={button} onClick={() => { setChannel({ ...source }); setAgreement(undefined); }}>Details / history</button>{editable && <button disabled={reviewing||(mode==='api'&&commands?.busy)} className={button} onClick={() => newVersion(source)}>New agreement version</button>}</div>
         </li>)}</ul>
     </section>
  {channel && <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">Channel identity</h2>
         <p className="mt-1 text-xs text-slate-500">Stable ID: {channel.id}</p>
-        <fieldset disabled={!editable} className="mt-4 grid gap-4 sm:grid-cols-2">
+        <fieldset disabled={!editable||reviewing||(mode==='api'&&commands?.busy)} className="mt-4 grid gap-4 sm:grid-cols-2">
         <label>Name<input className={input} value={channel.label} onChange={e => setChannel({ ...channel, label: e.target.value })}/>
         </label>
         <label>Classification<select className={input} value={channel.classification ?? "direct"} onChange={e => setChannel({ ...channel, classification: e.target.value as BookingSourceConfiguration["classification"] })}>{["direct", "ota", "corporate", "agent", "other"].map(v => <option key={v}>{v}</option>)}</select>
@@ -87,12 +112,12 @@ export function BookingChannelsEditor() {
         <button className={button} onClick={saveChannel}>Save channel</button>
         </fieldset>
         <h3 className="mt-6 font-semibold">Agreement history</h3>{(configuration.channelAgreements ?? []).filter(a => a.channelId === channel.id).sort((a, b) => b.version - a.version).map(a => <div key={a.id} className="mt-3 rounded-lg border p-3 text-sm">
-            <p>Version {a.version} / {a.status} / {a.effectiveFrom} to {a.effectiveTo ?? "open"} / {a.currency}</p>
-            <p>Commission: {a.commission.method}, {a.commission.basis.replaceAll("_", " ")}; collection: {a.payment.collection.replaceAll("_", " ")}; settlement: {a.settlement.method.replaceAll("_", " ")}</p>{editable && <button className={button} onClick={() => { setAgreement(structuredClone(a)); setFixed(String(fromMinorUnits(a.commission.fixedMinor, a.currency))); setRate(String(a.commission.rateBasisPoints / 100)); }}>Edit dates / status{a.status === "draft" ? " / rules" : ""}</button>}</div>)}</section>}
+            <p>Version {a.version} / {a.status} / {a.effectiveFrom} to {a.effectiveTo ?? "open"} / {a.currency}{mode==='api'&&a.status==='active'?` / ${a.effectiveFrom>hotelDateKey(new Date())?'Scheduled':a.effectiveTo&&a.effectiveTo<hotelDateKey(new Date())?'Expired':'Current'}`:''}</p>
+            <p>Commission: {a.commission.method}, {a.commission.basis.replaceAll("_", " ")}; collection: {a.payment.collection.replaceAll("_", " ")}; settlement: {a.settlement.method.replaceAll("_", " ")}</p>{editable && <button disabled={reviewing||(mode==='api'&&commands?.busy)} className={button} onClick={() => { if(mode==='api')setChannel(configuration.bookingSources.find(s=>s.id===a.channelId));setAgreement(structuredClone(a)); setFixed(mode==='api'?phpDecimal(a.commission.fixedMinor):String(fromMinorUnits(a.commission.fixedMinor, a.currency))); setRate(String(a.commission.rateBasisPoints / 100)); }}>Edit dates / status{a.status === "draft" ? " / rules" : ""}</button>}</div>)}</section>}
  {agreement && <section className="rounded-2xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">Agreement version {agreement.version}</h2>
         <p className="mt-2 text-sm text-slate-600">Rules of published versions are frozen. Create a new version for rule changes. End the previous active range before activating another.</p>
-        <fieldset disabled={!editable} className="mt-4 grid gap-4 sm:grid-cols-2">
+        <fieldset disabled={!editable||reviewing||(mode==='api'&&commands?.busy)} className="mt-4 grid gap-4 sm:grid-cols-2">
         <label>Effective from<input type="date" className={input} value={agreement.effectiveFrom} onChange={e => setAgreement({ ...agreement, effectiveFrom: e.target.value })}/>
         </label>
         <label>Effective through (inclusive)<input type="date" className={input} value={agreement.effectiveTo ?? ""} onChange={e => setAgreement({ ...agreement, effectiveTo: e.target.value || undefined })}/>
@@ -102,7 +127,7 @@ export function BookingChannelsEditor() {
         <label>Currency<input disabled={configuration.channelAgreements?.some(a => a.id === agreement.id && a.status !== "draft")} className={input} value={agreement.currency} onChange={e => setAgreement({ ...agreement, currency: e.target.value.toUpperCase() })}/>
         </label>
         </fieldset>
- <fieldset disabled={!editable || configuration.channelAgreements?.some(a => a.id === agreement.id && a.status !== "draft")} className="mt-4 space-y-4">
+ <fieldset disabled={!editable || reviewing || (mode==='api'&&commands?.busy) || configuration.channelAgreements?.some(a => a.id === agreement.id && a.status !== "draft")} className="mt-4 space-y-4">
         <div className="rounded-xl bg-slate-50 p-4">
         <h3 className="font-semibold">Accommodation pricing</h3>
         <label className="block mt-2">
@@ -133,8 +158,8 @@ export function BookingChannelsEditor() {
         </div>
         </fieldset>
         <div className="mt-4 flex gap-3">
-        <button disabled={!editable} className={button} onClick={saveAgreement}>Save agreement</button>
-        <button className={button} onClick={() => setAgreement(undefined)}>Cancel</button>
+        <button disabled={!editable||reviewing||(mode==='api'&&commands?.busy)} className={button} onClick={saveAgreement}>Save agreement</button>
+        <button disabled={reviewing||(mode==='api'&&commands?.busy)} className={button} onClick={() => setAgreement(undefined)}>Cancel</button>
         </div>
-        </section>}</div>;
+        </section>}{mode==='api'&&channel&&<button disabled={reviewing||commands?.busy} className={button} onClick={reviewLatest}>Load latest versions and review draft</button>}</div>;
 }

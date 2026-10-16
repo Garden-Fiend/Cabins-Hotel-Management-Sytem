@@ -161,6 +161,10 @@ def read_multi(service, session, parent):
             )
         )
     return (IndependentRead if parent["independent_stays"] else MultiRead)(
+        booking_source_label=parent["booking_source_label"]
+        or (lambda source: source["initial_label"] or source["label"])(
+            service.owned(session, booking_sources, parent["booking_source_id"])
+        ),
         **(
             {
                 "stay_defaults": {
@@ -294,8 +298,16 @@ def save_multi(service, request, key, id=None):
         service.owned(session, guests, request.guest_id, lock=True)
         source = service.owned(session, booking_sources, request.booking_source_id, lock=True)
         unchanged_source = parent and parent["booking_source_id"] == request.booking_source_id
-        if (not source["enabled"] and not unchanged_source) or source["source_id"] != "direct":
+        if parent and not unchanged_source:
+            raise DomainError(
+                "source_change_unsupported", "Reviewed reservation source changes belong to B6", 422
+            )
+        if (not source["enabled"] and not unchanged_source) or source["classification"] != "direct":
             raise DomainError("inactive_reference", "Enabled direct source required", 422)
+        if not unchanged_source and source["reference_required"]:
+            raise DomainError(
+                "source_capture_required", "External-reference capture belongs to B6", 422
+            )
         resolved = resolve_stays(service, session, request, old_rows, old, company)
         independent = bool(
             (parent and parent["independent_stays"])
@@ -575,6 +587,7 @@ def save_multi(service, request, key, id=None):
                         **parent_stay,
                         guest_id=request.guest_id,
                         booking_source_id=request.booking_source_id,
+                        booking_source_label=source["label"],
                         note=request.note,
                     )
                     .returning(reservations)

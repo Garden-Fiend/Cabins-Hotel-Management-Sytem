@@ -488,3 +488,9 @@ version, returns success without incrementing the version or duplicating the act
 Original UI actions await confirmation and refresh canonical records. Ambiguous requests retain their
 original key/body in tab session storage; resolve the original request before changing the intent.
 No migration, destructive cleanup, automatic relocation or repricing is involved.
+## Booking-source and commercial agreement configuration (B5)
+
+See [the B5 contract](booking-source-agreements.md) for owned source writes, agreement draft/published
+versioning, inclusive effective periods, typed PHP configuration, concurrency tokens and replay.
+These configuration operations do not capture channel financial terms or execute transactions.
+Non-direct/external-reference booking capture and reviewed source changes remain B6.

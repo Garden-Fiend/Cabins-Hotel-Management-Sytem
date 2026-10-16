@@ -134,15 +134,30 @@ booking_sources = sa.Table(
     ownership(),
     sa.Column("source_id", sa.Text, nullable=False),
     sa.Column("label", sa.Text, nullable=False),
-    sa.CheckConstraint("source_id = 'direct'", name="direct_only"),
+    sa.Column("classification", sa.Text, nullable=False, server_default="direct"),
+    sa.Column("version", sa.Integer, nullable=False, server_default="1"),
+    sa.Column("reference_required", sa.Boolean, nullable=False, server_default=sa.false()),
+    sa.Column("notes", sa.Text, nullable=False, server_default=""),
+    sa.Column("initial_label", sa.Text),
+    sa.CheckConstraint("version > 0", name="version_positive"),
+    sa.CheckConstraint(
+        "classification IN ('direct','ota','corporate','agent','other')", name="classification"
+    ),
     sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.true()),
     sa.UniqueConstraint("company_id", "source_id"),
+)
+sa.Index(
+    "uq_booking_source_label_casefold",
+    booking_sources.c.company_id,
+    sa.func.lower(booking_sources.c.label),
+    unique=True,
 )
 reservations = sa.Table(
     "reservations",
     Base.metadata,
     identity(),
     ownership(),
+    sa.Column("booking_source_label", sa.Text),
     sa.Column("multi_room", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("independent_stays", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("default_stay_start", sa.DateTime(timezone=True)),
