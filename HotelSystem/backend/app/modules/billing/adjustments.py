@@ -25,6 +25,15 @@ from app.mutations import replay_or_lock, request_hash, save_receipt
 
 
 def adjusted_snapshot(captured, adjustments, discounts=None, *, service=None, session=None):
+    if "channel" in captured:
+        from app.modules.reservations.booking_financials import apply_capture
+
+        raw = dict(captured)
+        commercial = raw.pop("channel")
+        raw.pop("channel_figures", None)
+        raw["schema_version"] = 6 if all("allocation_id" in line for line in raw["lines"]) else 5
+        base = adjusted_snapshot(raw, adjustments, discounts, service=service, session=session)
+        return apply_capture(base, commercial)
     if discounts is not None or "discounts" in captured:
         from app.modules.billing.discounts import calculate_discounts
 

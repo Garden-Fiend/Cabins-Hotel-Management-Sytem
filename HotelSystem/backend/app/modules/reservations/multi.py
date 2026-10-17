@@ -206,7 +206,7 @@ def read_multi(service, session, parent):
         ),
         audit=[
             MultiAuditRead(
-                **{name: row[name] for name in AuditRead.model_fields},
+                **{name: row[name] for name in AuditRead.model_fields if name != "description"},
                 description=(row["after"] or {}).get(
                     "description", row["event_type"].replace("reservation.", "").replace("_", " ")
                 ),
@@ -302,11 +302,13 @@ def save_multi(service, request, key, id=None):
             raise DomainError(
                 "source_change_unsupported", "Reviewed reservation source changes belong to B6", 422
             )
-        if (not source["enabled"] and not unchanged_source) or source["classification"] != "direct":
+        if not source["enabled"] and not unchanged_source:
             raise DomainError("inactive_reference", "Enabled direct source required", 422)
-        if not unchanged_source and source["reference_required"]:
+        if parent and request.booking_financials is not None:
             raise DomainError(
-                "source_capture_required", "External-reference capture belongs to B6", 422
+                "reviewed_financial_command_required",
+                "Use the reviewed source/financial command",
+                422,
             )
         resolved = resolve_stays(service, session, request, old_rows, old, company)
         independent = bool(
@@ -553,6 +555,27 @@ def save_multi(service, request, key, id=None):
         snapshot = adjusted_snapshot(
             raw, request.adjustments, request.discounts, service=service, session=session
         )
+        from app.modules.reservations.financial_capture import (
+            apply_capture,
+            check_reference,
+            persist_capture,
+            prepare_capture,
+        )
+
+        commercial = None
+        reference = ""
+        if not parent:
+            commercial = prepare_capture(
+                service, session, source, request.booking_financials, snapshot
+            )
+            reference = (
+                request.booking_financials.external_reference if request.booking_financials else ""
+            )
+            check_reference(service, session, source["id"], reference)
+            if commercial:
+                snapshot = apply_capture(snapshot, commercial)
+        elif "channel" in old:
+            snapshot = apply_capture(snapshot, old["channel"])
         if parent:
             parent = (
                 session.execute(
@@ -588,6 +611,7 @@ def save_multi(service, request, key, id=None):
                         guest_id=request.guest_id,
                         booking_source_id=request.booking_source_id,
                         booking_source_label=source["label"],
+                        external_booking_reference=reference or None,
                         note=request.note,
                     )
                     .returning(reservations)
@@ -595,6 +619,7 @@ def save_multi(service, request, key, id=None):
                 .mappings()
                 .one()
             )
+            persist_capture(service, session, reservation_id, commercial)
         removed = [r for r in old_rows if r["removed_at"] is None and r["id"] not in retained]
         for row in removed:
             session.execute(
@@ -713,6 +738,10 @@ def save_multi(service, request, key, id=None):
                         ),
                     ),
                 )
+        if id is None:
+            from app.modules.billing.collections import initial_financial_records
+
+            initial_financial_records(service, session, parent, request, key)
         result = read_multi(service, session, parent)
         save_receipt(
             session, service.context, operation, key, digest, result, reservation_id=reservation_id

@@ -16,6 +16,7 @@ import { toMinorUnits } from "../../lib/money";
 import { definitionIntent, type DefinitionIntent } from "./definitionInputs";
 import {sourceInput,agreementInput,presentSource,presentAgreement} from './sourceInputs';
 import {ApiError,errorMessage} from './client';
+import {duplicateReview} from './collections';
 function configurationError(error:unknown){
   if(error instanceof ApiError&&error.code==='version_conflict')return 'Source or agreement changed. Your draft is retained. Load latest versions and review before retrying.';
   if(error instanceof ApiError&&error.uncertain)return 'The outcome is not confirmed. Keep your draft and confirm the original configuration request.';
@@ -55,11 +56,12 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
   const unsupported = () => { throw new Error("This operation is not available in API mode. No records were changed."); };
   return <ReservationDemoContext.Provider value={{ mode: "api", actor: "local-development",
     capabilities: { manage_channels: references.capabilities?.includes('configuration.sources.v1')??false, edit_channel_terms: false, override_accommodation: false,
-      verify_collection: false, confirm_commission: false, record_settlement: false, reconcile_settlement: false },
+      verify_collection: references.capabilities?.includes('billing.collections.v1')??false, confirm_commission: false, record_settlement: false, reconcile_settlement: false },
     reservations: reservations.map(r => richReservation(r, references)), stays: reservations.flatMap(r => presentReservation(r).stays),
     guests, configuration, settlements: [],
     setReservations: unsupported, setStays: unsupported, setGuests: unsupported, setConfiguration: unsupported, setSettlements: unsupported,
     commands: {
+      collectionDuplicate:duplicateReview(create.failure)??duplicateReview(multiCreate.failure),
       saveSource:async(source,isNew)=>{const result=await sourceSave.submit({id:isNew?undefined:source.id,body:sourceInput(source,isNew)});if(!result)throw new Error('Source save was not confirmed. Your draft is retained. Review the API message or confirm the original source request.');return presentSource(result);},
       saveAgreement:async(agreement,source,isNew)=>{const result=await agreementSave.submit({sourceId:source.id,id:isNew?undefined:agreement.id,body:agreementInput(agreement,source,isNew)});if(!result)throw new Error('Agreement save was not confirmed. Your draft is retained. Review the API message or confirm the original agreement request.');},
       loadChannels:async()=>{const refs=await api.client.references();await api.refresh();return {sources:refs.booking_sources.map(presentSource),agreements:(refs.source_agreements??[]).map(presentAgreement)};},
@@ -133,7 +135,7 @@ export function RichApiBridge({ children }: { children: React.ReactNode }) {
 
         const room = references.rooms.find(r => r.number === input.roomNumber);
         if (!room) throw new Error("Select a server-owned room.");
-        const body: CreateInput = { guest_id: input.guestId, booking_source_id: input.bookingSourceId, room_id: room.id,
+        const body: CreateInput = { ...(input.collections?{collections:input.collections}:{}), ...(input.guestObligation?{guest_obligation:input.guestObligation}:{}), ...(input.bookingFinancials?{booking_financials:input.bookingFinancials}:{}), guest_id: input.guestId, booking_source_id: input.bookingSourceId, room_id: room.id,
           ...(input.adjustments?.length ? { adjustments: input.adjustments.map(a => ({ id: a.id, amount_minor: toMinorUnits(a.amount, "PHP"), reason: a.reason })) } : {}),
           ...(input.breakfast ? { breakfast: breakfastInputs(input.breakfast) } : {}),
           ...(input.inclusions ? { inclusions: input.inclusions.map(i => ({ product_id: i.catalogId, quantity: i.quantity, ...(i.overridden ? { overridden: true } : {}) })) } : {}),

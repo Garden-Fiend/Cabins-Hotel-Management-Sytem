@@ -30,7 +30,7 @@ export function presentReservation(dto:MultiReservationDto):{canonical:MultiRese
 export function presentReservation(dto:AnyReservationDto):{canonical:AnyReservationDto;stays:Stay[]};
 export function presentReservation(dto:AnyReservationDto):ApiReservationPresentation|{canonical:MultiReservationDto;stays:Stay[]} {
   if(dto.allocation===null){
-    if(!Number.isSafeInteger(dto.version)||dto.version<1||!Number.isSafeInteger(dto.business_number)||dto.business_number<1||dto.pricing.snapshot.schema_version!==6||dto.pricing.snapshot.currency!=="PHP")throw new Error("Invalid plural reservation capture.");
+    if(!Number.isSafeInteger(dto.version)||dto.version<1||!Number.isSafeInteger(dto.business_number)||dto.business_number<1||![6,7].includes(dto.pricing.snapshot.schema_version)||dto.pricing.snapshot.currency!=="PHP")throw new Error("Invalid plural reservation capture.");
     formatPhp(dto.pricing.snapshot.total_minor);
     const active=dto.allocations.filter(a=>!a.removed_at);
     if(!active.length||new Set(active.map(a=>a.id)).size!==active.length||new Set(active.map(a=>a.room_id)).size!==active.length)throw new Error("Invalid allocation set.");

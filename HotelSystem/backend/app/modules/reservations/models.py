@@ -158,6 +158,7 @@ reservations = sa.Table(
     identity(),
     ownership(),
     sa.Column("booking_source_label", sa.Text),
+    sa.Column("external_booking_reference", sa.Text),
     sa.Column("multi_room", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("independent_stays", sa.Boolean, nullable=False, server_default=sa.false()),
     sa.Column("default_stay_start", sa.DateTime(timezone=True)),
@@ -208,6 +209,15 @@ reservations = sa.Table(
         name="status_values",
     ),
 )
+sa.Index(
+    "uq_booking_external_reference",
+    reservations.c.company_id,
+    reservations.c.booking_source_id,
+    reservations.c.external_booking_reference,
+    unique=True,
+    postgresql_where=sa.text("external_booking_reference IS NOT NULL"),
+)
+
 allocations = sa.Table(
     "room_allocations",
     Base.metadata,

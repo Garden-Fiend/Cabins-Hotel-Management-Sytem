@@ -230,6 +230,7 @@ export interface ReservationSnapshot {
   stayDefaults?:{start:Date;end:Date;durationId:string};
   serverVersion?: number;
   channelTerms?: ReservationChannelTerms;
+  bookingFinancialCapture?: import('../app/api/bookingFinancials').BookingFinancialCapture;
   supersededChannelTerms?: ReservationChannelTerms[];
   id: string;
   status: ReservationStatus;

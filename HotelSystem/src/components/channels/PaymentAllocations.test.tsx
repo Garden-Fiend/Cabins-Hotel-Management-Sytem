@@ -1,0 +1,24 @@
+import {useState} from 'react';
+import {fireEvent,render,screen,waitFor,within} from '@testing-library/react';
+import {beforeEach,expect,it,vi} from 'vitest';
+import {InitialCollectionFields} from './CollectionFields';
+import {PaymentAllocationControls} from './PaymentAllocationControls';
+import type {CollectionRead,InitialCollections} from '../../app/api/collections';
+import {ApiError} from '../../app/api/client';
+const api=vi.hoisted(()=>({client:{baseUrl:'test',allocatePayment:vi.fn()},data:{references:{company:{id:'company'}}}}));
+vi.mock('../../app/api/useApi',()=>({useApi:()=>api}));
+const data={items:[],total:0,summary:{reservation_version:3,pricing_id:'price',allocation_obligation_id:null,allocation_history:[],allocated_hotel_minor:110000,unapplied_hotel_minor:25000,allocated_channel_minor:0,unapplied_channel_minor:0,payment_capacities:[{payment_id:'payment',collector:'hotel',component:'accommodation',remaining_minor:135000,refundable_minor:135000,allocated_minor:110000,unapplied_minor:25000}]}} as unknown as CollectionRead;
+beforeEach(()=>{vi.resetAllMocks();sessionStorage.clear();});
+it('retains the remaining staged amount when removing an earlier payment',()=>{
+ function Cart(){const [value,setValue]=useState<InitialCollections>();return <><InitialCollectionFields value={value} onChange={setValue} onObligation={()=>{}} nonDirect={false}/><output data-testid="payload">{JSON.stringify(value)}</output></>;}
+ render(<Cart/>);fireEvent.click(screen.getByLabelText('Verify guest collection before initial save'));fireEvent.change(screen.getByLabelText('Verified amount (PHP)'),{target:{value:'100.01'}});fireEvent.click(screen.getByRole('button',{name:'+ Add another collection'}));fireEvent.change(within(screen.getByRole('group',{name:'Initial payment 2'})).getByLabelText('Verified amount (PHP)'),{target:{value:'20.02'}});fireEvent.click(screen.getByRole('button',{name:'Remove staged collection 1'}));expect((screen.getByLabelText('Verified amount (PHP)') as HTMLInputElement).value).toBe('20.02');expect(JSON.parse(screen.getByTestId('payload').textContent!).amount_minor).toBe(2002);
+});
+it('submits the original payment and stable current context; failed drafts remain',async()=>{
+ api.client.allocatePayment.mockRejectedValueOnce(new ApiError('stale',409,'version_conflict')).mockResolvedValueOnce({});const reload=vi.fn().mockResolvedValue({...data,summary:{...data.summary,reservation_version:4}});
+ const view=render(<PaymentAllocationControls id="reservation" data={data} onReload={reload}/>);
+ fireEvent.change(screen.getByLabelText('Original hotel payment'),{target:{value:'payment'}});fireEvent.change(screen.getByLabelText('Allocation amount (PHP)'),{target:{value:'250.00'}});fireEvent.change(screen.getByLabelText('Allocation review reason'),{target:{value:'Reviewed meal balance'}});fireEvent.click(screen.getByRole('button',{name:'Save reviewed allocation'}));await screen.findByRole('alert');expect((screen.getByLabelText('Allocation amount (PHP)') as HTMLInputElement).value).toBe('250.00');fireEvent.click(screen.getByRole('button',{name:'Reload and review allocation context'}));await waitFor(()=>expect(reload).toHaveBeenCalledTimes(1));view.rerender(<PaymentAllocationControls id="reservation" data={{...data,summary:{...data.summary,reservation_version:4}}} onReload={reload}/>);fireEvent.click(screen.getByRole('button',{name:'Save reviewed allocation'}));await waitFor(()=>expect(api.client.allocatePayment).toHaveBeenCalledTimes(2));expect(api.client.allocatePayment.mock.calls[1][1]).toMatchObject({payment_id:'payment',component:'hotel_charges',amount_minor:25000,expected_version:4,expected_pricing_id:'price'});
+});
+it('replays an ambiguous allocation with its original body and key after refresh',async()=>{
+ api.client.allocatePayment.mockRejectedValueOnce(new ApiError('Lost',0,'network_error',true)).mockResolvedValueOnce({});const reload=vi.fn().mockResolvedValue(data);
+ const view=render(<PaymentAllocationControls id="reservation" data={data} onReload={reload}/>);fireEvent.change(screen.getByLabelText('Original hotel payment'),{target:{value:'payment'}});fireEvent.change(screen.getByLabelText('Allocation amount (PHP)'),{target:{value:'250'}});fireEvent.change(screen.getByLabelText('Allocation review reason'),{target:{value:'Apply cash'}});fireEvent.click(screen.getByRole('button',{name:'Save reviewed allocation'}));await screen.findByRole('button',{name:'Confirm original allocation request'});const call=api.client.allocatePayment.mock.calls[0];view.unmount();render(<PaymentAllocationControls id="reservation" data={data} onReload={reload}/>);fireEvent.click(screen.getByRole('button',{name:'Confirm original allocation request'}));await waitFor(()=>expect(api.client.allocatePayment).toHaveBeenCalledTimes(2));expect(api.client.allocatePayment.mock.calls[1]).toEqual(call);
+});

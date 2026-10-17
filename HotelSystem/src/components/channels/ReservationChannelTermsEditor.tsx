@@ -5,8 +5,10 @@ import type { ChannelCapabilities } from "../../app/permissions";
 import { can } from "../../app/permissions";
 import { parseMinor } from "../../lib/channelFinance";
 import { fromMinorUnits } from "../../lib/money";
+import {phpDecimal} from '../../app/api/presentation';
 const input = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm";
-export function ReservationChannelTermsEditor({ terms, onChange, capabilities, onValidity, onCollection, actor }: {
+export function ReservationChannelTermsEditor({ terms, onChange, capabilities, onValidity, onCollection, actor, exactPhp=false }: {
+    exactPhp?: boolean;
     terms: ReservationChannelTerms;
     onChange: (terms: ReservationChannelTerms) => void;
     capabilities: ChannelCapabilities;
@@ -19,10 +21,11 @@ export function ReservationChannelTermsEditor({ terms, onChange, capabilities, o
     const [verification, setVerification] = useState<"partial" | "confirmed">("partial");
     const [error, setError] = useState("");
     const [amountErrors, setAmountErrors] = useState<Record<string, string>>({});
-    const [override, setOverride] = useState(terms.accommodationOverrideMinor === undefined ? "" : String(fromMinorUnits(terms.accommodationOverrideMinor, terms.currency)));
-    const [reference, setReference] = useState(terms.referenceValueMinor === undefined ? "" : String(fromMinorUnits(terms.referenceValueMinor, terms.currency)));
-    const [basis, setBasis] = useState(terms.commissionableMinor === undefined ? "" : String(fromMinorUnits(terms.commissionableMinor, terms.currency)));
-    const [commission, setCommission] = useState(terms.commissionOverrideMinor === undefined ? "" : String(fromMinorUnits(terms.commissionOverrideMinor, terms.currency)));
+    const display=(minor:number)=>exactPhp?phpDecimal(minor):String(fromMinorUnits(minor,terms.currency));
+    const [override, setOverride] = useState(terms.accommodationOverrideMinor === undefined ? "" : display(terms.accommodationOverrideMinor));
+    const [reference, setReference] = useState(terms.referenceValueMinor === undefined ? "" : display(terms.referenceValueMinor));
+    const [basis, setBasis] = useState(terms.commissionableMinor === undefined ? "" : display(terms.commissionableMinor));
+    const [commission, setCommission] = useState(terms.commissionOverrideMinor === undefined ? "" : display(terms.commissionOverrideMinor));
     function amount(field: "accommodationOverrideMinor" | "referenceValueMinor" | "commissionableMinor" | "commissionOverrideMinor", value: string) {
         try {
             onChange({ ...terms, [field]: value.trim() ? parseMinor(value, terms.currency) : undefined });

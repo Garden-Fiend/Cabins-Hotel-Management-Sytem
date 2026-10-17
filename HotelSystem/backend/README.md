@@ -3,6 +3,10 @@
 FastAPI/SQLAlchemy/PostgreSQL/Alembic local backend. React defaults to independent demo mode;
 an explicit API-backed branch is available at the
 [first frontend integration checkpoint](../docs/planning/frontend-api-integration-2026-10-13.md).
+
+B7 operational collections, linked refunds/reversals and guest-obligation review are documented
+in [collections.md](collections.md). Current additive head: `da4eb9f506a9`. B7.1 adds append-only component allocations/releases and atomic ordered initial payment lists.
+
 Health, reference reads, independent guest creation/reads and direct single-room reservation
 creation/reads and version-checked note/count PATCH are implemented. Creates and patches are
 transactional, audited and idempotent; creates are server-priced and patches preserve pricing.
@@ -290,3 +294,7 @@ Other checkouts must explicitly upgrade their isolated development/test database
 owned targets are migrated. Normally restart an older launcher before `run-api.bat`; no reset/reseed.
 Focused backend: `& .\scripts\python.ps1 -m pytest --postgres -q tests/test_sources.py`.
 From app root, separately: `& .\backend\scripts\python.ps1 integration-tests/run-sources.py`.
+
+## B6 booking provenance
+
+Original Dashboard/calendar controls now support manual non-direct booking capture and detail-page reviewed corrections/history. See [booking-financials.md](booking-financials.md). Apply additive migrations through `a71b86c2d376` in another checkout; owned development/test targets are already upgraded. Use `integration-tests/run-booking-financials.py` from the frontend root for guarded original-UI, SQL and API-restart verification, separately from PostgreSQL suites. No reset/reseed or payment/settlement execution is involved.

@@ -199,6 +199,8 @@ def edit_stay(service, id: UUID, request: ReservationStayEdit, key: UUID):
                 }
             if "charges" in before["pricing"]["snapshot"]:
                 captured = {**captured, "charges": before["pricing"]["snapshot"]["charges"]}
+            if "channel" in before["pricing"]["snapshot"]:
+                captured = {**captured, "channel": before["pricing"]["snapshot"]["channel"]}
             if purchases:
                 captured = {
                     **captured,

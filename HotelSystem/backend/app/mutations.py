@@ -19,7 +19,14 @@ def request_hash(body, *, resource_id: UUID | None = None, exclude_fields=frozen
         for optional in ("charges", "adjustments"):
             if optional not in body.model_fields_set:
                 exclude_fields = set(exclude_fields) | {optional}
-    for optional in ("inclusions", "default_inclusions", "breakfast"):
+    for optional in (
+        "inclusions",
+        "default_inclusions",
+        "breakfast",
+        "booking_financials",
+        "collections",
+        "guest_obligation",
+    ):
         if optional in type(body).model_fields and optional not in body.model_fields_set:
             exclude_fields = set(exclude_fields) | {optional}
     if type(body).__name__.startswith("DiscountPreset"):
@@ -66,6 +73,37 @@ def replay_or_lock(session, context: CommandContext, operation: str, key: UUID, 
 
 
 def save_receipt(session, context, operation, key, digest, result, reservation_id=None):
+    # Concrete billing invariant: pricing/basis changes compensate obsolete payment allocations
+    # before receipt commit. Existing reservation/document locks remain authoritative.
+    if reservation_id is not None:
+        from app.modules.billing.payment_allocations import events, synchronize
+
+        before = session.scalar(
+            sa.select(sa.func.count())
+            .select_from(events)
+            .where(
+                events.c.reservation_id == reservation_id, events.c.company_id == context.company_id
+            )
+        )
+        synchronize(session, context, reservation_id)
+        after = session.scalar(
+            sa.select(sa.func.count())
+            .select_from(events)
+            .where(
+                events.c.reservation_id == reservation_id, events.c.company_id == context.company_id
+            )
+        )
+        if (
+            after != before
+            and getattr(result, "id", None) == reservation_id
+            and hasattr(result, "audit")
+        ):
+            from app.models import reservations
+            from app.modules.reservations.services import ReservationService
+
+            service = ReservationService(session.bind, context)
+            parent = service.owned(session, reservations, reservation_id)
+            result.audit = service.read_in_transaction(session, parent).audit
     session.execute(
         mutation_receipts.insert().values(
             id=uuid4(),

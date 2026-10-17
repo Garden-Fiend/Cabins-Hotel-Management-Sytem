@@ -156,6 +156,83 @@ def main():
         booking = write("reservations", request)
         assert booking["allocation"]["inclusions"][0]["quantity"] == 2
         assert booking["pricing"]["snapshot"]["total_minor"] == 214975
+        # Exercise new B7 records in the same independently isolated recovery target.
+        collection_context = client.get(f"/api/v1/reservations/{booking['id']}/collections").json()[
+            "summary"
+        ]
+        write(
+            f"reservations/{booking['id']}/collections",
+            dict(
+                expected_version=booking["version"],
+                source_id=collection_context["source_id"],
+                capture_id=None,
+                kind="collection",
+                collector="hotel",
+                component="accommodation",
+                amount_minor=50000,
+                currency="PHP",
+                payment_method="cash",
+                reference="",
+                declaration="partial",
+                reason="Recovery rehearsal evidence",
+            ),
+        )
+        booking = client.get(f"/api/v1/reservations/{booking['id']}").json()
+        collection_context = client.get(f"/api/v1/reservations/{booking['id']}/collections").json()
+        original_collection = collection_context["items"][0]
+        write(
+            f"reservations/{booking['id']}/collections",
+            dict(
+                expected_version=booking["version"],
+                source_id=collection_context["summary"]["source_id"],
+                capture_id=None,
+                kind="refund",
+                collector="hotel",
+                component="accommodation",
+                amount_minor=10000,
+                currency="PHP",
+                payment_method="cash",
+                reference="",
+                declaration="partial",
+                related_transaction_id=original_collection["id"],
+                reason="Reviewed recovery refund",
+            ),
+        )
+        booking = client.get(f"/api/v1/reservations/{booking['id']}").json()
+        write(
+            f"reservations/{booking['id']}/guest-obligation",
+            dict(
+                expected_version=booking["version"],
+                expected_capture_id=None,
+                expected_pricing_id=booking["pricing"]["id"],
+                status="known",
+                accommodation_minor=214975,
+                evidence="Explicit recovery review",
+            ),
+        )
+        booking = client.get(f"/api/v1/reservations/{booking['id']}").json()
+        collection_context = client.get(f"/api/v1/reservations/{booking['id']}/collections").json()
+        summary = collection_context["summary"]
+        # An explicit release is preserved alongside automatic refund/basis compensations.
+        active = next(
+            row for row in reversed(summary["allocation_history"]) if row["kind"] == "allocate"
+        )
+        write(
+            f"reservations/{booking['id']}/payment-allocations",
+            dict(
+                expected_version=summary["reservation_version"],
+                expected_pricing_id=summary["pricing_id"],
+                expected_obligation_id=summary["allocation_obligation_id"],
+                kind="release",
+                payment_id=active["payment_id"],
+                component=active["component"],
+                amount_minor=1,
+                release_of=active["id"],
+                reason="Recovery allocation linkage",
+            ),
+        )
+        booking = client.get(f"/api/v1/reservations/{booking['id']}").json()
+        collection_context = client.get(f"/api/v1/reservations/{booking['id']}/collections").json()
         expected = inventory(engine)
         head = command(
             sys.executable, "-I", "-m", "alembic", "current", environment=subprocess_environment
@@ -205,6 +282,9 @@ def main():
                     mode="json"
                 )
             assert canonical == booking, "Restored canonical reservation differs"
+            from app.modules.billing.collections import collection_read
+
+            assert collection_read(service, booking["id"]) == collection_context
             restored_environment = dict(subprocess_environment, HMS_DATABASE_URL=restored_url)
             restored_head = command(
                 sys.executable, "-I", "-m", "alembic", "current", environment=restored_environment

@@ -1,4 +1,4 @@
-%% Current implemented HMS architecture, 2026-10-15.
+%% Current implemented HMS architecture, 2026-10-17.
 %% Solid arrows represent existing code paths, not a claim that each process is running.
 %% Explicit API mode is connected; demo remains independent. Original PATCH remains notes/counts only.
 flowchart TB
@@ -33,12 +33,12 @@ flowchart TB
         CONFIG["Pydantic settings and target guard<br/>Ignored local .env<br/>Only owned loopback database targets allowed"]
         ENGINE["SQLAlchemy + psycopg<br/>PostgreSQL connections in UTC"]
         ROUTES["Guest and reference APIs<br/>Reservation POST / list / detail<br/>Original PATCH: notes/counts only<br/>Explicit guest, stay, lifecycle, readiness and billing commands<br/>Versioned configuration/catalog endpoints"]
-        COMMANDS["Reservations service<br/>Server-priced single or multi-room direct bookings<br/>Allocation-specific hourly/nightly stays and derived parent range<br/>Independent/strict bulk lifecycle<br/>Version/row locks + request-key advisory lock<br/>Sorted room locks and PostgreSQL overlap exclusion<br/>One transaction: allocations, pricing, audit, receipt"]
+        COMMANDS["Reservations service<br/>Single or multi-room direct/non-direct bookings<br/>Captured contractual accommodation, exact commission and pending expectations<br/>Allocation-specific hourly/nightly stays and derived parent range<br/>Independent/strict bulk lifecycle<br/>Version/row locks + request-key advisory lock<br/>Sorted room locks and PostgreSQL overlap exclusion<br/>One transaction: allocations, pricing, audit, receipt"]
         CONTEXT["Server-selected company<br/>Actor: local-development<br/>Business routes restricted to development environment"]
         subgraph MODEL["SQLAlchemy table definitions - schema only"]
             CORE["Core<br/>Companies and hotel time defaults<br/>Operational audit, mutation receipts"]
             RES["Reservations boundary<br/>Guests, rooms, room types, durations, rates,<br/>booking sources, reservations, allocations"]
-            BILL["Billing boundary<br/>Append-only operational pricing revisions<br/>Captured purchases and distinct extra charges<br/>Signed adjustments, manual discounts and configured presets<br/>Separate captured final unit prices before reductions<br/>Immutable finalized operational documents and transactional counters<br/>No accounting journal or posting"]
+            BILL["Billing boundary<br/>Append-only operational pricing revisions<br/>Captured purchases and distinct extra charges<br/>Signed adjustments, manual discounts and configured presets<br/>Separate captured final unit prices before reductions<br/>Immutable finalized operational documents and transactional counters<br/>Append-only owned booking-financial captures and reviewed corrections<br/>B7 hotel/channel collections and linked refunds/full reversals<br/>Separate reviewed guest accommodation obligation and component residuals<br/>B7.1 append-only payment allocations/releases and unapplied funds<br/>Atomic ordered initial multi-payment creation<br/>No channel payouts, statutory receipts, accounting journal or posting"]
         end
         CATALOG["Configuration boundary<br/>Owned categories/products and versioned discount/final-price definitions<br/>Stable booking sources and commercial agreement revisions<br/>Inclusive effective dates, immutable published rules and exact configured units<br/>Protected extras, inclusions and virtual breakfast view<br/>Owned defaults and meal/beverage eligibility<br/>Captured allocation entitlements/selections - zero breakfast charge<br/>No stock movement or channel financial ledger"]
         CATALOG --> ALEMBIC
@@ -48,7 +48,7 @@ flowchart TB
         ROUTES --> DOCS
         DOCS --> ENGINE
         DOCS --> ALEMBIC
-        ALEMBIC["Alembic<br/>Nineteen frozen schema migrations<br/>Current head: c37d42e8f932<br/>Ownership, overlap, shared or independent stays, retained allocation history, protected catalog and immutable documents"]
+        ALEMBIC["Alembic<br/>Twenty-five additive schema migrations<br/>Current head: c93da8e4f598<br/>Ownership, overlap, shared or independent stays, retained allocation history, protected catalog, immutable documents and financial transactions"]
         SEED["Explicit development seed command<br/>Transactional, repeatable reference inserts<br/>Does not overwrite existing values"]
         TESTS["Opt-in PostgreSQL and HTTP tests<br/>Concurrency, rollback, server pricing and durable replay<br/>Real API restart verification in hms_test"]
         API --> LIVE
@@ -70,7 +70,7 @@ flowchart TB
 
     subgraph DOCKER["Own Docker Compose project: hms-local-foundation"]
         PG["PostgreSQL 17.6<br/>Host 127.0.0.1:55432 → container 5432"]
-        DEV[("hms_dev<br/>19 tables in hms schema<br/>Minimal explicit references + existing local records<br/>User business data preserved")]
+        DEV[("hms_dev<br/>23 tables in hms schema<br/>Minimal explicit references + existing local records<br/>User business data preserved")]
         TESTDB[("hms_test<br/>Separate integration-test database<br/>Same migration history")]
         VOLUME[("Own persistent Docker volume<br/>hms-local-foundation_hms_pgdata")]
         PG --> DEV

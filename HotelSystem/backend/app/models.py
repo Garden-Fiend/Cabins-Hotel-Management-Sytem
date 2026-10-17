@@ -1,6 +1,8 @@
 import sqlalchemy as sa
 
 from app.core_models import audit_events, companies, mutation_receipts
+from app.modules.billing.allocation_models import payment_allocations  # noqa: F401
+from app.modules.billing.collection_models import collection_transactions, guest_obligations  # noqa: F401
 from app.modules.billing.models import billing_documents, document_counters, pricing_revisions
 from app.modules.configuration.models import (
     breakfast_eligibility,
@@ -10,6 +12,7 @@ from app.modules.configuration.models import (
     room_type_inclusions,
 )
 from app.modules.configuration.source_models import agreements  # noqa: F401
+from app.modules.reservations.financial_models import booking_financial_captures  # noqa: F401
 from app.modules.reservations.models import (
     allocations,
     booking_sources,

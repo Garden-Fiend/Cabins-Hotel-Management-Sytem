@@ -1,0 +1,112 @@
+{
+  "container": "hms-recovery-20261017t015142z-ac62a129",
+  "port": 55433,
+  "source": "hms_rehearsal",
+  "restored": "hms_restore",
+  "migration_head": "c93da8e4f598 (head)",
+  "seed_counts": {
+    "companies": 1,
+    "room_types": 1,
+    "rooms": 1,
+    "durations": 2,
+    "reference_rates": 2,
+    "booking_sources": 1
+  },
+  "seed_replay_unchanged": true,
+  "raw_restore_identical": true,
+  "canonical_restore_identical": true,
+  "tables": {
+    "companies": {
+      "count": 1,
+      "sha256": "6460281b9c53467239b17b1788c0a8e58674c93488be051404e5625331b13aaf"
+    },
+    "billing_document_counters": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "booking_sources": {
+      "count": 1,
+      "sha256": "42698d647b33879b9f1c32fc13e9f7ae7f24bfbc03752407585f415b44da47ed"
+    },
+    "durations": {
+      "count": 2,
+      "sha256": "6c9c9b44ca1401e50f61018cc542f4d5340302b8e657b7676917941194d8deaa"
+    },
+    "guests": {
+      "count": 1,
+      "sha256": "e12f777350721c471803a3cb38242252bb88ec6e7677d8505e8d964dfed2103e"
+    },
+    "inventory_categories": {
+      "count": 3,
+      "sha256": "82e06941be0b979431028930ee6c39e0284bb572265e6e67e3b7097164161027"
+    },
+    "room_types": {
+      "count": 1,
+      "sha256": "b0501e4620838f869d6c7800686532dedfa2b5a9de575f9ea674250013e79e9f"
+    },
+    "catalog_products": {
+      "count": 1,
+      "sha256": "34923ebbda9394e58e927a706445938e3db0d980c6de52dc6ea74854186cdb2b"
+    },
+    "reference_rates": {
+      "count": 2,
+      "sha256": "65512834653ddb281f88916b797ee6362e79aae34e6ad7c04116d6236581f490"
+    },
+    "reservations": {
+      "count": 1,
+      "sha256": "354e95b0311b57e096eb8795f6f4c20036ae8a959e3143e32870d4a328e3b92a"
+    },
+    "rooms": {
+      "count": 1,
+      "sha256": "d3e6c95d81dcc4df7f4a86800e9347e32187c4c59c9a6ccef6446350ca8df4c0"
+    },
+    "source_agreements": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "booking_financial_captures": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "breakfast_eligibility": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "discount_presets": {
+      "count": 1,
+      "sha256": "add005a802208fc4ecbe60fef6791c016fb9a9a64dbc7c0abe50a984ecfafd1d"
+    },
+    "mutation_receipts": {
+      "count": 8,
+      "sha256": "fac218eb36deb78fbedb5675eae1bbcbfca2220f9d2f59d588bd1af92d446e90"
+    },
+    "operational_audit": {
+      "count": 8,
+      "sha256": "26a90eaf93aaec2b9c3fbeb1439ff25552c18f48ab9538e460525ec25893fe7b"
+    },
+    "pricing_revisions": {
+      "count": 1,
+      "sha256": "b2ddbdd5bc37c3b1fc3e451d9fe5e966b5d07cd4c42e527cc8266c462103158c"
+    },
+    "room_allocations": {
+      "count": 1,
+      "sha256": "dfd8a6c7410922ab4822ffef1a4c14dd7588cbe67406a181904dc4d49ea605cd"
+    },
+    "room_type_inclusions": {
+      "count": 1,
+      "sha256": "bfd8b7ee2fe30555221fb4a901a2705c6aea18336091b6469b9d2d6d64ae4f4d"
+    },
+    "billing_collection_transactions": {
+      "count": 2,
+      "sha256": "9501798476f18467edbda9cfe28bb43fe32aab1f0283fdfff71adee9bb648302"
+    },
+    "billing_documents": {
+      "count": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "guest_obligation_bases": {
+      "count": 1,
+      "sha256": "f8c4938133487ad85428549c9f88722cc90d402bfb46abea4f972d5d1f86e03a"
+    }
+  }
+}

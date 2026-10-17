@@ -154,7 +154,73 @@ def isolated_company(pg_engine):
     finally:
         with pg_engine.begin() as c:
             # Test-owner cleanup of this fixture's random company only. Deferred aggregate
-            from app.models import agreements
+            from app.modules.billing.allocation_models import payment_allocations
+
+            c.execute(sa.text("LOCK TABLE hms.payment_allocation_events IN ACCESS EXCLUSIVE MODE"))
+            c.execute(
+                sa.text(
+                    "ALTER TABLE hms.payment_allocation_events "
+                    "DISABLE TRIGGER allocation_history_guard"
+                )
+            )
+            c.execute(payment_allocations.delete().where(payment_allocations.c.company_id == owner))
+            c.execute(
+                sa.text(
+                    "ALTER TABLE hms.payment_allocation_events "
+                    "ENABLE TRIGGER allocation_history_guard"
+                )
+            )
+            from app.modules.billing.collection_models import (
+                collection_transactions,
+                guest_obligations,
+            )
+
+            for table in (collection_transactions, guest_obligations):
+                c.execute(sa.text(f"LOCK TABLE hms.{table.name} IN ACCESS EXCLUSIVE MODE"))
+                c.execute(
+                    sa.text(
+                        f"ALTER TABLE hms.{table.name} DISABLE TRIGGER collection_history_guard"
+                    )
+                )
+                c.execute(table.delete().where(table.c.company_id == owner))
+                c.execute(
+                    sa.text(f"ALTER TABLE hms.{table.name} ENABLE TRIGGER collection_history_guard")
+                )
+            from app.models import (
+                agreements,
+                billing_documents,
+                booking_financial_captures,
+                document_counters,
+            )
+
+            c.execute(sa.text("LOCK TABLE hms.billing_documents IN ACCESS EXCLUSIVE MODE"))
+            c.execute(
+                sa.text("ALTER TABLE hms.billing_documents DISABLE TRIGGER billing_documents_guard")
+            )
+            c.execute(billing_documents.delete().where(billing_documents.c.company_id == owner))
+            c.execute(
+                sa.text("ALTER TABLE hms.billing_documents ENABLE TRIGGER billing_documents_guard")
+            )
+            c.execute(document_counters.delete().where(document_counters.c.company_id == owner))
+
+            c.execute(sa.text("LOCK TABLE hms.booking_financial_captures IN ACCESS EXCLUSIVE MODE"))
+            c.execute(
+                sa.text(
+                    "ALTER TABLE hms.booking_financial_captures "
+                    "DISABLE TRIGGER booking_financial_capture_guard"
+                )
+            )
+            c.execute(
+                booking_financial_captures.delete().where(
+                    booking_financial_captures.c.company_id == owner
+                )
+            )
+            c.execute(
+                sa.text(
+                    "ALTER TABLE hms.booking_financial_captures "
+                    "ENABLE TRIGGER booking_financial_capture_guard"
+                )
+            )
 
             c.execute(sa.text("LOCK TABLE hms.source_agreements IN ACCESS EXCLUSIVE MODE"))
             c.execute(

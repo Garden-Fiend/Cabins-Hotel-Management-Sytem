@@ -1,5 +1,15 @@
 # Demo-to-API parity matrix
 
+October 17: [B7.1 allocation closure](b71-payment-allocation-checkpoint-2026-10-17.md) adds
+persistent component allocation/release, unapplied funds and atomic initial payment lists. Ambiguous
+adjustment attribution remains requires_review; B8 settlements remain outside this milestone.
+
+[B6 booking financial capture](b6-non-direct-booking-financials-checkpoint-2026-10-16.md) now supports non-direct creation, effective agreement/manual terms, exact commission/collection expectations and reviewed source/financial corrections. B7/B8 collection and settlement execution remain outside B6. Historical rows below retain their audit-date classifications.
+
+October 17: [B7 operational records](b7-collections-checkpoint-2026-10-17.md) adds persistent
+hotel/channel collections, linked corrections, duplicate review and separate guest obligations.
+Read its limits before treating the historical Missing row below as current. B8 remains unimplemented.
+
 Progress after this audit: [B1 passed its bounded acceptance gate](b1-initial-financials-checkpoint-2026-10-15.md).
 The initial ordinary purchase and initial adjustment gaps recorded below are now closed.
 [B2 shared-stay multi-room](b2-multi-room-checkpoint-2026-10-15.md) also closes the named aggregate,

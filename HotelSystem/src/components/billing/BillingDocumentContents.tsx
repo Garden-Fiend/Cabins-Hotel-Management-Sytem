@@ -1,4 +1,5 @@
 import type { BillingDocumentDto } from "../../app/api/billingDocuments";
+import {BookingFinancialContents} from '../channels/BookingFinancialContents';
 import { billMoney, billDate } from "../../app/api/billingDocuments";
 
 export function BillingDocumentContents({document:doc,companyName}:{document:BillingDocumentDto;companyName?:string}){
@@ -22,6 +23,7 @@ export function BillingDocumentContents({document:doc,companyName}:{document:Bil
     {(pricing.price_overrides ?? []).length>0 && <section><h2 className="font-semibold">Unit-price replacements</h2>{pricing.price_overrides!.map(o=><p key={o.id}>{o.label}: {billMoney(o.original_unit_amount_minor)} → {billMoney(o.replacement_unit_amount_minor)} × {o.quantity}; effect {billMoney(o.effect_minor)}</p>)}<p>Total replacement effect: {billMoney(pricing.price_override_total_minor ?? 0)}</p></section>}
     <section><h2 className="font-semibold">Discounts</h2>{(pricing.discounts ?? []).map(d=><p key={d.id}>{d.label} ({d.provenance==="preset"?"preset":"manual"}, {d.scope}): {billMoney(d.amount_minor)}</p>)}<p>Total discounts: {billMoney(pricing.discount_total_minor ?? 0)}</p></section>
     <section><h2 className="font-semibold">Signed adjustments</h2>{!(pricing.adjustments ?? []).length && <p>None</p>}{(pricing.adjustments ?? []).map(a=><p key={a.id}>{a.reason}: {billMoney(a.amount_minor)}</p>)}</section>
+    {pricing.channel&&<section><h2 className="font-semibold">Captured booking financials</h2><BookingFinancialContents capture={pricing.channel}/></section>}
     <p className="border-t pt-3 text-xl font-bold">Final payable total: {billMoney(doc.total_minor)}</p>
     <p className="text-xs">Adjustments and the final zero clamp are included in the payable total. Captured values are read-only and are not recalculated from current configuration.</p>
   </article>;

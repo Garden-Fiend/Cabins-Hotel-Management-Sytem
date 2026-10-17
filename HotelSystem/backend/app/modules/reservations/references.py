@@ -109,6 +109,7 @@ class ReferenceRead(DTO):
     discount_presets: list[DiscountPresetRead] = Field(default_factory=list)
     breakfast_eligible_items: list[BreakfastEligibility] = Field(default_factory=list)
     capabilities: tuple[str, ...] = (
+        "billing.collections.v1",
         "configuration.sources.v1",
         "reservation.multi-room.v1",
         "reservation.independent-stays.v1",

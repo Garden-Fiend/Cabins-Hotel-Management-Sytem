@@ -1,4 +1,5 @@
 import { ChannelGuestSummary } from "../components/channels/ChannelGuestSummary";
+import {BookingFinancialContents} from '../components/channels/BookingFinancialContents';
 import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { useReservationDemo } from "../app/useReservationDemo";
@@ -24,7 +25,7 @@ export function ReservationPrintPage() {
   const { reservationId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const layout = searchParams.get("layout") === "thermal" ? "thermal" : "document";
-  const { reservations, guests, configuration } = useReservationDemo();
+  const { reservations, guests, configuration, mode } = useReservationDemo();
   const reservation = reservations.find((item) => item.id === reservationId);
 
   if (!reservation) {
@@ -191,11 +192,12 @@ export function ReservationPrintPage() {
               <span>{money(reservation.pricing.amountOwed, currency)}</span>
             </li>
           </ul>
-          <ChannelGuestSummary pricing={reservation.pricing} />
+          {mode!=='api'&&<ChannelGuestSummary pricing={reservation.pricing} />}
           <p className="mt-4 text-[0.7rem]">
-            {reservation.channelTerms ? "Amounts reflect the saved reservation snapshot and verified collection. Channel payouts are separate." : "Amounts reflect the saved reservation snapshot. No payment record is available."}
+            {mode==='api'?"Operational pricing snapshot. Current guest obligation and collection records are separate and are not included here.":reservation.channelTerms ? "Amounts reflect the saved reservation snapshot and verified collection. Channel payouts are separate." : "Amounts reflect the saved reservation snapshot. No payment record is available."}
           </p>
         </section>
+        {reservation.bookingFinancialCapture&&<section className="border-t py-4"><h2 className="font-bold">Captured booking financials</h2><BookingFinancialContents capture={reservation.bookingFinancialCapture}/></section>}
         {reservation.note && (
           <section className="border-t border-slate-300 py-4">
             <h2 className="font-bold">Reservation note</h2>

@@ -246,7 +246,16 @@ def test_create_discounts_and_historical_request_hash(patch_api):
         json.dumps(
             old.model_dump(
                 mode="json",
-                exclude={"discounts", "charges", "adjustments", "inclusions", "breakfast"},
+                exclude={
+                    "discounts",
+                    "charges",
+                    "adjustments",
+                    "inclusions",
+                    "breakfast",
+                    "booking_financials",
+                    "collections",
+                    "guest_obligation",
+                },
             ),
             sort_keys=True,
             separators=(",", ":"),

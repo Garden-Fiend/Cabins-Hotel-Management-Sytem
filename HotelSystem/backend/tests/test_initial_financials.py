@@ -201,7 +201,17 @@ def test_omitted_adjustments_keep_old_create_hash(api):
     _client, _service, body, _ids = api
     request = ReservationCreate(**body)
     old = request.model_dump(
-        mode="json", exclude={"adjustments", "charges", "discounts", "inclusions", "breakfast"}
+        mode="json",
+        exclude={
+            "adjustments",
+            "charges",
+            "discounts",
+            "inclusions",
+            "breakfast",
+            "booking_financials",
+            "collections",
+            "guest_obligation",
+        },
     )
     expected = hashlib.sha256(
         json.dumps(old, sort_keys=True, separators=(",", ":")).encode()

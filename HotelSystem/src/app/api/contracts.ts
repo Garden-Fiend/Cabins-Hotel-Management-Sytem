@@ -1,6 +1,9 @@
 export interface GuestDto { id: string; company_id: string; name: string; phone: string; email: string }
 export interface GuestInput { name: string; phone?: string; email?: string }
 export interface CreateInput {
+  collections?:import('./collections').InitialCollections;
+  guest_obligation?:import('./collections').ObligationInput;
+  booking_financials?:import('./bookingFinancials').BookingFinancialInput;
   breakfast?: BreakfastInput[];
   inclusions?: InclusionInput[];
   guest_id: string; booking_source_id: string; room_id: string; duration_id: string;
@@ -45,13 +48,13 @@ export interface ReservationDto {
     blocks_availability: boolean;
   };
   pricing: { id: string; revision: number; reservation_version: number; captured_at: string;
-    snapshot: { schema_version: 1 | 2 | 3 | 4 | 5 | 6; calculation_version: "direct-accommodation-v1" | "direct-adjustments-v1" | "direct-charges-v1" | "direct-manual-discounts-v1" | "direct-unit-overrides-v1" | "direct-multi-room-v1"; currency: "PHP";
+    snapshot: { channel?:import('./bookingFinancials').BookingFinancialCapture; channel_figures?:import('./bookingFinancials').BookingFinancialCapture['figures']; schema_version: 1 | 2 | 3 | 4 | 5 | 6 | 7; calculation_version: "direct-accommodation-v1" | "direct-adjustments-v1" | "direct-charges-v1" | "direct-manual-discounts-v1" | "direct-unit-overrides-v1" | "direct-multi-room-v1" | "channel-capture-v1"; currency: "PHP";
       price_overrides?:PriceOverrideCaptureDto[];price_override_total_minor?:number;
       hotel_timezone: "Asia/Manila"; tax_status: "not_configured"; tax_minor: 0;
       discounts?: ManualDiscountCaptureDto[]; discount_total_minor?: number; pipeline_version?: 2;
       lines: CapturedLineDto[]; total_minor: number; adjustments?: AdjustmentInput[];
       charges?: (ChargeInput & { allocation_id?:string; label: string; unit_amount_minor: number; amount_minor: number; currency: "PHP" })[] } };
-  audit: { description?:string; id: string; event_type: string; actor: string; attribution: "local_development";
+  audit: { description?:string|null; id: string; event_type: string; actor: string; attribution: "local_development";
     reservation_version: number; occurred_at: string }[];
 }
 export type MultiAllocationDto = ReservationDto["allocation"] & {state:"reserved"|"checked_in"|"checked_out"|"cancelled"|"no_show"|"removed";removed_at:string|null;room_number:string;room_type_label:string;uses_reservation_stay?:boolean};
@@ -61,7 +64,7 @@ export interface MultiReservationDto extends Omit<ReservationDto,"allocation"> {
 }
 export type AnyReservationDto=ReservationDto|MultiReservationDto;
 export interface MultiAllocationInput {stay?:{scheduled_start:string;duration_id:string;scheduled_end?:string}|null;id?:string;room_id:string;adults:number;children:number;charges:ChargeInput[];inclusions?:InclusionInput[];breakfast:BreakfastInput[]}
-export interface MultiCreateInput {guest_id:string;booking_source_id:string;duration_id:string;scheduled_start:string;note:string;allocations:MultiAllocationInput[];discounts:ManualDiscountInput[];adjustments:AdjustmentInput[]}
+export interface MultiCreateInput {collections?:import('./collections').InitialCollections;guest_obligation?:import('./collections').ObligationInput;booking_financials?:import('./bookingFinancials').BookingFinancialInput;guest_id:string;booking_source_id:string;duration_id:string;scheduled_start:string;note:string;allocations:MultiAllocationInput[];discounts:ManualDiscountInput[];adjustments:AdjustmentInput[]}
 export interface MultiEditInput extends MultiCreateInput {expected_version:number}
 export interface ReferencesDto {
   discount_presets?: (DefinitionMap["discount-presets"] & {id:string;version:number})[];

@@ -108,3 +108,7 @@ the overall range; individual allocation dates/duration and captured rate/kind/q
 authority. Contents/print display captured room stays without current rate/duration configuration.
 Schemas 1/2, source-version checks, hashes, counters and immutable finalization remain unchanged.
 Date/duration edits make an earlier draft source stale; finalized documents are never regenerated.
+
+## B6 captured commercial context
+
+New documents can contain pricing schema 7: the immutable original commercial `channel` capture and separate per-pricing-revision `channel_figures`. Payable total uses that saved pricing result; commission and reported guest payments are not added as guest charges or hotel receipts. The UI labels original commercial capture totals separately from the document's current captured total. Existing document schemas/captures and finalized rows are unchanged. Reviewed commercial correction rejects while a finalized bill exists; no finalized-document correction workflow is introduced.

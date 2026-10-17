@@ -128,9 +128,7 @@ class ReservationService:
             duration = self.owned(session, durations, request.duration_id, lock=True)
             room_type = self.owned(session, room_types, room["room_type_id"], lock=True)
             if (
-                source["classification"] != "direct"
-                or source["reference_required"]
-                or not source["enabled"]
+                not source["enabled"]
                 or not duration["enabled"]
                 or not room_type["enabled"]
                 or room_type["archived"]
@@ -194,6 +192,22 @@ class ReservationService:
                     service=self,
                     session=session,
                 )
+            from app.modules.reservations.financial_capture import (
+                apply_capture,
+                check_reference,
+                persist_capture,
+                prepare_capture,
+            )
+
+            commercial = prepare_capture(
+                self, session, source, request.booking_financials, snapshot
+            )
+            reference = (
+                request.booking_financials.external_reference if request.booking_financials else ""
+            )
+            check_reference(self, session, source["id"], reference)
+            if commercial:
+                snapshot = apply_capture(snapshot, commercial)
             reservation = (
                 session.execute(
                     reservations.insert()
@@ -203,6 +217,7 @@ class ReservationService:
                         guest_id=guest["id"],
                         booking_source_id=source["id"],
                         booking_source_label=source["label"],
+                        external_booking_reference=reference or None,
                         note=request.note,
                     )
                     .returning(reservations)
@@ -210,6 +225,7 @@ class ReservationService:
                 .mappings()
                 .one()
             )
+            persist_capture(self, session, reservation_id, commercial)
             session.execute(
                 allocations.insert().values(
                     id=uuid4(),
@@ -281,6 +297,9 @@ class ReservationService:
                     ),
                 )
             )
+            from app.modules.billing.collections import initial_financial_records
+
+            initial_financial_records(self, session, reservation, request, key)
             result = self.read_in_transaction(session, reservation)
             save_receipt(
                 session,
@@ -480,7 +499,11 @@ class ReservationService:
                 snapshot=pricing["snapshot"],
             ),
             audit=[
-                AuditRead(**{name: row[name] for name in AuditRead.model_fields}) for row in events
+                AuditRead(
+                    **{name: row[name] for name in AuditRead.model_fields if name != "description"},
+                    description=(row["after"] or {}).get("description"),
+                )
+                for row in events
             ],
         )
 
@@ -489,13 +512,36 @@ class ReservationService:
             reservation = self.owned(session, reservations, id, lock=True)
             return self.read_in_transaction(session, reservation)
 
-    def list(self, *, limit=100, offset=0) -> list[ReservationRead]:
+    def list(
+        self, *, limit=100, offset=0, external_reference="", source_id=None
+    ) -> list[ReservationRead]:
         with self.transaction() as session:
+            from app.models import booking_financial_captures
+
+            criteria = []
+            if external_reference:
+                reference = external_reference.strip()
+                current = reservations.c.external_booking_reference == reference
+                historical = sa.select(booking_financial_captures.c.id).where(
+                    booking_financial_captures.c.reservation_id == reservations.c.id,
+                    booking_financial_captures.c.company_id == self.context.company_id,
+                    booking_financial_captures.c.snapshot["input"]["external_reference"].astext
+                    == reference,
+                )
+                if source_id is not None:
+                    current = sa.and_(current, reservations.c.booking_source_id == source_id)
+                    historical = historical.where(
+                        booking_financial_captures.c.source_id == source_id
+                    )
+                criteria.append(sa.or_(current, historical.exists()))
+            elif source_id is not None:
+                criteria.append(reservations.c.booking_source_id == source_id)
             rows = (
                 session.execute(
                     sa.select(reservations)
                     .where(
                         reservations.c.company_id == self.context.company_id,
+                        *criteria,
                     )
                     .order_by(reservations.c.business_number)
                     .limit(limit)

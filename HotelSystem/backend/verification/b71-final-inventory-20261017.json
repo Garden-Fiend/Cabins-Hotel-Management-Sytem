@@ -1,0 +1,17 @@
+{
+  "hms_dev": {
+    "head": "da4eb9f506a9",
+    "table_count": 24,
+    "reservations": 6,
+    "allocations": 6,
+    "allocation_events": 0
+  },
+  "hms_test": {
+    "head": "da4eb9f506a9",
+    "table_count": 24,
+    "reservations": 0,
+    "allocations": 0,
+    "allocation_events": 0
+  },
+  "revision_count": 26
+}

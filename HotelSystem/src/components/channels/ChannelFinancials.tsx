@@ -1,4 +1,5 @@
 import { useState } from "react";
+import {ApiCollectionsSection} from './ApiCollectionsSection';
 import { useReservationDemo } from "../../app/useReservationDemo";
 import { can } from "../../app/permissions";
 import type { ReservationSnapshot } from "../../types/reservation";
@@ -12,6 +13,10 @@ const button = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm fo
 export function ChannelFinancials({ reservation }: {
     reservation: ReservationSnapshot;
 }) {
+    const {mode}=useReservationDemo();
+    return mode==='api'?<ApiCollectionsSection reservation={reservation}/>:<DemoChannelFinancials reservation={reservation}/>;
+}
+function DemoChannelFinancials({reservation}:{reservation:ReservationSnapshot}) {
     const { capabilities, actor, reservations, setReservations, settlements, setSettlements } = useReservationDemo();
     const [notice, setNotice] = useState("");
     const [collectionLedger, setCollectionLedger] = useState("current");

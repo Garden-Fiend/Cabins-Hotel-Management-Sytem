@@ -1,3 +1,8 @@
+import {ApiBookingFinancialFields} from '../channels/ApiBookingFinancialFields';
+import {InitialCollectionFields} from '../channels/CollectionFields';
+import type {InitialCollections,ObligationInput} from '../../app/api/collections';
+import {emptyBookingFinancials,bookingFinancialPreview} from '../../app/api/bookingFinancials';
+import type {BookingFinancialInput} from '../../app/api/bookingFinancials';
 import { InfoTip } from "../InfoTip";
 import { adjustmentIdentityError, createAdjustment, removeAdjustment } from "../../lib/reservationAdjustments";
 import { fromMinorUnits } from "../../lib/money";
@@ -591,6 +596,12 @@ export function ReservationPane({
     });
   }, [expandedRoom]);
   const [pendingFinancialAudit,setPendingFinancialAudit] = useState<ReservationAuditEntry[]>([]);
+  const [bookingFinancials,setBookingFinancials]=useState<BookingFinancialInput|undefined>();
+  const [initialCollection,setInitialCollection]=useState<InitialCollections>();
+  const [guestObligation,setGuestObligation]=useState<ObligationInput>();
+  const [collectionSource,setCollectionSource]=useState<string>();
+  const [obligationSource,setObligationSource]=useState<string>();
+  const [bookingReviewBusy,setBookingReviewBusy]=useState(false);
   const [channelInputsValid,setChannelInputsValid] = useState(true);
   const [channelTerms,setChannelTerms] = useState<ReservationChannelTerms | undefined>(()=>initialReservation?.channelTerms ? structuredClone(initialReservation.channelTerms) : undefined);
   const [channelHistory,setChannelHistory] = useState<ReservationChannelTerms[]>(()=>structuredClone(initialReservation?.supersededChannelTerms ?? []));
@@ -602,7 +613,7 @@ export function ReservationPane({
     setChannelTerms(verified.channelTerms);setPendingFinancialAudit(current=>[...current,...verified.audit.slice(-1)]);markDirty();
   }
   function changeSource(id:string,reviewed=false) {
-    if(persistent){if(initialReservation)return;setBookingSource(id);setChannelTerms(undefined);markDirty();return;}
+    if(persistent){if(initialReservation)return;const source=bookingSources.find(s=>s.id===id);setBookingSource(id);setBookingFinancials(source&&((source.classification??'direct')!=='direct'||source.referenceRequired)?emptyBookingFinancials(source):undefined);setChannelTerms(undefined);markDirty();return;}
     if (initialReservation && id !== bookingSource && !reviewed) {setPendingSource(id);return;}
     try {
       requireCapability(capabilities,"edit_channel_terms");
@@ -694,7 +705,12 @@ export function ReservationPane({
       return { summary: initialReservation?.pricing ?? { lines: [], discounts: [], subtotal: 0, discountTotal: 0, adjustmentTotal: 0, amountOwed: 0 }, error: error instanceof Error ? error.message : "Unable to calculate prices." };
     }
   })();
-  const channelPricingResult = (() => { try { return {summary:applyChannelPricing(pricingResult.summary,channelTerms,channelHistory),error:""}; } catch (error) {return {summary:pricingResult.summary,error:error instanceof Error ? error.message : "Invalid channel pricing."};} })();
+  const channelPricingResult = (() => { try {
+    if(persistent&&!initialReservation&&bookingFinancials){
+      return {summary:bookingFinancialPreview(pricingResult.summary,bookingFinancials.contractual_accommodation_minor),error:''};
+    }
+    return {summary:applyChannelPricing(pricingResult.summary,channelTerms,channelHistory),error:""};
+  } catch (error) {return {summary:pricingResult.summary,error:error instanceof Error ? error.message : "Invalid channel pricing."};} })();
   const priceSummary = persistent && initialReservation ? initialReservation.pricing : channelPricingResult.summary;
 
   function selectLinePreset(line: ReservationPriceLine, presetId: string) {
@@ -1062,6 +1078,9 @@ export function ReservationPane({
 
   async function submitReservation() {
     if (commands) {
+      if((initialCollection&&collectionSource!==bookingSource)||(guestObligation&&obligationSource!==bookingSource)){setErrorMessage('Booking source changed. Review the staged collection and obligation for this source before saving.');return;}
+      if(bookingReviewBusy){setErrorMessage('Finish reviewing the booking definitions before saving.');return;}
+      if(!channelInputsValid){setErrorMessage('Correct the booking financial inputs before saving.');return;}
       if (isSubmitting || !guest || (roomDrafts.length < 1 || (!commands.canEditMultiple && roomDrafts.length !== 1))) return;
       const room = roomDrafts[0];
       setIsSubmitting(true);
@@ -1083,7 +1102,7 @@ export function ReservationPane({
           breakfast:commands.canEditBreakfast?Object.entries(room.breakfast).flatMap(([key,b])=>{const [stayDate,index]=key.split(":");const guestNumber=Number(index)+1;return ownDates.includes(stayDate)&&guestNumber<=room.adults+room.children?[{stayDate,guestNumber,status:b.status,...(b.status==="included"?{mealId:b.meal,beverageId:b.drink}:{})}]:[]}) : []};});
         const saved = initialReservation
           ? await commands.patch(initialReservation, { rooms, ...breakfastInput, ...inclusionInput, discounts, charges: room.charges, adjustments, guestId: guest.id, roomNumber: room.roomNumber, durationId, start: reservationCheckIn, note, adults: room.adults, children: room.children })
-          : await commands.create({ rooms, ...breakfastInput, ...inclusionInput, charges: room.charges, adjustments, discounts, guestId: guest.id, bookingSourceId: bookingSource, roomNumber: room.roomNumber,
+          : await commands.create({ ...(initialCollection?{collections:initialCollection}:{}), ...(guestObligation?{guestObligation}:{}), ...(bookingFinancials?{bookingFinancials}:{}), rooms, ...breakfastInput, ...inclusionInput, charges: room.charges, adjustments, discounts, guestId: guest.id, bookingSourceId: bookingSource, roomNumber: room.roomNumber,
               durationId, start: reservationCheckIn, adults: room.adults, children: room.children, note });
         const savedStays = stays.filter(s => s.reservationId === saved.id);
         if (initialReservation) await onSaved?.(saved, savedStays);
@@ -1607,7 +1626,7 @@ export function ReservationPane({
         </header>
 
         <div ref={reservationScrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-slate-100/70 px-4 py-5 sm:px-5">
-          {persistent && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">Persistent direct booking with shared or custom stays for each selected room. Saved edits support primary guest, notes, guest counts, purchased items and billing adjustments. Before check-in, room assignment, arrival and duration can also change. Assignment/duration changes capture the current server rate; earlier pricing revisions remain preserved. Purchases and signed adjustments can be included in the initial atomic save. Manual discounts, configured reductions and final unit prices, room-type inclusions and nightly breakfast selections are supported. Custom stay dates and durations can change only while every assigned room remains reserved.</p>}
+          {persistent && <p className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">Persistent bookings with shared or custom stays for each selected room. Non-direct sources capture booking references and contractual facts; reviewed source/financial corrections are available in reservation details. Saved edits support primary guest, notes, guest counts, purchased items and billing adjustments. Before check-in, room assignment, arrival and duration can also change. Assignment/duration changes capture the current server rate; earlier pricing revisions remain preserved. Purchases and signed adjustments can be included in the initial atomic save. Manual discounts, configured reductions and final unit prices, room-type inclusions and nightly breakfast selections are supported. Custom stay dates and durations can change only while every assigned room remains reserved.</p>}
 
 
           <fieldset disabled={persistent && Boolean(initialReservation) && !commands?.canEditGuest}><section className={sectionClass}>
@@ -2411,7 +2430,7 @@ export function ReservationPane({
             <label>
               <span className={labelClass}>Booking source *</span>
               <select
-                disabled={persistent&&Boolean(initialReservation)}
+                disabled={persistent&&Boolean(initialReservation)||bookingReviewBusy}
                 className={inputClass}
                 onChange={(event) => {
                   changeSource(event.target.value);
@@ -2436,16 +2455,18 @@ export function ReservationPane({
                   <option
                     key={source.id}
                     value={source.id}
-                    disabled={!source.enabled||(persistent&&((source.classification??'direct')!=='direct'||source.referenceRequired))}
+                    disabled={!source.enabled}
                   >
                     {source.label}
                     {!source.enabled ? " (inactive historical source)" : ""}
-                    {persistent&&((source.classification??'direct')!=='direct'||source.referenceRequired)?' (channel booking capture requires B6)':''}
                   </option>
                   ))}
               </select>
             </label>
             {pendingSource !== undefined && <div role="dialog" aria-label="Review booking source change" className="rounded-xl border border-amber-300 bg-amber-50 p-4"><h3 className="font-semibold">Review booking source change</h3><p className="mt-2 text-sm">This captures the new channel defaults. Existing collection and confirmed financial terms are archived with their original channel. Verified historical collection still reduces the guest balance; settlement records retain their original channel.</p><div className="mt-3 flex gap-3"><button type="button" className={inputClass} onClick={()=>changeSource(pendingSource,true)}>Confirm reviewed source change</button><button type="button" className={inputClass} onClick={()=>setPendingSource(undefined)}>Keep current source</button></div></div>}
+            {persistent&&!initialReservation&&bookingFinancials&&selectedBookingSource&&<ApiBookingFinancialFields key={selectedBookingSource.id} source={selectedBookingSource} agreements={configuration.channelAgreements??[]} value={bookingFinancials} onChange={value=>{setBookingFinancials(value);markDirty();}} onReviewDefinitions={commands?.loadChannels?async()=>{setBookingReviewBusy(true);try{return await commands.loadChannels!();}finally{setBookingReviewBusy(false);}}:undefined} onValidity={setChannelInputsValid}/>}
+            {persistent&&!initialReservation&&<InitialCollectionFields key={`initial-collection:${bookingSource}`} value={initialCollection} onChange={value=>{setInitialCollection(value);setCollectionSource(bookingSource);markDirty();}} obligation={guestObligation} onObligation={value=>{setGuestObligation(value);setObligationSource(bookingSource);markDirty();}} nonDirect={Boolean(bookingFinancials)} review={commands?.collectionDuplicate}/>}
+            {persistent&&!initialReservation&&((initialCollection&&collectionSource!==bookingSource)||(guestObligation&&obligationSource!==bookingSource))&&<button type="button" onClick={()=>{setCollectionSource(bookingSource);setObligationSource(bookingSource);markDirty();}}>I reviewed the staged collection and obligation for this booking source</button>}
             {channelTerms && (channelTerms.classification !== "direct" || channelTerms.agreement || channelTerms.externalReference) && <ReservationChannelTermsEditor key={channelTerms.channelId} terms={channelTerms} capabilities={capabilities} actor={actor} onCollection={verifyDraftCollection} onValidity={setChannelInputsValid} onChange={next=>{setChannelTerms(next);markDirty();}} />}
             <details className="rounded-lg border border-slate-200 p-3" open={Boolean(note) || undefined}><summary className="cursor-pointer text-sm font-medium">Reservation note <span className="font-normal text-slate-500">/ optional</span> <InfoTip label="Reservation note">Add arrival instructions or staff information. Notes do not change the bill.</InfoTip></summary>
             <label className="mt-3 block">
@@ -2692,7 +2713,7 @@ export function ReservationPane({
               </p>
             </div>
             <div className="space-y-2">
-              {priceSummary.channel ? <ChannelGuestSummary pricing={priceSummary} compact /> : <div className="flex justify-between rounded-xl bg-blue-50 p-4 font-semibold"><span>Total guest charges</span><span>{formatReservationMoney(priceSummary.amountOwed)}</span></div>}
+              {!persistent&&priceSummary.channel ? <ChannelGuestSummary pricing={priceSummary} compact /> : <div className="flex justify-between rounded-xl bg-blue-50 p-4 font-semibold"><span>{persistent?'Operational bill total (not payment balance)':'Total guest charges'}</span><span>{formatReservationMoney(priceSummary.amountOwed)}</span></div>}
               <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-sm font-medium">Price breakdown <InfoTip label="Price breakdown">Original room and item prices, hotel discounts and billing corrections are retained. Channel adjustments appear in guest billing. Commission never reduces guest charges.</InfoTip></summary><div className="mt-3 space-y-2">
               {priceSummary.lines.map((line) => (
                 <div
@@ -2748,10 +2769,10 @@ export function ReservationPane({
         <footer className="sticky bottom-0 z-10 shrink-0 border-t border-slate-200 bg-white px-5 py-4 shadow-[0_-4px_12px_rgba(15,23,42,0.04)] sm:px-6">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-sm font-medium text-slate-600">
-              {priceSummary.channel ? "Guest balance" : "Total guest charges"}
+              {persistent ? "Operational bill total (not payment balance)" : priceSummary.channel ? "Guest balance" : "Total guest charges"}
             </span>
             <span className="text-lg font-bold text-slate-900">
-              {formatReservationMoney(priceSummary.channel ? fromMinorUnits(priceSummary.channel.guestBalanceMinor,priceSummary.channel.currency) : priceSummary.amountOwed)}
+              {formatReservationMoney(!persistent&&priceSummary.channel ? fromMinorUnits(priceSummary.channel.guestBalanceMinor,priceSummary.channel.currency) : priceSummary.amountOwed)}
             </span>
           </div>
           {errorMessage && !showCreateGuest && (

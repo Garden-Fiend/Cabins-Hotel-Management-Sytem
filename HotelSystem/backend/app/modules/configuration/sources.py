@@ -187,11 +187,18 @@ def save_source(service, request, key, identity=None):
                     "version_conflict", "Source changed; reload and review your draft"
                 )
             if previous and previous["classification"] != request.classification:
-                from app.models import reservations
+                from app.models import booking_financial_captures, reservations
 
                 if session.scalar(
                     sa.select(reservations.c.id)
                     .where(reservations.c.booking_source_id == identity)
+                    .limit(1)
+                ) or session.scalar(
+                    sa.select(booking_financial_captures.c.id)
+                    .where(
+                        booking_financial_captures.c.source_id == identity,
+                        booking_financial_captures.c.company_id == service.context.company_id,
+                    )
                     .limit(1)
                 ):
                     raise DomainError(

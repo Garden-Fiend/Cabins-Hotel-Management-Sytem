@@ -17,6 +17,9 @@ from pydantic import (
     model_validator,
 )
 
+from app.modules.billing.collection_schemas import InitialCollections, ObligationIntent
+from app.modules.reservations.booking_financials import BookingFinancialIntent, CapturedBookingTerms
+
 MAX_MINOR = 2**53 - 1  # Exact in the existing JavaScript frontend as well as PostgreSQL.
 Minor = Annotated[StrictInt, Field(ge=0, le=MAX_MINOR)]
 Positive = Annotated[StrictInt, Field(ge=1, le=2**31 - 1)]
@@ -170,6 +173,9 @@ def validate_manual_discounts(value):
 
 
 class ReservationCreate(DTO):
+    collections: InitialCollections | None = None
+    guest_obligation: ObligationIntent | None = None
+    booking_financials: BookingFinancialIntent | None = None
     breakfast: tuple[BreakfastIntent, ...] = Field(default=(), max_length=500)
     _breakfast_valid = field_validator("breakfast")(distinct_breakfast)
     inclusions: tuple[InclusionIntent, ...] = Field(default=(), max_length=100)
@@ -636,6 +642,41 @@ class MultiPricingSnapshot(OverridePricingSnapshot):
         return self
 
 
+class ChannelPricingSnapshot(OverridePricingSnapshot):
+    schema_version: Literal[7] = 7
+    calculation_version: Literal["channel-capture-v1"] = "channel-capture-v1"
+    lines: tuple[MultiCapturedLine | CapturedLine, ...] = Field(min_length=1, max_length=50)
+    charges: tuple[MultiChargeCapture | ChargeCapture, ...] = ()
+    channel: CapturedBookingTerms
+    channel_figures: dict
+
+    @model_validator(mode="after")
+    def exact_total(self):
+        from app.modules.billing.discounts import calculate_discounts
+        from app.modules.reservations.booking_financials import calculate_financials
+
+        raw = self.model_dump(mode="json")
+        intents = [
+            {k: v for k, v in d.items() if k not in ("amount_minor", "order", "allocations")}
+            for d in raw["discounts"]
+        ]
+        discounts, reduction, _ = calculate_discounts(raw, intents, raw["price_overrides"])
+        figures = calculate_financials(raw, self.channel.input, self.channel.terms, historical=True)
+        if discounts != raw["discounts"] or reduction != self.discount_total_minor:
+            raise ValueError("Hotel reductions must retain their deterministic allocations")
+        if figures != self.channel_figures or figures["total_minor"] != self.total_minor:
+            raise ValueError("Channel total must match the captured contractual calculation")
+        unique_adjustments(self.adjustments)
+        unique_charges(self.charges)
+        if len(self.lines) > 1 or any(isinstance(line, MultiCapturedLine) for line in self.lines):
+            owners = {getattr(line, "allocation_id", None) for line in self.lines}
+            if None in owners or len(owners) != len(self.lines):
+                raise ValueError("Each plural accommodation line requires a distinct allocation")
+            if any(getattr(charge, "allocation_id", None) not in owners for charge in self.charges):
+                raise ValueError("Plural charges require allocation attribution")
+        return self
+
+
 class PricingRead(DTO):
     id: UUID
     revision: Positive
@@ -648,6 +689,7 @@ class PricingRead(DTO):
         | DiscountedPricingSnapshot
         | OverridePricingSnapshot
         | MultiPricingSnapshot
+        | ChannelPricingSnapshot
     )
 
 
@@ -667,6 +709,7 @@ class AllocationRead(DTO):
 
 
 class AuditRead(DTO):
+    description: str | None = None
     id: UUID
     event_type: str
     actor: str

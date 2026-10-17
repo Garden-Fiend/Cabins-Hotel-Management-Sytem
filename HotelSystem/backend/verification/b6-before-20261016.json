@@ -1,0 +1,758 @@
+{
+  "hms_dev": {
+    "billing_document_counters": {
+      "columns": [
+        "company_id",
+        "next_number"
+      ],
+      "rows": []
+    },
+    "billing_documents": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "source_pricing_id",
+        "source_reservation_version",
+        "document_type",
+        "status",
+        "number",
+        "currency",
+        "total_minor",
+        "capture",
+        "capture_hash",
+        "version",
+        "created_at",
+        "finalized_at",
+        "created_by",
+        "finalized_by",
+        "attribution",
+        "created_request_key",
+        "finalized_request_key"
+      ],
+      "rows": []
+    },
+    "booking_sources": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled",
+        "classification",
+        "version",
+        "reference_required",
+        "notes",
+        "initial_label"
+      ],
+      "rows": [
+        "26b565a00c532a3839cefdb52e66a13be679a348229af13a035ae5609484806b"
+      ]
+    },
+    "breakfast_eligibility": {
+      "columns": [
+        "company_id",
+        "product_id",
+        "kind",
+        "enabled"
+      ],
+      "rows": []
+    },
+    "catalog_products": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "category_id",
+        "label",
+        "unit_amount_minor",
+        "currency",
+        "available_for_sale",
+        "enabled",
+        "archived",
+        "version"
+      ],
+      "rows": [
+        "011dcf6fb64aa1b7762bc7b3b1de8aeebc130a61266a217749a0f26881650fab",
+        "0a839e20771ee979aac39158890523dd0354a0d9b77f98bdb8efc815acdeeca1"
+      ]
+    },
+    "companies": {
+      "columns": [
+        "id",
+        "name",
+        "currency",
+        "hotel_timezone",
+        "default_check_in_time",
+        "default_check_out_time",
+        "breakfast_version"
+      ],
+      "rows": [
+        "5a5504a9566a084447e545729c8ad16f6359d8cbbf1a13b067d074dfc720faf7"
+      ]
+    },
+    "discount_presets": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "scope",
+        "method",
+        "value",
+        "currency",
+        "target_room_type_id",
+        "target_product_id",
+        "enabled",
+        "version",
+        "replacement_unit_amount_minor",
+        "rate_prices"
+      ],
+      "rows": []
+    },
+    "durations": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "kind",
+        "minutes",
+        "nights",
+        "enabled",
+        "version",
+        "label"
+      ],
+      "rows": [
+        "8c80946e2b81a2c1cf932e2edacc3ce74e443f1bb35d93e42abd360821c192ac",
+        "af5a370f894107b1e07b5fa85419195a589d899d75a03a347b6fac91d0da240e"
+      ]
+    },
+    "guests": {
+      "columns": [
+        "id",
+        "company_id",
+        "name",
+        "phone",
+        "email"
+      ],
+      "rows": [
+        "29def46bad53242b5204dc6e41ea4d497e188ecc9f0b814b854132d76c3c9f34",
+        "69aafa3d174243c3911a7e3820f8d9ad218081d76c621501e6e07561aa1de46a",
+        "b3a7eef44ffc6173f85854f0e7061a036d08046742180d08006b0996859ec23c"
+      ]
+    },
+    "inventory_categories": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "type",
+        "enabled",
+        "system_defined",
+        "version"
+      ],
+      "rows": [
+        "61b88362a0860ae01efc8001567e233d8a09c82770fbc4747dca8b8b2284c3e6",
+        "a2965e9bf97a0d8d7ea305c4e65f520b6b53b6cd561aa4321b8fd70d85c6292c",
+        "a7279bd5f86969b396fb591e584da7cf70da0d2e5cd57603867d628581a7d335",
+        "efcdd3abb1b32b8da309496198f3e5e98ba4204c2aedd1aad0ee4abd4d267ec1"
+      ]
+    },
+    "mutation_receipts": {
+      "columns": [
+        "id",
+        "company_id",
+        "operation",
+        "request_key",
+        "request_hash",
+        "reservation_id",
+        "response",
+        "created_at"
+      ],
+      "rows": [
+        "01aaf61760d462c5bf169146c7cd1b631fd91ce4209ea55716dff2e67ac8cb27",
+        "13d503ec37b5865457ac549ff2f5942400c44585478de9acd91dcf59eaf256a1",
+        "20f9b7ed748abdb6e2877176e1b6303b2f5c3643dbfebc2750ec9720646175ed",
+        "241fdb73b2d186f6f8ad3670038a15da8db083f0a7f74b496315415ed3618fdd",
+        "2568d98b362a857af26902084120680b95084721b9bc1ee1ee4413c9f373c991",
+        "311137091b4d0beedbe81987f9f7b7e28595681f85c86b82c4322a6dbc818650",
+        "39a8af4cfe9ee206b1fcd3e72ea6d3b8a01e7dc38f45a2286a101023e7e37227",
+        "3a334349162f0f7b91197995784c847c2647c16a2d51b90828a3ba2c2b9da193",
+        "3d8f668ef4abd59139b808ef5e0769feab4c1c4e9cde337ff98fb9ad9b4cdc4c",
+        "4e2ff091ea5c13a70f10b5e756576ca3633eadc9157e93b2cfd67ab5b7b98e82",
+        "534d747cd9de92e6ad9d993a568b4b776c92ef566cc6fca44e0e87b11d19ddab",
+        "5a810f1ed985c8545a9100dd8a18c07c124861f20f314811bf975295ca04d1bc",
+        "60b75c48c70545931635030bd981d217e2aba3b2bd051b61d83bb9631a292a54",
+        "63f603685b392890d2453b059e0b0f9d2d5d2c9c02452bdc8f1790bf0c29b2c0",
+        "65f42560bdcef7f0ece5806fbf4ca506ab6aab1a21dad713f196d2b0c8f6b813",
+        "6f761492ec1b0e6fed7c0ed67f177960a405788a2a06905ced2fe369d9595784",
+        "7c30b4db46279b14720169b075aa731d9d452431ef0ffbd1ad6488afc3cb01b1",
+        "7f2e496549db9e8abe74fb95c835076f7e7804494ddbb1b3510cfef401b3bdb9",
+        "8f1995727fdddba88fca748653123a18c278eafef6cc609502dc4bdc13d4989b",
+        "955f55428e69c4c88e3e02722bf6095fb3502136a65b210dbbdc4a3658e2bbb2",
+        "97fc5f5bc9d4b6460a92fdc4d4f265c7ced98530b9a0994a6c3f0058dc86d199",
+        "a7ab5bfa0da9bc44e27bd3edd25b57db4a4d200696d3839f765d3e96d5062efd",
+        "abcf2aebe7679fc3e8db0faf6331f95b8186cb1bd51b7a12d73a1cc675abbaff",
+        "b240c22fc277697ba7b5bbce4e0b693632162379bee3bf88a9db36138d2ac7d7",
+        "b339b09345be316253dea66a856995a7f6067bab0dd0c477d2fd2bfcc8148565",
+        "b3d334b4357e0446352fe56f822a80c5aca7bf40fb98f1c0c202d3fb42dae361",
+        "bf580bdefe4f4fd33ed543dd2bc0d91f81a5913b7b9525f8cc0f993b1d87f32e",
+        "c4c4776bbd033ca92462b53d8db4c2e321e77093dba2a94efd472476d7989a75",
+        "e644b0c680d7c197c6e95041ad86f3cd42f6b28e7b58a402a111d4e61a13fe6d",
+        "fd5bafee3ce0b7d0791f98e38f4afc0870170ad21b6de6a0ddeab4c53412540c"
+      ]
+    },
+    "operational_audit": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "event_type",
+        "actor",
+        "attribution",
+        "occurred_at",
+        "before",
+        "after",
+        "reservation_version"
+      ],
+      "rows": [
+        "072bbaedeb14eb5dcfd4e75df7b3ffdeef2e6126c2796db89513d36d918b3a6c",
+        "0d86083b97965711f7ce353cc7583efec4ad9a7ee61a042eee07595dd665d775",
+        "136023875c451003f4e2234a5745a313874e3bcd16b384790cca95e02240f6fa",
+        "2af3405bbe9ac4550ce3e5637ae6dea801c20187cbfd5426f09c279c1ef4d374",
+        "2c975d2ac019f51b26120ce6b77704bf3f21754cb6c401652dd393c69a8c0f46",
+        "3791162f78ec70aa5d1887fd156afdfd8f70222ce43691a445e79d5873c0e3e1",
+        "4680668f18d490c5e784257e19efe273226a2b54c07b66568e3a47ad2d636851",
+        "4d9decc88064b7a3b51cb748e4d79d9b1ff8592a5eb04e1d586a4cee0271c2e2",
+        "54c37d5dfb1f8a679ad350d57e172136b00a5a4f18bb73eb2232eee7a34b1bdf",
+        "5c95feb36fc6dd49eddb53ac6fa2d4945526dfb64e71253478a80183ed4cfd4c",
+        "60c6cd2d0f8cc4b0cacb886bdb885a6b4f8fb5c146d28a21a6a3bb66f29ba7f6",
+        "62474ae32e29e09ee76891dcb90b77c34f05c71e64a88e34e23271e5a1920629",
+        "6f223e80ea59db7ac9fe59f465e90dd8481735e8b5ab8a97ae6befcbc8d48d84",
+        "725a4f6cfac4edc5b4589157e100c9f1240b170fbc90193033dc038fc05c1d8a",
+        "76a4b8da60d0f68d0844a1e70963994528bba064c0f43fb31c274e51c8b52d4f",
+        "7b11ea8b2e5b2d2dddf62c648a74e68a833fcbd64699b2f2108d024983fbd147",
+        "91899fdaec009797f914ef2ad8700cc99208d7efbe92820e6613b380f98340f6",
+        "9a7dc121a0b221159560a4d897237a710d012c09c033327102fbca9f8fecf1be",
+        "a060ef990b0afded1cf0def05308fa8702b85d0de2d4d804f15a2f2cc810ce0c",
+        "a60307a29a53c1394cbd979c2f3ec943f3275f9347a2bcec953cb55ac1b87a0a",
+        "a81f41dce3a30913fc76faf476a4bf6aa8071c84dc9c9a7edc661dc7a636c713",
+        "b42599dd3775e0ea20acbf000154cb8f1063738d684a455a38ce73797cdcc68a",
+        "b5f25bf34f2fc82ed04425dbb2d8f152563cbaaad9dbc09486d6a6f32c6cafc6",
+        "bb649e749658c1683e258ac6f7ffc49b77cd3d2ff330e7943d7c8035d4ce3e22",
+        "dac4a33f3dbd214ec62f79dc25486de136088f7bcc4a78a957f4e28c30fecb00",
+        "dff03dea3eed1321e858e37c3235c36a2696e75983b48df414a78e3e1cdf9742",
+        "e3cba64a81ebadedc12ed91cf37cfafad5e0f80c1b25671b68d36e9a34b5227b",
+        "ef6fe5187a72fe96c2bf0a5f8bfe891cf3006a9cfa948cb49dda42666124e4a8",
+        "f7e45638c334109614da434831f87a094a408bccf8fafbca8d5bbdd102f90e97",
+        "fdac482cba58b3bf92706bd9740b5357322a6a31773809555455d8c6d0578d75"
+      ]
+    },
+    "pricing_revisions": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "revision",
+        "currency",
+        "total_minor",
+        "calculation_version",
+        "snapshot",
+        "created_at",
+        "reservation_version"
+      ],
+      "rows": [
+        "2b2b6b2250c7a4b2b9705c66355fd1dc93bf3509b01cb7f3091093c1f4ed7d8a",
+        "6121efcd894e95a662f0ab64e8391a4ea4d15493d6ba4a991714eab953ad7ffc",
+        "6e3fb4dd79938654589e81cf216e6766dc3a18d51fea1a45c9df44553d13609d",
+        "78c935496be4b86fdcc191b1ed2164989f647a565f176aaa65031a14597b7956",
+        "8b6e1bc0880e82200283d5df783b16db814d8a58e0728b3b42ecbc7bd667569a",
+        "ce25f42424b6517dedefd38251a3c94f745a23309736439ee2479fdd42d0827c",
+        "ff49b2c480adf708ab74c4557b763cfc4bb9ed9ddc49090832a7f3749750f1c6"
+      ]
+    },
+    "reference_rates": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "source_id",
+        "booking_kind",
+        "duration_id",
+        "unit_amount_minor",
+        "currency",
+        "enabled",
+        "version"
+      ],
+      "rows": [
+        "3eaae498d4141b166960ff27a441b2f75b436fb8d52b26fef18764c2cfe85e3d",
+        "4f27d729a2ec1ec34436dfe11d6ba58488b450b471a86cb888133e33f6bc5948",
+        "c7ee0f42530b8c46171bce7ef62f03583d6d6d3732cf1dcdd17f6fa9378e1f7a"
+      ]
+    },
+    "reservations": {
+      "columns": [
+        "id",
+        "company_id",
+        "business_number",
+        "guest_id",
+        "booking_source_id",
+        "status",
+        "version",
+        "note",
+        "created_at",
+        "updated_at",
+        "multi_room",
+        "shared_start",
+        "shared_end",
+        "shared_duration_id",
+        "independent_stays",
+        "default_stay_start",
+        "default_duration_id",
+        "booking_source_label"
+      ],
+      "rows": [
+        "3616da58438419cb5491983d66dad4ede6a673e0a34ca63f287360adb7a16000",
+        "53809b6cbda86db5043c038a6992620a5fae7e2c38191803fdc5a11de04cdb67",
+        "54f1ba8f219e65012e3f1839d9950ff36d9d58967206675f5a3ec57f3a12e595",
+        "7e5616cf03216879a899d44b375e929303f05ede7f89d6f1e6246182e9632ff2",
+        "8442f4838ca838ab1743bfa83f6f68d22de274c250941b2758670b7af553c645",
+        "a18ca5817dce9d80832f71b0464f3009ad6db1df88b61f9180b53593eb206df3"
+      ]
+    },
+    "room_allocations": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "room_id",
+        "duration_id",
+        "scheduled_start",
+        "scheduled_end",
+        "actual_check_in",
+        "actual_check_out",
+        "blocks_availability",
+        "period",
+        "adults",
+        "children",
+        "inclusions",
+        "breakfast",
+        "state",
+        "removed_at",
+        "uses_reservation_stay"
+      ],
+      "rows": [
+        "851fa24fc4756ba7c88fca9dce18f36f93c4aeea838f5dcd387e09c3846ef3ce",
+        "854a913e39271e5608b530b10e8fa7a392baf0192b380b40f71fee879f683505",
+        "8fd134e10567a19b4f877ca6eaca85060dcd8662f69711dd2712a4e424c8a35e",
+        "bd23dc499300d5a57428c44c8563ba212cd1b724077f7d9a73e6626af50a4913",
+        "e42c3edcf8db6dd696e7b07f4505087ec51fc007300670e452bcc27b8ae1ec3a",
+        "e431952fb139a4497f16be375b865eb07dd63d7af7d8e71a946053bea2e5bf93"
+      ]
+    },
+    "room_type_inclusions": {
+      "columns": [
+        "company_id",
+        "room_type_id",
+        "product_id",
+        "quantity",
+        "position"
+      ],
+      "rows": []
+    },
+    "room_types": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled",
+        "default_capacity",
+        "version",
+        "archived",
+        "amenities"
+      ],
+      "rows": [
+        "5888bab6fd5e8749f9bf3edfae787968b8ef37506f83ab6cc88e493fd32dad08",
+        "85fd5a358944241b6a5094de7358421d27c1a6ed1a296237dab39e51a54c8963",
+        "9a0e3b0e15e30eca0d249a5b6953c07ec26d93672b5edc30330ddce7022d3749"
+      ]
+    },
+    "rooms": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "number",
+        "display_name",
+        "enabled",
+        "archived",
+        "housekeeping",
+        "operational",
+        "capacity_override",
+        "current_occupancy_allocation_id",
+        "version",
+        "amenities_additions",
+        "amenities_removals",
+        "description",
+        "operational_notes",
+        "operational_status"
+      ],
+      "rows": [
+        "247e6db446ab1cea4bd94c080f268346e7c6e3391472b33177ec91cf825dfc76",
+        "259f6fabc2614d56d806058f4733d977ce9308a603511c893f84329c9f55f533",
+        "408fdf88ef72852469598cacd454cfe4985871aee3ee99ebf845da842b580b7d",
+        "46fd763f59d2550318474e39405ec4a1789755f0aca1123eaa8e1dd42739ab10",
+        "55604822dbb83851fc93d51432d834419042ae23382e610c16ba0f6514602cbb",
+        "6bd9d0f73aefdac5c0fc7f6470310b4e9fff89e2f680c9ba31ab408a25f07bfa",
+        "ade76fbd0cd3b52653e918e8fbc882b58b802a4ccb50f6e6094c617e4bc7a902",
+        "d52570acdfa0b525a15b3b5b901b9385c49305f448f64bfca60c44828de0d9a0"
+      ]
+    },
+    "source_agreements": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "revision",
+        "version",
+        "effective_from",
+        "effective_to",
+        "status",
+        "currency",
+        "terms",
+        "created_at",
+        "actor"
+      ],
+      "rows": []
+    }
+  },
+  "hms_test": {
+    "billing_document_counters": {
+      "columns": [
+        "company_id",
+        "next_number"
+      ],
+      "rows": []
+    },
+    "billing_documents": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "source_pricing_id",
+        "source_reservation_version",
+        "document_type",
+        "status",
+        "number",
+        "currency",
+        "total_minor",
+        "capture",
+        "capture_hash",
+        "version",
+        "created_at",
+        "finalized_at",
+        "created_by",
+        "finalized_by",
+        "attribution",
+        "created_request_key",
+        "finalized_request_key"
+      ],
+      "rows": []
+    },
+    "booking_sources": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled",
+        "classification",
+        "version",
+        "reference_required",
+        "notes",
+        "initial_label"
+      ],
+      "rows": [
+        "26b565a00c532a3839cefdb52e66a13be679a348229af13a035ae5609484806b"
+      ]
+    },
+    "breakfast_eligibility": {
+      "columns": [
+        "company_id",
+        "product_id",
+        "kind",
+        "enabled"
+      ],
+      "rows": []
+    },
+    "catalog_products": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "category_id",
+        "label",
+        "unit_amount_minor",
+        "currency",
+        "available_for_sale",
+        "enabled",
+        "archived",
+        "version"
+      ],
+      "rows": []
+    },
+    "companies": {
+      "columns": [
+        "id",
+        "name",
+        "currency",
+        "hotel_timezone",
+        "default_check_in_time",
+        "default_check_out_time",
+        "breakfast_version"
+      ],
+      "rows": [
+        "5a5504a9566a084447e545729c8ad16f6359d8cbbf1a13b067d074dfc720faf7"
+      ]
+    },
+    "discount_presets": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "scope",
+        "method",
+        "value",
+        "currency",
+        "target_room_type_id",
+        "target_product_id",
+        "enabled",
+        "version",
+        "replacement_unit_amount_minor",
+        "rate_prices"
+      ],
+      "rows": []
+    },
+    "durations": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "kind",
+        "minutes",
+        "nights",
+        "enabled",
+        "version",
+        "label"
+      ],
+      "rows": [
+        "8c80946e2b81a2c1cf932e2edacc3ce74e443f1bb35d93e42abd360821c192ac",
+        "af5a370f894107b1e07b5fa85419195a589d899d75a03a347b6fac91d0da240e"
+      ]
+    },
+    "guests": {
+      "columns": [
+        "id",
+        "company_id",
+        "name",
+        "phone",
+        "email"
+      ],
+      "rows": []
+    },
+    "inventory_categories": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "type",
+        "enabled",
+        "system_defined",
+        "version"
+      ],
+      "rows": [
+        "61b88362a0860ae01efc8001567e233d8a09c82770fbc4747dca8b8b2284c3e6",
+        "a2965e9bf97a0d8d7ea305c4e65f520b6b53b6cd561aa4321b8fd70d85c6292c",
+        "efcdd3abb1b32b8da309496198f3e5e98ba4204c2aedd1aad0ee4abd4d267ec1"
+      ]
+    },
+    "mutation_receipts": {
+      "columns": [
+        "id",
+        "company_id",
+        "operation",
+        "request_key",
+        "request_hash",
+        "reservation_id",
+        "response",
+        "created_at"
+      ],
+      "rows": []
+    },
+    "operational_audit": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "event_type",
+        "actor",
+        "attribution",
+        "occurred_at",
+        "before",
+        "after",
+        "reservation_version"
+      ],
+      "rows": []
+    },
+    "pricing_revisions": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "revision",
+        "currency",
+        "total_minor",
+        "calculation_version",
+        "snapshot",
+        "created_at",
+        "reservation_version"
+      ],
+      "rows": []
+    },
+    "reference_rates": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "source_id",
+        "booking_kind",
+        "duration_id",
+        "unit_amount_minor",
+        "currency",
+        "enabled",
+        "version"
+      ],
+      "rows": [
+        "3eaae498d4141b166960ff27a441b2f75b436fb8d52b26fef18764c2cfe85e3d",
+        "c7ee0f42530b8c46171bce7ef62f03583d6d6d3732cf1dcdd17f6fa9378e1f7a"
+      ]
+    },
+    "reservations": {
+      "columns": [
+        "id",
+        "company_id",
+        "business_number",
+        "guest_id",
+        "booking_source_id",
+        "status",
+        "version",
+        "note",
+        "created_at",
+        "updated_at",
+        "multi_room",
+        "shared_start",
+        "shared_end",
+        "shared_duration_id",
+        "independent_stays",
+        "default_stay_start",
+        "default_duration_id",
+        "booking_source_label"
+      ],
+      "rows": []
+    },
+    "room_allocations": {
+      "columns": [
+        "id",
+        "company_id",
+        "reservation_id",
+        "room_id",
+        "duration_id",
+        "scheduled_start",
+        "scheduled_end",
+        "actual_check_in",
+        "actual_check_out",
+        "blocks_availability",
+        "period",
+        "adults",
+        "children",
+        "inclusions",
+        "breakfast",
+        "state",
+        "removed_at",
+        "uses_reservation_stay"
+      ],
+      "rows": []
+    },
+    "room_type_inclusions": {
+      "columns": [
+        "company_id",
+        "room_type_id",
+        "product_id",
+        "quantity",
+        "position"
+      ],
+      "rows": []
+    },
+    "room_types": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "label",
+        "enabled",
+        "default_capacity",
+        "version",
+        "archived",
+        "amenities"
+      ],
+      "rows": [
+        "85fd5a358944241b6a5094de7358421d27c1a6ed1a296237dab39e51a54c8963"
+      ]
+    },
+    "rooms": {
+      "columns": [
+        "id",
+        "company_id",
+        "room_type_id",
+        "number",
+        "display_name",
+        "enabled",
+        "archived",
+        "housekeeping",
+        "operational",
+        "capacity_override",
+        "current_occupancy_allocation_id",
+        "version",
+        "amenities_additions",
+        "amenities_removals",
+        "description",
+        "operational_notes",
+        "operational_status"
+      ],
+      "rows": [
+        "55604822dbb83851fc93d51432d834419042ae23382e610c16ba0f6514602cbb"
+      ]
+    },
+    "source_agreements": {
+      "columns": [
+        "id",
+        "company_id",
+        "source_id",
+        "revision",
+        "version",
+        "effective_from",
+        "effective_to",
+        "status",
+        "currency",
+        "terms",
+        "created_at",
+        "actor"
+      ],
+      "rows": []
+    }
+  }
+}

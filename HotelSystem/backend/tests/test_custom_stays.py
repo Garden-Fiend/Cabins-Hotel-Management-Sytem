@@ -349,7 +349,9 @@ def test_old_b2_hash_excludes_omitted_custom_fields(multi_api):
     from app.mutations import request_hash
 
     request = MultiCreate.model_validate(multi_api[2])
-    original = request.model_dump(mode="json", exclude={"discounts"})
+    original = request.model_dump(
+        mode="json", exclude={"discounts", "booking_financials", "collections", "guest_obligation"}
+    )
     for value in original["allocations"]:
         value.pop("stay")
     digest = hashlib.sha256(

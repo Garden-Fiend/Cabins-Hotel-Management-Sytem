@@ -4,6 +4,8 @@ Approved scope: one company, PHP, **single-room direct bookings**, versioned ess
 server-owned prices. Guest creation is independent, matching the current pane's provider flow.
 No transaction-integrity requirement found that warrants silently changing guest ownership.
 
+For the later B7 operational collection/guest-obligation boundary, see [collections.md](collections.md).
+
 The backend-only operational billing-document API is defined in
 [billing-documents.md](billing-documents.md): fixed draft capture, explicit versioned finalization,
 company-scoped numbering, immutable snapshots and durable replay. It does not change reservation
@@ -494,3 +496,7 @@ See [the B5 contract](booking-source-agreements.md) for owned source writes, agr
 versioning, inclusive effective periods, typed PHP configuration, concurrency tokens and replay.
 These configuration operations do not capture channel financial terms or execute transactions.
 Non-direct/external-reference booking capture and reviewed source changes remain B6.
+
+## B6 commercial booking captures
+
+Singular/plural create accepts optional `booking_financials` atomically. `GET /api/v1/reservations/{id}/booking-financials` returns immutable capture history; `POST /api/v1/reservations/{id}/edit-booking-financials` performs a reasoned versioned correction with UUID key. Reservation list supports scoped current/historical `external_reference` lookup. See [the B6 contract](booking-financials.md) for exact input facts, accommodation-only replacement, confirmation-date resolution, schema 7, manual arrangements, database guards and finalized-bill restrictions. No hotel collection or settlement record is created.

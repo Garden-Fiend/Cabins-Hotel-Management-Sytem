@@ -1,5 +1,6 @@
 import {MultiRoomHeaderActions,RoomAllocationsSection} from "../components/reservations/AllocationOperations";
 import { ChannelGuestSummary } from "../components/channels/ChannelGuestSummary";
+import {BookingFinancialSection} from '../components/channels/BookingFinancialSection';
 import { ChannelFinancials } from "../components/channels/ChannelFinancials";
 import { fromMinorUnits } from "../lib/money";
 import { ReservationAuditHistory } from "../components/reservations/ReservationAuditHistory";
@@ -221,7 +222,7 @@ export function ReservationDetailPage() {
       <section aria-label="Billing summary" className={`${cardClass} grid gap-4 sm:grid-cols-3`}>
         <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Total charges</p><p className="mt-2 text-2xl font-bold">{money(reservation.pricing.subtotal, currency)}</p></div>
         <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Amount paid</p><p className="mt-2 text-xl font-semibold text-slate-600">{reservation.pricing.channel ? money(fromMinorUnits(reservation.pricing.channel.verifiedCollectionMinor,currency),currency) : "Not recorded"}</p></div>
-        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Outstanding balance</p><p className="mt-2 text-2xl font-bold text-blue-900">{money(reservation.pricing.channel ? fromMinorUnits(reservation.pricing.channel.guestBalanceMinor,currency) : reservation.pricing.amountOwed, currency)}</p><p className="mt-1 text-xs text-slate-500">{reservation.pricing.channel ? "Guest charges less verified collection; negative balance is credit." : "Saved amount owed; no payment records available."}</p></div>
+        <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{mode==='api'?'Operational bill total':'Outstanding balance'}</p><p className="mt-2 text-2xl font-bold text-blue-900">{money(mode!=='api'&&reservation.pricing.channel ? fromMinorUnits(reservation.pricing.channel.guestBalanceMinor,currency) : reservation.pricing.amountOwed, currency)}</p><p className="mt-1 text-xs text-slate-500">{mode==='api'?'Guest obligation, collections and residuals are shown separately in Guest collections.':reservation.pricing.channel ? "Guest charges less verified collection; negative balance is credit." : "Saved amount owed; no payment records available."}</p></div>
       </section>
 
       {actions.message && (
@@ -373,6 +374,7 @@ export function ReservationDetailPage() {
       </section>
 
       <ChannelFinancials key={reservation.id} reservation={reservation} />
+      <BookingFinancialSection key={`booking-financials:${reservation.id}`} reservation={reservation}/>
       <section className={cardClass}>
         <h2 className="text-lg font-semibold">Billing & Payments</h2>
         <div className="mt-4"><ChannelGuestSummary pricing={reservation.pricing} /></div>

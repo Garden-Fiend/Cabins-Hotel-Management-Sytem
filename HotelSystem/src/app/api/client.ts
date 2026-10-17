@@ -5,6 +5,7 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
   readonly uncertain: boolean;
+  details?: unknown;
   constructor(message: string, status = 0, code = "network_error", uncertain = false) {
     super(message); this.name = "ApiError";
     this.status = status; this.code = code; this.uncertain = uncertain;
@@ -57,8 +58,9 @@ export class ApiClient {
     if (!response.ok) {
       const fault = result as { code?: string; message?: string; detail?: string; field_errors?: { field: string; message: string }[] };
       const fields = fault.field_errors?.map(item => `${item.field}: ${item.message}`).join("; ");
-      throw new ApiError(fields || fault.message || fault.detail || `API request failed (${response.status}).`,
+      const failure = new ApiError(fields || fault.message || fault.detail || `API request failed (${response.status}).`,
         response.status, fault.code ?? "http_error", response.status >= 500 && method !== "GET");
+      failure.details=result; throw failure;
     }
     return result as T;
     } finally {
@@ -78,6 +80,12 @@ export class ApiClient {
     }
   }
   references(signal?: AbortSignal) { return this.request<ReferencesDto>("/reference-data", "GET", undefined, undefined, signal); }
+  collections(id:string,offset=0){return this.request<import('./collections').CollectionRead>(`/reservations/${encodeURIComponent(id)}/collections?offset=${offset}`);}
+  allocatePayment(id:string,body:import('./collections').AllocationInput,key:string){return this.request<{summary:import('./collections').CollectionSummary}>(`/reservations/${encodeURIComponent(id)}/payment-allocations`,'POST',body,key);}
+  recordCollection(id:string,body:import('./collections').CollectionInput&{expected_version:number},key:string){return this.request<{summary:import('./collections').CollectionSummary}>(`/reservations/${encodeURIComponent(id)}/collections`,'POST',body,key);}
+  reviewObligation(id:string,body:import('./collections').ObligationInput&{expected_version:number;expected_pricing_id:string;expected_capture_id:string|null},key:string){return this.request<{summary:import('./collections').CollectionSummary}>(`/reservations/${encodeURIComponent(id)}/guest-obligation`,'POST',body,key);}
+  bookingFinancialHistory(id:string){return this.request<import('./bookingFinancials').BookingFinancialCapture[]>(`/reservations/${encodeURIComponent(id)}/booking-financials`);}
+  correctBookingFinancials(id:string,body:{expected_version:number;booking_source_id:string;booking_financials:import('./bookingFinancials').BookingFinancialInput;reason:string},key:string){return this.request<import('./contracts').AnyReservationDto>(`/reservations/${encodeURIComponent(id)}/edit-booking-financials`,'POST',body,key);}
   guests(signal?: AbortSignal) { return this.all<GuestDto>("/guests", signal); }
   reservations(signal?: AbortSignal) { return this.all<AnyReservationDto>("/reservations", signal); }
   reservation(id: string) { return this.request<AnyReservationDto>(`/reservations/${encodeURIComponent(id)}`); }

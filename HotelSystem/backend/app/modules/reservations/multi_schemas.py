@@ -5,11 +5,13 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, StrictBool, field_validator, model_validator
 
+from app.modules.billing.collection_schemas import InitialCollections, ObligationIntent
 from app.modules.reservations.schemas import (
     DTO,
     AdjustmentCapture,
     AllocationRead,
     AuditRead,
+    BookingFinancialIntent,
     BreakfastIntent,
     ChargeIntent,
     Count,
@@ -65,6 +67,9 @@ class AllocationIntent(DTO):
 
 
 class MultiCreate(DTO):
+    collections: InitialCollections | None = None
+    guest_obligation: ObligationIntent | None = None
+    booking_financials: "BookingFinancialIntent | None" = None
     guest_id: UUID
     booking_source_id: UUID
     duration_id: UUID
@@ -99,6 +104,14 @@ class MultiCreate(DTO):
 
 class MultiEdit(MultiCreate):
     expected_version: Positive
+
+    @model_validator(mode="after")
+    def no_collection_side_effect(self):
+        if self.collections is not None or self.guest_obligation is not None:
+            raise ValueError(
+                "Use explicit collection or obligation commands for saved reservations"
+            )
+        return self
 
 
 class MultiAllocationRead(AllocationRead):

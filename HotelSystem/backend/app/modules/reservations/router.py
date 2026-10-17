@@ -6,6 +6,19 @@ from fastapi import APIRouter, Depends, Header, Query
 from app.context import get_command_context
 from app.db import get_engine
 from app.modules.billing.adjustments import save_adjustments
+from app.modules.billing.collection_schemas import (
+    AllocationCommand,
+    CollectionCommand,
+    ObligationCommand,
+)
+from app.modules.billing.collections import collection_read, record
+from app.modules.billing.payment_allocations import command as allocate_payment
+from app.modules.reservations.booking_financials import CapturedBookingTerms
+from app.modules.reservations.financial_corrections import (
+    BookingFinancialCorrection,
+    correct_financials,
+    financial_history,
+)
 from app.modules.reservations.lifecycle import transition
 from app.modules.reservations.multi import save_multi
 from app.modules.reservations.multi_lifecycle import transition_multi
@@ -52,6 +65,41 @@ def get_service(engine=Depends(get_engine), context=Depends(get_command_context)
 Service = Annotated[ReservationService, Depends(get_service)]
 
 
+@router.get("/reservations/{id}/collections")
+def read_collections(id: UUID, service: Service, limit: Limit = 100, offset: Offset = 0):
+    return collection_read(service, id, limit=limit, offset=offset)
+
+
+@router.post("/reservations/{id}/payment-allocations", status_code=201)
+def payment_allocation(id: UUID, request: AllocationCommand, key: Key, service: Service):
+    return allocate_payment(service, id, request, key)
+
+
+@router.post("/reservations/{id}/collections", status_code=201)
+def record_collection(id: UUID, request: CollectionCommand, key: Key, service: Service):
+    return record(service, id, request, key)
+
+
+@router.post("/reservations/{id}/guest-obligation")
+def review_guest_obligation(id: UUID, request: ObligationCommand, key: Key, service: Service):
+    return record(service, id, request, key, obligation=True)
+
+
+@router.get("/reservations/{id}/booking-financials", response_model=list[CapturedBookingTerms])
+def booking_financial_history(id: UUID, service: Service):
+    return financial_history(service, id)
+
+
+@router.post(
+    "/reservations/{id}/edit-booking-financials",
+    response_model=ReservationRead | MultiRead | IndependentRead,
+)
+def booking_financial_correction(
+    id: UUID, request: BookingFinancialCorrection, key: Key, service: Service
+):
+    return correct_financials(service, id, request, key)
+
+
 @router.get("/reference-data", response_model=ReferenceRead)
 def reference_data(service: Service):
     return read_references(service)
@@ -78,8 +126,19 @@ def create_reservation(request: ReservationCreate, key: Key, service: Service):
 
 
 @router.get("/reservations", response_model=list[ReservationRead | MultiRead | IndependentRead])
-def reservations(service: Service, limit: Limit = 100, offset: Offset = 0):
-    return service.list(limit=limit, offset=offset)
+def reservations(
+    service: Service,
+    limit: Limit = 100,
+    offset: Offset = 0,
+    external_reference: Annotated[str, Query(max_length=200)] = "",
+    booking_source_id: UUID | None = None,
+):
+    return service.list(
+        limit=limit,
+        offset=offset,
+        external_reference=external_reference,
+        source_id=booking_source_id,
+    )
 
 
 @router.get("/reservations/{id}", response_model=ReservationRead | MultiRead | IndependentRead)

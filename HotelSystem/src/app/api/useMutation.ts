@@ -19,6 +19,7 @@ export function useMutation<T, R>(save: (body: T, key: string) => Promise<R>, re
   const [error, setError] = useState(recovered ? "An earlier request needs confirmation. Retry its original request before starting another." : "");
   const [uncertain, setUncertain] = useState(Boolean(recovered));
   const [conflict, setConflict] = useState(false);
+  const [failure, setFailure] = useState<unknown>();
   async function submit(body: T): Promise<R | undefined> {
     if (running.current) return;
     if (typeof crypto.randomUUID !== "function") { setError("This browser needs a secure context to save requests."); return; }
@@ -32,13 +33,14 @@ export function useMutation<T, R>(save: (body: T, key: string) => Promise<R>, re
       try { sessionStorage.setItem(recoveryKey, JSON.stringify(request.current)); }
       catch { setError("Session request recovery is unavailable; no request was sent."); return; }
     }
-    running.current = true; setPending(true); setError(""); setConflict(false);
+    running.current = true; setPending(true); setError(""); setConflict(false); setFailure(undefined);
     try {
       const result = await save(request.current.body, request.current.key);
       request.current = null; setUncertain(false);
       if (recoveryKey) { try { sessionStorage.removeItem(recoveryKey); } catch { /* A confirmed commit must remain success even if cleanup is unavailable. */ } }
       return result;
     } catch (failure) {
+      setFailure(failure);
       const ambiguous = !(failure instanceof ApiError) || failure.uncertain;
       setUncertain(ambiguous); setConflict(failure instanceof ApiError && failure.code === "version_conflict");
       setError(formatError(failure));
@@ -50,5 +52,5 @@ export function useMutation<T, R>(save: (body: T, key: string) => Promise<R>, re
   }
   function reviewedLatest() { if (!uncertain) { request.current = null; setError(""); setConflict(false); } }
   async function retryOriginal() { return request.current ? submit(request.current.body) : undefined; }
-  return { submit, retryOriginal, pending, error, uncertain, conflict, reviewedLatest };
+  return { submit, retryOriginal, pending, error, uncertain, conflict, reviewedLatest, failure };
 }

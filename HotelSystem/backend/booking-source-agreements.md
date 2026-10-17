@@ -1,5 +1,7 @@
 # Booking-source and agreement configuration (B5)
 
+This describes the B5 configuration boundary historically. [B6](booking-financials.md) now connects booking capture and protects captured dates/classification while preserving retirement used by immutable commercial history; the later B6 contract supersedes the booking gates described below.
+
 Configuration only. These commands do not create collections, calculate commissions, reprice
 bookings, attach channel terms, or produce settlement/accounting transactions. Actor attribution
 remains local development, not authenticated staff identity.

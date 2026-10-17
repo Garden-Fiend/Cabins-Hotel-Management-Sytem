@@ -133,6 +133,8 @@ Non-direct reservation captures/source changes remain B6, not implicit effects o
 
 ## B6 — Captured channel terms and reviewed booking-source changes (large)
 
+Implemented within the [B6 capture checkpoint](b6-non-direct-booking-financials-checkpoint-2026-10-16.md). Payments and executed settlements remain B7/B8. The following bullets retain the original planning scope.
+
 - Files: ReservationChannelTermsEditor, ChannelGuestSummary, pane, channelActions/channelFinance;
   reservation schemas/services, pricing, bridge/edit adapters and print.
 - Schema/API: owned terms and historical superseded terms; agreement capture, external reference,
@@ -146,6 +148,11 @@ Non-direct reservation captures/source changes remain B6, not implicit effects o
 - Dependencies: B5; B2 for full original multi-room allocation semantics.
 
 ## B7 — Manual collection/refund/reversal records and guest balance (large)
+
+October 17: persistent operational transactions, reviewed accommodation obligations and component
+coverage are implemented; see [B7 checkpoint](b7-collections-checkpoint-2026-10-17.md).
+The checkpoint names initial-entry limits, unresolved allocation cases and browser coverage gaps;
+this is not a declaration of complete demo parity. B8 remains separately bounded.
 
 - Files: ChannelFinancials, ChannelGuestSummary, ReservationChannelTermsEditor, channelActions;
   new module-owned operational collection services/models/DTOs and reservation read projections.

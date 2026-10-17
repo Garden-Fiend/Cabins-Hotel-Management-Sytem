@@ -43,7 +43,7 @@ export function ReservationsPage() {
       reservations.filter((reservation) => {
         const guestName =
           guests.find((guest) => guest.id === reservation.guestId)?.name ?? "";
-        const searchMatches = `${reservation.id} ${guestName}`
+        const searchMatches = `${reservation.id} ${guestName} ${reservation.bookingFinancialCapture?.input.external_reference??''}`
           .toLowerCase()
           .includes(query.trim().toLowerCase());
         const roomMatches =
@@ -130,7 +130,7 @@ export function ReservationsPage() {
 
       <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5">
         <label className="text-sm font-medium text-slate-700">
-          Search guest or reservation ID
+          {mode==='api'?'Search guest, reservation ID or external reference':'Search guest or reservation ID'}
           <input
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             value={query}

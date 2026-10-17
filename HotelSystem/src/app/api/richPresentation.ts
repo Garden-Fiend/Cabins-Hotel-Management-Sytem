@@ -57,6 +57,7 @@ export function richReservation(dto: AnyReservationDto, refs: ReferencesDto): Re
   };
   return {
     id: dto.id, serverVersion: dto.version, status: dto.status, guestId: dto.guest.id,
+    bookingFinancialCapture:dto.pricing.snapshot.channel,
     bookingSourceId: dto.booking_source_id, bookingSourceLabel: sourceLabel(dto.booking_source_id,dto.booking_source_label,refs.booking_sources),
     checkIn: apiInstant(a.scheduled_start), checkOut: apiInstant(a.scheduled_end), note: dto.note,
     createdAt: apiInstant(dto.created_at), actualCheckInAt: a.actual_check_in ? apiInstant(a.actual_check_in) : undefined,
@@ -78,6 +79,6 @@ export function richReservation(dto: AnyReservationDto, refs: ReferencesDto): Re
       ...(overrides.length ? {priceOverrides:overrides,priceOverrideTotal:(dto.pricing.snapshot.price_override_total_minor ?? 0)/100} : {}),
       subtotal: Number((dto.pricing.snapshot.charges ?? []).reduce((sum, item) => sum + BigInt(item.amount_minor), BigInt(line.amount_minor))) / 100, discountTotal: (dto.pricing.snapshot.discount_total_minor ?? 0) / 100, adjustmentTotal: Number((dto.pricing.snapshot.adjustments ?? []).reduce((sum, item) => sum + BigInt(item.amount_minor), 0n)) / 100, amountOwed: dto.pricing.snapshot.total_minor / 100 },
     audit: dto.audit.map(e => ({ eventType: events[e.event_type] ?? "updated",
-      action: e.event_type, actor: e.actor, occurredAt: apiInstant(e.occurred_at) })),
+      action: e.description??e.event_type, actor: e.actor, occurredAt: apiInstant(e.occurred_at) })),
   };
 }

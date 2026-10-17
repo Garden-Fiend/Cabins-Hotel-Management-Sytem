@@ -12,6 +12,7 @@ agreements = sa.Table(
     identity(),
     ownership(),
     sa.Column("source_id", UUID(as_uuid=True), nullable=False),
+    sa.UniqueConstraint("id", "company_id", "source_id", name="uq_agreement_owned_source"),
     sa.Column("revision", sa.Integer, nullable=False),
     sa.Column("version", sa.Integer, nullable=False, server_default="1"),
     sa.Column("effective_from", sa.Date, nullable=False),

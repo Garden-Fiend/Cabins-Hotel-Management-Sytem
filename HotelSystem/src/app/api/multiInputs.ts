@@ -9,7 +9,7 @@ import {allocationStayInput,roomStayChanged} from './allocationStayInputs';
 import {apiInstant} from './presentation';
 import {hotelDateKey,createHotelDateTime} from '../../lib/hotelTime';
 
-type Draft={rooms?:CommandRoomInput[];guestId?:string;bookingSourceId?:string;durationId?:string;start?:Date;note:string;discounts?:ReservationDiscount[];adjustments?:ReservationAdjustment[];breakfastDates?:string[]};
+type Draft={collections?:import('./collections').InitialCollections;guestObligation?:import('./collections').ObligationInput;bookingFinancials?:import('./bookingFinancials').BookingFinancialInput;rooms?:CommandRoomInput[];guestId?:string;bookingSourceId?:string;durationId?:string;start?:Date;note:string;discounts?:ReservationDiscount[];adjustments?:ReservationAdjustment[];breakfastDates?:string[]};
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 function merge<T extends {id:string}>(before:T[],draft:T[],remote:T[]):T[]{
  const original=new Map(before.map(i=>[i.id,i])),local=new Map(draft.map(i=>[i.id,i]));
@@ -66,7 +66,7 @@ export function multiReservationInput(input:Draft,refs:ReferencesDto,original?:R
  const currentDiscounts:ManualDiscountInput[]=[...(canonical?.pricing.snapshot.discounts??[]).map(d=>({id:d.id,label:d.label,scope:d.scope,method:d.method,value:d.value,target_id:d.target_id,currency:d.currency,...(d.preset_id?{preset_id:d.preset_id}:{})})),...(canonical?.pricing.snapshot.price_overrides??[]).map(d=>({id:d.id,label:d.label,scope:d.scope,method:'final_price' as const,value:'0',target_id:d.scope==='room'?d.line_id.replace(/^room:/,''):d.line_id,currency:d.currency,preset_id:d.preset_id}))];
  const adjustment=(a:ReservationAdjustment)=>{const old=original?.adjustments.find(o=>o.id===a.id),raw=canonical?.pricing.snapshot.adjustments?.find(o=>o.id===a.id);return {id:a.id,amount_minor:old?.amount===a.amount&&raw?raw.amount_minor:toMinorUnits(a.amount,'PHP'),reason:a.reason};};
  const unchangedStart=original&&input.start?.getTime()===(original.stayDefaults?.start??original.checkIn).getTime();
- return {guest_id:original&&input.guestId===original.guestId&&canonical?canonical.guest.id:input.guestId??canonical?.guest.id??'',booking_source_id:input.bookingSourceId??canonical?.booking_source_id??'',
+ return {...(!original&&input.collections?{collections:input.collections}:{}),...(!original&&input.guestObligation?{guest_obligation:input.guestObligation}:{}),...(!original&&input.bookingFinancials?{booking_financials:input.bookingFinancials}:{}),guest_id:original&&input.guestId===original.guestId&&canonical?canonical.guest.id:input.guestId??canonical?.guest.id??'',booking_source_id:input.bookingSourceId??canonical?.booking_source_id??'',
   duration_id:original&&input.durationId===(original.stayDefaults?.durationId??original.rooms[0].durationId)&&canonical?(canonical.allocation===null?(canonical.stay_defaults?.duration_id??canonical.shared_duration_id??input.durationId??''):canonical.allocation.duration_id):input.durationId??'',
   scheduled_start:unchangedStart&&canonical?(canonical.allocation===null?(canonical.stay_defaults?.scheduled_start??canonical.shared_start):canonical.allocation.scheduled_start):input.start!.toISOString(),note:original&&input.note===original.note&&canonical?canonical.note:input.note,allocations,
   discounts:original&&canonical?merge(discountInputs(original.discounts),discountInputs(input.discounts??[]),currentDiscounts):discountInputs(input.discounts??[]),
